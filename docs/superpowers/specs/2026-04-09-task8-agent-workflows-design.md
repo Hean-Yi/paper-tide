@@ -6,7 +6,7 @@ Scope: `services/agent`
 
 ## Goal
 
-Implement real LangGraph-backed workflows in the FastAPI agent service so that Task 7's `/agent/tasks` API can immediately execute a workflow in the background, validate the final output against task-specific schemas, generate a reviewer-safe redacted result, and persist the completed payload back into the in-memory task store.
+Implement real LangGraph-backed workflows in the FastAPI agent service so that Task 7's `/agent/tasks` API can authenticate the caller, reuse cached work when possible, immediately execute a workflow in the background, validate the final output against the authoritative task-specific schemas, generate reviewer-safe redacted results, and persist the completed payload back into the in-memory task store.
 
 Task 8 must not yet integrate with the main Java system's Oracle BLOB upload path. That remains deferred to Task 9.
 
@@ -18,9 +18,10 @@ Task 8 must not yet integrate with the main Java system's Oracle BLOB upload pat
   - `OPENROUTER_API_KEY`
   - `OPENROUTER_FALLBACK_API_KEY`
 - Task 8 will use `OPENROUTER_API_KEY` only.
-- Task 8 must start workflow execution immediately after `POST /agent/tasks`.
+- Task 8 must start workflow execution immediately after authenticated `POST /agent/tasks`.
 - Task 8 continues to accept JSON metadata only.
 - Multipart metadata + PDF upload remains deferred to Task 9.
+- Task 8 must not expose a live external-cost execution route without service-to-service authentication.
 
 ## Non-Goals
 
@@ -40,23 +41,52 @@ Add these Python dependencies to `services/agent/pyproject.toml`:
 
 Keep the current FastAPI and pytest stack.
 
+## Service-to-Service Authentication
+
+Task 8 brings live external-cost execution into scope, so service authentication must be included before background execution is enabled.
+
+Agent routes under `/agent/tasks` must require an internal API key header:
+
+- header name: `X-Agent-Api-Key`
+- environment variable: `AGENT_INTERNAL_API_KEY`
+
+Rules:
+
+- `/health` remains unauthenticated
+- `POST /agent/tasks` requires the header
+- `GET /agent/tasks/{taskId}` requires the header
+- `GET /agent/tasks/{taskId}/result` requires the header
+
+Behavior:
+
+- missing or wrong key returns `401`
+- if `AGENT_INTERNAL_API_KEY` is unset, the service may still boot, but authenticated task execution must not be considered enabled
+
+For deterministic tests, the app factory should allow auth to be disabled explicitly, for example:
+
+- `create_app(enable_background_execution=False, require_internal_api_key=False)`
+
+Task 9 will supply the real key from the Java side.
+
 ## Environment Model
 
 Task 8 uses these environment variables:
 
 - `OPENROUTER_API_KEY`
-  Required for any live workflow execution.
+  Required for live workflow execution.
 - `OPENROUTER_BASE_URL`
   Optional.
   Default: `https://openrouter.ai/api/v1`
 - `OPENROUTER_MODEL`
   Required for execution.
   Task 8 will not hardcode a model name in Python.
+- `AGENT_INTERNAL_API_KEY`
+  Required for authenticated access to `/agent/tasks*` in non-test operation.
 
-Behavior when configuration is incomplete:
+Behavior when LLM configuration is incomplete:
 
-- If `OPENROUTER_API_KEY` or `OPENROUTER_MODEL` is missing, the service should still boot.
-- The task runner should mark the task as `FAILED` with a clear configuration error when execution starts.
+- if `OPENROUTER_API_KEY` or `OPENROUTER_MODEL` is missing, the service should still boot
+- the task runner should mark the task as `FAILED` with a clear configuration error when execution starts
 
 This keeps local development bootable while preserving explicit runtime failure semantics.
 
@@ -75,12 +105,11 @@ Task 8 adds these agent modules:
 Responsibilities:
 
 - `router.py`
-  Selects the workflow for a given `TASK_TYPE`.
-  Builds the initial state from the stored task record.
+  Selects the workflow for a given `TASK_TYPE`, computes workflow revision, and builds initial state from the stored task record.
 - `schemas.py`
-  Defines the shared intermediate representation and task-specific result schemas.
+  Defines the shared intermediate representation and the task-specific result schemas that must match the authoritative main-system design.
 - `coordinator.py`
-  Runs workflows in a background thread, updates task status, catches failures, and stores final results.
+  Runs workflows in a background thread, updates task status and step, catches failures, and stores final results.
 - `paper_understanding.py`
   Defines the shared LangGraph subgraph for normalizing manuscript context into a stable intermediate representation.
 - `review_assist.py`
@@ -90,12 +119,12 @@ Responsibilities:
 - `router.py`
   Also contains the `SCREENING_ANALYSIS` graph because the plan does not allocate a separate `screening.py`.
 - `redaction.py`
-  Produces reviewer-safe redacted outputs from raw workflow outputs.
+  Produces reviewer-safe redacted outputs from raw workflow outputs, including content-level sanitization of identity-bearing clues.
 
-## Task Store Changes
+## Task Store Changes and Cache Semantics
 
 Task 7 already introduced the in-memory `TaskStore`.
-Task 8 extends its usage rather than replacing it.
+Task 8 extends it rather than replacing it.
 
 `TaskRecord` is the authoritative execution record for the agent process and must carry:
 
@@ -109,12 +138,38 @@ Task 8 extends its usage rather than replacing it.
 - `step`
 - `error`
 - `result`
+- `cache_key`
+- `workflow_revision`
 
-Task 8 uses these status transitions:
+Task 8 keeps `status` aligned with the Oracle `AGENT_ANALYSIS_TASK` table:
 
-- `PENDING -> PROCESSING`
-- `PROCESSING -> SUCCESS`
-- `PROCESSING -> FAILED`
+- `PENDING`
+- `PROCESSING`
+- `SUCCESS`
+- `FAILED`
+
+Task 8 standardizes `step` to the design-spec enum:
+
+- `queued`
+- `parsing`
+- `understanding`
+- `analyzing`
+- `summarizing`
+- `validating`
+- `completed`
+- `failed`
+
+Task 8 actively uses this subset:
+
+- create task: `queued`
+- paper-understanding node: `understanding`
+- task-specific analysis node: `analyzing`
+- result shaping node: `summarizing`
+- schema validation node: `validating`
+- success terminal: `completed`
+- failure terminal: `failed`
+
+`parsing` is reserved until Task 9 adds multipart PDF handling.
 
 `result` is stored only on success and has this shape:
 
@@ -123,6 +178,104 @@ Task 8 uses these status transitions:
   "resultType": "string",
   "rawResult": {},
   "redactedResult": {}
+}
+```
+
+### De-duplication and Cache Reuse
+
+Task 8 must not create a new UUID task for every repeated request.
+
+Before creating a task, the service computes a deterministic `cache_key` from:
+
+- `task_type`
+- `manuscript_id`
+- `version_id`
+- `round_id`
+- `workflow_revision`
+
+`workflow_revision` is a stable version string derived from:
+
+- prompt version
+- schema version
+- redaction version
+- model name
+
+This lets the system invalidate cached results cleanly when the workflow contract changes.
+
+Reuse policy:
+
+- if an existing task with the same cache key is `PENDING` or `PROCESSING`, return that existing task instead of creating a duplicate
+- if an existing task with the same cache key is `SUCCESS`, return that existing task and reuse its stored result
+- if an existing task with the same cache key is `FAILED`, create a new task only when the caller explicitly retries or when `workflow_revision` changed
+
+Task 8 can keep the cache index in memory because persistence is still deferred, but the cache-key semantics must be fixed now so Task 9 and the frontend do not guess.
+
+## Result Schema Contract
+
+Task 8 must align exactly with the authoritative output schema in the main system design document. These names are contractual and must not be flattened or renamed.
+
+### Common Envelope Fields
+
+- `taskType`
+- `manuscriptId`
+- `versionId`
+- `status`
+- `confidence`
+
+### `SCREENING_ANALYSIS`
+
+```json
+{
+  "taskType": "SCREENING_ANALYSIS",
+  "manuscriptId": "string",
+  "versionId": "string",
+  "topicCategory": "string",
+  "scopeFit": "FIT|PARTIAL|UNFIT",
+  "formatRisks": ["string"],
+  "blindnessRisks": ["string"],
+  "screeningSummary": "string",
+  "confidence": "number"
+}
+```
+
+### `REVIEW_ASSIST_ANALYSIS`
+
+```json
+{
+  "taskType": "REVIEW_ASSIST_ANALYSIS",
+  "manuscriptId": "string",
+  "versionId": "string",
+  "summary": "string",
+  "novelty": {
+    "analysis": "string",
+    "score": "integer(1-5)"
+  },
+  "methodology": {
+    "analysis": "string",
+    "score": "integer(1-5)"
+  },
+  "writing": {
+    "analysis": "string",
+    "score": "integer(1-5)"
+  },
+  "risks": ["string"],
+  "finalSuggestion": "string",
+  "confidence": "number"
+}
+```
+
+### `DECISION_CONFLICT_ANALYSIS`
+
+```json
+{
+  "taskType": "DECISION_CONFLICT_ANALYSIS",
+  "manuscriptId": "string",
+  "versionId": "string",
+  "consensusPoints": ["string"],
+  "conflictPoints": ["string"],
+  "highRiskIssues": ["string"],
+  "decisionSummary": "string",
+  "confidence": "number"
 }
 ```
 
@@ -165,22 +318,24 @@ This is enough to satisfy the design spec without prematurely splitting each sco
 
 Recommended implementation:
 
-- keep `create_app(enable_background_execution: bool = True)`
-- production/default behavior: `True`
-- tests that need deterministic `PENDING` reads can pass `False`
+- keep `create_app(enable_background_execution: bool = True, require_internal_api_key: bool = True)`
+- production/default behavior: both `True`
+- tests that need deterministic reads can disable background execution and auth explicitly
 
 When background execution is enabled:
 
-1. create task with `PENDING`
-2. spawn a background thread
-3. background runner loads the task from `TaskStore`
-4. update to `PROCESSING`
-5. run the selected graph
-6. validate final result
-7. generate redacted result
-8. write `SUCCESS` + result, or `FAILED` + error
+1. authenticate caller
+2. compute cache key and reuse an existing task when eligible
+3. create task with `PENDING` and step `queued` only if no reusable task exists
+4. spawn a background thread
+5. background runner loads the task from `TaskStore`
+6. update to `PROCESSING`
+7. run the selected graph
+8. validate final result
+9. generate redacted result
+10. write `SUCCESS` + result, or `FAILED` + error
 
-This preserves Task 7's API contract while enabling real execution in Task 8.
+This preserves Task 7's API contract while making execution conditional on auth and de-duplication checks.
 
 ## Shared Intermediate Representation
 
@@ -236,12 +391,13 @@ Graph shape:
 3. `validate_screening_result`
 4. `redact_screening_result`
 
-Output schema must include at least:
+Output schema must match:
 
-- `scope_fit`
-- `summary`
-- `desk_reject_risk`
-- `blindness_risks`
+- `topicCategory`
+- `scopeFit`
+- `formatRisks`
+- `blindnessRisks`
+- `screeningSummary`
 - `confidence`
 
 This directly supports the plan test `test_screening_schema_has_scope_fit`.
@@ -257,18 +413,20 @@ Graph shape:
 3. `validate_review_assist_result`
 4. `redact_review_assist_result`
 
-Output schema must include:
+Output schema must match:
 
-- `novelty_score`
-- `method_score`
-- `experiment_score`
-- `writing_score`
-- `overall_score`
-- `strengths`
-- `weaknesses`
-- `recommendation`
+- `summary`
+- `novelty.analysis`
+- `novelty.score`
+- `methodology.analysis`
+- `methodology.score`
+- `writing.analysis`
+- `writing.score`
+- `risks`
+- `finalSuggestion`
+- `confidence`
 
-All score fields must be integers in the range `1-5`.
+All score fields remain integers in the range `1-5`.
 
 This directly supports the plan test `test_review_assist_schema_requires_integer_scores`.
 
@@ -282,14 +440,16 @@ Graph shape:
 2. `validate_conflict_result`
 3. `redact_conflict_result`
 
-This workflow does not require the full paper-understanding subgraph if the payload already contains reviewer summaries, score spread, or conflicting recommendations.
+This workflow is round-scoped, not only version-scoped.
+`round_id` is required and router/state validation must fail if it is missing.
 
-Output schema must include:
+Output schema must match:
 
-- `consensus`
-- `conflicts`
-- `chair_summary`
-- `missing_information`
+- `consensusPoints`
+- `conflictPoints`
+- `highRiskIssues`
+- `decisionSummary`
+- `confidence`
 
 This directly supports the plan test `test_conflict_schema_has_consensus_and_conflicts`.
 
@@ -299,10 +459,11 @@ Task 8 must validate final outputs with `Pydantic` models defined in `schemas.py
 
 Validation rules:
 
-- review-assist scores are integers only
-- review-assist scores must be `1-5`
-- screening result must include `scope_fit`
-- conflict result must include both `consensus` and `conflicts`
+- review-assist nested scores are integers only
+- review-assist nested scores must be `1-5`
+- screening result must include `scopeFit`
+- conflict result must include both `consensusPoints` and `conflictPoints`
+- `DECISION_CONFLICT_ANALYSIS` must reject missing `round_id`
 
 If validation fails:
 
@@ -314,17 +475,31 @@ If validation fails:
 
 Task 8 must emit both raw and redacted results.
 
-Redaction rules for this task:
+Redaction in Task 8 must do two things:
 
-- preserve structure
-- remove fields that could expose internal chain-of-thought style reasoning
-- keep reviewer-facing summaries concise and neutral
-- keep explicit blindness-risk findings in screening output
-- keep score fields in review-assist output
-- keep consensus/conflict summaries in decision-conflict output
+1. prompt-level prevention
+2. deterministic result sanitization
 
-Task 8 does not need a complex policy engine.
-Simple deterministic field-level projection functions in `redaction.py` are sufficient.
+Prompt-level prevention:
+
+- instruct the model not to repeat author names, institution names, acknowledgements, grant names, self-citation identity clues, or direct author-history references
+- instruct the model to summarize evidence without identity-bearing quotations
+
+Deterministic sanitization:
+
+- sanitize all free-text fields that may be shown to reviewers
+- inspect summary-like strings and list items for identity-bearing phrases
+- mask or drop suspicious fragments involving:
+  - institutions
+  - acknowledgements
+  - grant or project names
+  - explicit self-citation clues
+  - author-name-like references
+
+If sanitization cannot confidently produce a safe reviewer-facing text field, the redacted output should replace that field with a conservative generic summary instead of leaking the original text.
+
+Task 8 does not need a full NLP policy engine, but field projection alone is not sufficient.
+`redaction.py` must include content-level text sanitization for reviewer-visible narrative fields.
 
 ## Router Design
 
@@ -332,6 +507,7 @@ Simple deterministic field-level projection functions in `redaction.py` are suff
 
 - `select_workflow(task_type: str) -> CompiledStateGraph`
 - `build_initial_state(task_record: TaskRecord) -> dict`
+- `workflow_revision_for(task_record: TaskRecord) -> str`
 
 The router is not an LLM component.
 It only:
@@ -339,6 +515,7 @@ It only:
 - validates supported task types
 - chooses the correct compiled graph
 - prepares the initial state
+- enforces per-task required identifiers such as `round_id` for `DECISION_CONFLICT_ANALYSIS`
 
 Unsupported `TASK_TYPE` must fail fast and mark the task `FAILED`.
 
@@ -350,7 +527,7 @@ Responsibilities:
 
 - create the OpenAI client lazily
 - read config from environment
-- update task status in `TaskStore`
+- update task status and step in `TaskStore`
 - invoke the selected LangGraph workflow
 - normalize final graph output into the stored result envelope
 - catch and persist errors
@@ -358,6 +535,7 @@ Responsibilities:
 Failure handling:
 
 - unsupported task type -> `FAILED`
+- missing `round_id` for conflict analysis -> `FAILED`
 - missing API key/model -> `FAILED`
 - model/provider error -> `FAILED`
 - schema validation error -> `FAILED`
@@ -371,9 +549,9 @@ Task 8 should keep prompts short and deterministic.
 
 Use role-specific instructions in each analysis node:
 
-- screening: venue fit, obvious desk-reject risk, blindness concerns
-- review assist: structured review scoring and concise strengths/weaknesses
-- conflict analysis: summarize agreement, disagreement, and missing evidence
+- screening: venue fit, formatting risk, blindness concerns, no identity-bearing wording
+- review assist: structured nested scoring, concise evidence summaries, no identity-bearing wording
+- conflict analysis: summarize agreement and disagreement across a round, no author or institution clues
 
 Do not ask the model for free-form essays.
 Ask for compact JSON-shaped outputs that can be validated after parsing.
@@ -386,21 +564,25 @@ Task 8 plan already requires:
 - `test_screening_schema_has_scope_fit`
 - `test_conflict_schema_has_consensus_and_conflicts`
 
-Add one small router test as part of the same test module:
+Add:
 
 - `test_router_selects_graph_for_each_task_type`
+- `test_decision_conflict_requires_round_id`
+- `test_redaction_sanitizes_identity_clues`
 
 Testing boundaries:
 
 - schema tests should not depend on live network calls
 - router tests should not depend on real model execution
+- auth tests should not depend on external model calls
 - live execution can be covered separately after the structural tests are green
 
 For implementation, prefer:
 
 - direct schema unit tests
 - router selection unit tests
-- one integration-level test that uses `create_app(enable_background_execution=False)` where needed to keep Task 7 behavior deterministic
+- auth-guard tests for `X-Agent-Api-Key`
+- one integration-level test that uses `create_app(enable_background_execution=False, require_internal_api_key=False)` where needed to keep Task 7 behavior deterministic
 
 ## Deferred Work
 
@@ -410,18 +592,20 @@ Explicitly deferred beyond Task 8:
 - PDF extraction tools
 - Oracle-backed task/result persistence
 - polling integration from Java
-- retry/fallback behavior using `OPENROUTER_FALLBACK_API_KEY`
+- retry and failover behavior using `OPENROUTER_FALLBACK_API_KEY`
 - durable execution and checkpoint persistence
 - deeper multi-node specialist decomposition
+- moving `parsing` into active use before Task 9's PDF ingestion path exists
 
 ## Acceptance Criteria
 
 Task 8 is complete when:
 
 1. the agent service depends on real `langgraph` and `openai`
-2. each supported `TASK_TYPE` maps to a real compiled LangGraph workflow
-3. final workflow results are validated against task-specific schemas
-4. the service produces both raw and redacted outputs
-5. background execution updates `TaskStore` statuses through `PROCESSING` to terminal states
-6. the schema tests and router tests pass
-
+2. `/agent/tasks*` is protected by an internal API key before live execution is enabled
+3. duplicate requests for the same natural task key reuse cache instead of spawning duplicate external calls
+4. each supported `TASK_TYPE` maps to a real compiled LangGraph workflow
+5. final workflow results match the authoritative schema contract from the main design document
+6. the service produces both raw and redacted outputs, with content-level sanitization for reviewer-visible text
+7. background execution updates `TaskStore` statuses through `PROCESSING` to terminal states while `step` follows the fixed enum
+8. the schema, router, auth, and redaction tests pass

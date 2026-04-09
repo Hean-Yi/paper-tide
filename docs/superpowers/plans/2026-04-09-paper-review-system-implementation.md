@@ -50,8 +50,9 @@ This plan assumes the implementation will use the following file layout:
 - Task 4 completed on 2026-04-09
 - Task 5 completed on 2026-04-09
 - Task 6 completed on 2026-04-09
+- Task 7 completed in the working tree on 2026-04-09
 - Local environment bootstrap completed on 2026-04-09. Java, Maven, Node/npm, project `.venv`, frontend dependencies, Colima/Docker, and a local Oracle Free container are ready. Oracle schema import and verification passed inside the container.
-- Next recommended implementation target is Task 7: agent task API and in-memory task store.
+- Next recommended implementation target is Task 8: LangGraph workflows, result schemas, service authentication, and cache-aware task execution.
 
 ## Task 1: Scaffold the Monorepo
 
@@ -767,9 +768,13 @@ git commit -m "feat: add agent task api and in-memory task store"
 
 ## Task 8: Implement LangGraph Workflows and Result Schemas
 
-**Design Note:** Task 8 design is drafted in `docs/superpowers/specs/2026-04-09-task8-agent-workflows-design.md` and targets real LangGraph execution with OpenAI-compatible OpenRouter access, immediate background execution after task creation, schema validation, and redacted result generation. Multipart PDF upload remains deferred to Task 9.
+**Design Note:** Task 8 design is drafted in `docs/superpowers/specs/2026-04-09-task8-agent-workflows-design.md` and targets real LangGraph execution with OpenAI-compatible OpenRouter access, immediate background execution after authenticated task creation, cache-aware task reuse, schema validation aligned with the authoritative system design, and content-aware redacted result generation. Multipart PDF upload remains deferred to Task 9.
 
 **Files:**
+- Modify: `services/agent/app/main.py`
+- Modify: `services/agent/app/routes/tasks.py`
+- Modify: `services/agent/app/models.py`
+- Modify: `services/agent/app/task_store.py`
 - Create: `services/agent/app/workflows/router.py`
 - Create: `services/agent/app/workflows/schemas.py`
 - Create: `services/agent/app/workflows/coordinator.py`
@@ -778,6 +783,7 @@ git commit -m "feat: add agent task api and in-memory task store"
 - Create: `services/agent/app/workflows/conflict_analysis.py`
 - Create: `services/agent/app/redaction.py`
 - Create: `services/agent/tests/test_workflow_schemas.py`
+- Modify: `services/agent/tests/test_tasks_api.py`
 
 - [ ] **Step 1: Write failing schema tests**
 
@@ -787,6 +793,10 @@ def test_review_assist_schema_requires_integer_scores(): ...
 def test_screening_schema_has_scope_fit(): ...
 
 def test_conflict_schema_has_consensus_and_conflicts(): ...
+
+def test_decision_conflict_requires_round_id(): ...
+
+def test_redaction_sanitizes_identity_clues(): ...
 ```
 
 - [ ] **Step 2: Define the Paper Understanding intermediate representation**
@@ -811,20 +821,35 @@ Support:
 - `REVIEW_ASSIST_ANALYSIS`
 - `DECISION_CONFLICT_ANALYSIS`
 
-- [ ] **Step 4: Implement redaction and validation**
+- [ ] **Step 4: Add service authentication, cache reuse, and background execution hooks**
+
+Implement:
+
+- `X-Agent-Api-Key` protection for `/agent/tasks*`
+- cache-aware task reuse keyed by task type + manuscript/version/round + workflow revision
+- immediate background workflow execution after authenticated task creation
+- stable `step` enum updates
+
+- [ ] **Step 5: Implement redaction and validation**
 
 The final result path must:
 
-- validate required fields
-- enforce integer score `1-5`
-- generate redacted output for reviewer-facing result
+- validate required fields against the authoritative schema names
+- enforce integer score `1-5` in nested review-assist score objects
+- require `roundId` for `DECISION_CONFLICT_ANALYSIS`
+- generate content-sanitized redacted output for reviewer-facing result
 
-- [ ] **Step 5: Re-run workflow tests**
+- [ ] **Step 6: Re-run workflow and agent API tests**
 
-Run: `pytest services/agent/tests/test_workflow_schemas.py -q`  
+Run:
+
+- `pytest services/agent/tests/test_workflow_schemas.py -q`
+- `pytest services/agent/tests/test_tasks_api.py -q`
+- `pytest services/agent/tests -q`
+
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add services/agent/app/workflows services/agent/app/redaction.py services/agent/tests

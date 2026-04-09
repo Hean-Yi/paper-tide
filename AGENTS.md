@@ -42,10 +42,13 @@ Working rule:
 
 Current lessons captured from recent review cycles:
 - Add a root `.gitignore` early in scaffold work so generated files such as `.DS_Store`, `node_modules`, `dist`, `target`, `.m2`, `.venv`, and Python caches cannot drift back into the workspace.
+- Extend the root `.gitignore` early enough to cover local tool staging and packaging byproducts too, especially `.skill-staging/` and `*.egg-info`, so repository initialization and first commits do not capture machine-local metadata.
 - When the frontend stack is already chosen, the scaffold must reflect it early: use TypeScript entrypoints and include baseline dependencies and verification hooks for `Vitest`, `Element Plus`, and `vue-router` instead of leaving them implicit for later.
 - For Oracle schema design, avoid quoted reserved identifiers in persistent columns. Prefer explicit business-safe names such as `FEEDBACK_COMMENT` over `"COMMENT"` to reduce friction in Java/MyBatis and future SQL work.
 - Add high-value lookup indexes as soon as the access pattern is obvious, especially version-scoped result lookups such as `AGENT_ANALYSIS_RESULT (MANUSCRIPT_ID, VERSION_ID)`.
 - Verification scripts should test the real selected toolchain when dependencies are present. For the frontend, that means `Vitest + vue-tsc + vite build`, not syntax-only checks once the project has moved past pure scaffold stage.
+- On newer local JDKs where Mockito inline attachment can fail, prefer pinning Spring Boot tests to the subclass mock maker unless the task truly requires inline mocking; otherwise red-green verification can fail for toolchain reasons instead of product behavior.
+- If backend integration tests depend on seeded Oracle auth data, make the verification script apply the demo seed before API tests so repository-level verification matches the task's real execution assumptions.
 
 ## Plan File Discipline
 Execution work must stay anchored to one authoritative implementation plan file.

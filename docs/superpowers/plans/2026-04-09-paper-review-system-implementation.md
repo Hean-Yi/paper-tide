@@ -368,59 +368,126 @@ git commit -m "feat: add jwt authentication and role protection"
 
 ## Task 4: Build Manuscript, Version, and Author Management
 
+**Status:** Completed in the working tree on 2026-04-09. Implemented a stable manuscript aggregate with explicit draft-version submission, version-scoped author snapshots, separate PDF upload/download flows, submitter-owned reads, and a "My Manuscripts" collection endpoint for the author home screen. A review-driven follow-up also aligned the Task 4 step list with the approved spec and wrote the reusable lessons back into `AGENTS.md`.
+
+**Design Note:** Detailed Task 4 design is documented in `docs/superpowers/specs/2026-04-09-task4-manuscript-version-author-design.md`.
+
+**Execution Summary:** Executed red-green manuscript workflow development with Oracle-backed `MockMvc` integration tests, added the `com.example.review.manuscript` controller/service/repository/DTO slice, replaced the placeholder `/api/manuscripts` GET mapping with real manuscript routes, implemented manuscript creation, revision creation, PDF upload/download, explicit submit transitions, submitter-only list/detail/version reads, and added a secondary seeded author inside the test fixture for ownership assertions.
+
+**Verification Run:** `bash scripts/oracle-demo-seed.sh`; `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=ManuscriptServiceTest test`; `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test`; `bash scripts/test-all.sh`. All completed successfully with local Oracle access.
+
+**Commit Note:** This repository snapshot supports a normal git commit flow for Task 4 once the user requests integration.
+
 **Files:**
 - Create: `apps/api/src/main/java/com/example/review/manuscript/ManuscriptController.java`
 - Create: `apps/api/src/main/java/com/example/review/manuscript/ManuscriptService.java`
 - Create: `apps/api/src/main/java/com/example/review/manuscript/ManuscriptRepository.java`
 - Create: `apps/api/src/main/java/com/example/review/manuscript/VersionRepository.java`
 - Create: `apps/api/src/main/java/com/example/review/manuscript/AuthorRepository.java`
+- Create: `apps/api/src/main/java/com/example/review/manuscript/ManuscriptDtos.java`
 - Create: `apps/api/src/test/java/com/example/review/manuscript/ManuscriptServiceTest.java`
+- [ ] **Step 1: Write the failing manuscript integration tests**
 
-- [ ] **Step 1: Write failing manuscript workflow tests**
+Add tests for:
 
 ```java
 @Test
-void submitDraftCreatesSubmittedManuscriptAndVersion() {}
+void createDraftManuscriptPersistsAggregate() {}
+
+@Test
+void submitDraftVersionMovesStatusToSubmitted() {}
+
+@Test
+void submitDraftWithoutPdfIsRejected() {}
+
+@Test
+void createRevisionRequiresRevisionRequiredStatus() {}
 
 @Test
 void submitRevisionMovesStatusToRevisedSubmitted() {}
+
+@Test
+void uploadPdfRejectsNonPdfFile() {}
+
+@Test
+void downloadPdfReturnsStoredFileForSubmitter() {}
+
+@Test
+void onlySubmitterCanAccessManuscript() {}
+
+@Test
+void listManuscriptsAndVersionsReturnAuthorOwnedData() {}
 ```
 
-- [ ] **Step 2: Implement the manuscript aggregate**
+- [ ] **Step 2: Run manuscript tests to verify failure**
 
-Include fields:
+Run: `mvn -f apps/api/pom.xml -Dtest=ManuscriptServiceTest test`  
+Expected: FAIL because the manuscript slice does not exist yet.
 
-- `currentStatus`
-- `currentVersionId`
-- `currentRoundNo`
-- `blindMode`
+- [ ] **Step 3: Implement manuscript DTOs and controller endpoints**
 
-- [ ] **Step 3: Implement version upload and author persistence**
+Add endpoints for:
 
-The service must write:
+- `POST /api/manuscripts`
+- `GET /api/manuscripts`
+- `GET /api/manuscripts/{id}`
+- `POST /api/manuscripts/{id}/versions`
+- `GET /api/manuscripts/{id}/versions`
+- `POST /api/manuscripts/{id}/versions/{versionId}/pdf`
+- `GET /api/manuscripts/{id}/versions/{versionId}/pdf`
+- `POST /api/manuscripts/{id}/versions/{versionId}/submit`
 
-- `MANUSCRIPT`
-- `MANUSCRIPT_VERSION`
-- `MANUSCRIPT_AUTHOR`
+Use request/response DTOs that carry:
 
-- [ ] **Step 4: Add the PDF upload endpoint**
+- manuscript summary fields for the "My Manuscripts" list
+- manuscript detail fields
+- version history fields
+- create-manuscript and create-version payloads with author snapshots
 
-```java
-@PostMapping("/{id}/versions/{versionId}/pdf")
-public ResponseEntity<Void> uploadPdf(@PathVariable Long id, @PathVariable Long versionId, @RequestParam MultipartFile file) {
-    return ResponseEntity.ok().build();
-}
-```
+- [ ] **Step 4: Implement repositories for manuscript, version, and author persistence**
 
-- [ ] **Step 5: Re-run manuscript tests**
+The persistence layer must support:
+
+- insert and lock reads for `MANUSCRIPT`
+- insert, list, and BLOB updates for `MANUSCRIPT_VERSION`
+- batch insert and ordered reads for `MANUSCRIPT_AUTHOR`
+- author-owned manuscript list queries joined to the current version title
+
+- [ ] **Step 5: Implement service validation, ownership checks, and transactions**
+
+Implement:
+
+- `AUTHOR` role and submitter ownership enforcement
+- `blindMode` validation
+- exactly one corresponding author validation
+- `DRAFT -> SUBMITTED` submit transition
+- `REVISION_REQUIRED -> REVISED_SUBMITTED` submit transition
+- `SELECT ... FOR UPDATE` locking for revision creation and submission
+- non-current-version and post-submit PDF overwrite guards
+
+- [ ] **Step 6: Re-run manuscript tests**
 
 Run: `mvn -f apps/api/pom.xml -Dtest=ManuscriptServiceTest test`  
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Run API regression suite**
+
+Run: `mvn -f apps/api/pom.xml test`  
+Expected: PASS.
+
+- [ ] **Step 8: Update Task 4 execution status in this plan**
+
+Record:
+
+- what was executed
+- what changed
+- what verification ran
+- current completion state
+
+- [ ] **Step 9: Add commit**
 
 ```bash
-git add apps/api/src/main/java/com/example/review/manuscript apps/api/src/test/java/com/example/review/manuscript
+git add apps/api/src/main/java/com/example/review/manuscript apps/api/src/test/java/com/example/review/manuscript AGENTS.md docs/superpowers/specs/2026-04-09-task4-manuscript-version-author-design.md docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md
 git commit -m "feat: add manuscript version and author management"
 ```
 

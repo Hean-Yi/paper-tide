@@ -49,6 +49,9 @@ Current lessons captured from recent review cycles:
 - Verification scripts should test the real selected toolchain when dependencies are present. For the frontend, that means `Vitest + vue-tsc + vite build`, not syntax-only checks once the project has moved past pure scaffold stage.
 - On newer local JDKs where Mockito inline attachment can fail, prefer pinning Spring Boot tests to the subclass mock maker unless the task truly requires inline mocking; otherwise red-green verification can fail for toolchain reasons instead of product behavior.
 - If backend integration tests depend on seeded Oracle auth data, make the verification script apply the demo seed before API tests so repository-level verification matches the task's real execution assumptions.
+- When a task spec is revised during review, update the authoritative plan file's concrete task steps in the same work cycle so the execution ledger stays aligned with the approved design instead of drifting behind it.
+- For actor-facing workflow tasks, include the minimal collection/list endpoint needed to render that actor's primary screen in the same backend slice; do not stop at detail endpoints if the UI cannot navigate without a "my items" query.
+- In service-layer error mapping, catch only the specific client-input exceptions you intend to translate to `4xx`. Do not wrap persistence or infrastructure failures in broad catches that misreport server faults as bad requests.
 
 ## Plan File Discipline
 Execution work must stay anchored to one authoritative implementation plan file.

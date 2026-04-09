@@ -701,13 +701,23 @@ git commit -m "feat: add review submission decisions and notifications"
 
 ## Task 7: Scaffold the Agent Service API and Task Store
 
+**Status:** Completed in the working tree on 2026-04-09. Implemented the FastAPI task API skeleton and an in-memory task store that is ready for Task 8 workflow execution to drive status transitions.
+
+**Execution Summary:** Wrote failing FastAPI tests for task creation, task lookup, unknown-task handling, and result-not-ready behavior. Added `app.models`, `app.task_store`, and `app.routes.tasks`, mounted the new router in `app.main`, and implemented a lock-protected in-memory `TaskStore` keyed by UUID task IDs. Task creation now persists `task_type`, manuscript/version/round identifiers, and `request_payload` so Task 8 can consume the original analysis input without changing the store contract. Task 7 intentionally keeps the API JSON-only; the future main-system integration that sends PDF files remains deferred to the later multipart upgrade task.
+
+**Verification Run:** `./.venv/bin/python -m pytest services/agent/tests/test_tasks_api.py -q`; `./.venv/bin/python -m pytest services/agent/tests -q`. Both completed successfully.
+
+**Commit Note:** Task 7 is complete in the working tree but has not been committed yet.
+
 **Files:**
 - Create: `services/agent/app/routes/tasks.py`
+- Create: `services/agent/app/routes/__init__.py`
 - Create: `services/agent/app/models.py`
 - Create: `services/agent/app/task_store.py`
 - Create: `services/agent/tests/test_tasks_api.py`
+- Modify: `services/agent/app/main.py`
 
-- [ ] **Step 1: Write failing agent task API tests**
+- [x] **Step 1: Write failing agent task API tests**
 
 ```python
 def test_create_task_returns_pending_status(): ...
@@ -715,7 +725,7 @@ def test_create_task_returns_pending_status(): ...
 def test_get_unknown_task_returns_404(): ...
 ```
 
-- [ ] **Step 2: Implement the in-memory task store**
+- [x] **Step 2: Implement the in-memory task store**
 
 ```python
 from dataclasses import dataclass
@@ -723,12 +733,14 @@ from dataclasses import dataclass
 @dataclass
 class TaskRecord:
     task_id: str
+    task_type: str
     status: str
     step: str
     error: str | None = None
+    request_payload: dict | None = None
 ```
 
-- [ ] **Step 3: Implement the API endpoints**
+- [x] **Step 3: Implement the API endpoints**
 
 Expose:
 
@@ -736,12 +748,17 @@ Expose:
 - `GET /agent/tasks/{task_id}`
 - `GET /agent/tasks/{task_id}/result`
 
-- [ ] **Step 4: Re-run agent API tests**
+- [x] **Step 4: Re-run agent API tests**
 
 Run: `pytest services/agent/tests/test_tasks_api.py -q`  
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Re-run the full agent test directory**
+
+Run: `pytest services/agent/tests -q`  
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add services/agent/app services/agent/tests
@@ -749,6 +766,8 @@ git commit -m "feat: add agent task api and in-memory task store"
 ```
 
 ## Task 8: Implement LangGraph Workflows and Result Schemas
+
+**Design Note:** Task 8 design is drafted in `docs/superpowers/specs/2026-04-09-task8-agent-workflows-design.md` and targets real LangGraph execution with OpenAI-compatible OpenRouter access, immediate background execution after task creation, schema validation, and redacted result generation. Multipart PDF upload remains deferred to Task 9.
 
 **Files:**
 - Create: `services/agent/app/workflows/router.py`

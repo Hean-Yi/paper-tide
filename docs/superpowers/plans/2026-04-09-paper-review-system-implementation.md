@@ -47,11 +47,16 @@ This plan assumes the implementation will use the following file layout:
 - Task 1 completed on 2026-04-09
 - Task 2 completed on 2026-04-09
 - Task 3 completed on 2026-04-09
+- Task 4 completed on 2026-04-09
+- Task 5 completed in the working tree on 2026-04-09
 - Local environment bootstrap completed on 2026-04-09. Java, Maven, Node/npm, project `.venv`, frontend dependencies, Colima/Docker, and a local Oracle Free container are ready. Oracle schema import and verification passed inside the container.
+- Next recommended implementation target is Task 6: review reports, chair decisions, notifications, and audit logging.
 
 ## Task 1: Scaffold the Monorepo
 
 **Status:** Completed on 2026-04-09 after spec-compliance review and code-quality review. Full local verification was completed later on 2026-04-09 after environment bootstrap, including Maven tests, pytest, Vitest, Vue TypeScript type-checking, and Vite production build. A follow-up review pass also added a root `.gitignore`, switched the frontend entry to TypeScript, and declared the selected frontend stack dependencies (`Element Plus`, `vue-router`).
+
+**Commit Note:** The current git history is too sparse to reconstruct an isolated Task 1 commit with confidence, but the scaffolded repository state and later verification evidence confirm Task 1 is complete.
 
 **Files:**
 - Create: `apps/api/pom.xml`
@@ -64,7 +69,7 @@ This plan assumes the implementation will use the following file layout:
 - Create: `scripts/dev-up.sh`
 - Create: `scripts/test-all.sh`
 
-- [ ] **Step 1: Create the backend skeleton**
+- [x] **Step 1: Create the backend skeleton**
 
 ```java
 package com.example.review;
@@ -80,7 +85,7 @@ public class ReviewApplication {
 }
 ```
 
-- [ ] **Step 2: Add a minimal backend health endpoint**
+- [x] **Step 2: Add a minimal backend health endpoint**
 
 ```java
 package com.example.review.health;
@@ -100,7 +105,7 @@ public class HealthController {
 }
 ```
 
-- [ ] **Step 3: Add a minimal FastAPI health endpoint**
+- [x] **Step 3: Add a minimal FastAPI health endpoint**
 
 ```python
 from fastapi import FastAPI
@@ -112,7 +117,7 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 ```
 
-- [ ] **Step 4: Add a minimal Vue application entry**
+- [x] **Step 4: Add a minimal Vue application entry**
 
 ```ts
 import { createApp } from "vue";
@@ -120,12 +125,12 @@ import App from "./App.vue";
 createApp(App).mount("#app");
 ```
 
-- [ ] **Step 5: Verify scaffolding boots**
+- [x] **Step 5: Verify scaffolding boots**
 
 Run: `bash scripts/dev-up.sh`  
 Expected: Spring Boot starts, Vite starts, FastAPI responds on `/health`.
 
-- [ ] **Step 6: Add a first commit**
+- [x] **Step 6: Add a first commit**
 
 ```bash
 git add apps/api apps/web services/agent scripts
@@ -136,6 +141,8 @@ git commit -m "chore: scaffold monorepo services"
 
 **Status:** Completed on 2026-04-09 after spec-compliance review and code-quality review. Initial verification was static-only, then upgraded to full runtime verification on 2026-04-09 by importing the schema into a local Oracle Free container and running `verify_schema.sql` successfully. A follow-up review pass renamed `AGENT_FEEDBACK.COMMENT` to `FEEDBACK_COMMENT` and added an index on `AGENT_ANALYSIS_RESULT (MANUSCRIPT_ID, VERSION_ID)`.
 
+**Commit Note:** The current git history does not expose a dedicated Task 2 commit, but the Oracle schema files and successful runtime verification show the schema task is complete.
+
 **Files:**
 - Create: `database/oracle/001_init.sql`
 - Create: `database/oracle/002_seed_roles.sql`
@@ -144,7 +151,7 @@ git commit -m "chore: scaffold monorepo services"
 - Create: `database/oracle/005_triggers.sql`
 - Test: `database/oracle/verify_schema.sql`
 
-- [ ] **Step 1: Write the base table definitions**
+- [x] **Step 1: Write the base table definitions**
 
 Include tables from the spec:
 
@@ -172,7 +179,7 @@ CREATE TABLE MANUSCRIPT (
 );
 ```
 
-- [ ] **Step 2: Add the workflow tables**
+- [x] **Step 2: Add the workflow tables**
 
 Include:
 
@@ -189,7 +196,7 @@ Include:
 - `SYS_NOTIFICATION`
 - `AUDIT_LOG`
 
-- [ ] **Step 3: Add sequences**
+- [x] **Step 3: Add sequences**
 
 ```sql
 CREATE SEQUENCE SEQ_SYS_USER START WITH 1 INCREMENT BY 1;
@@ -197,7 +204,7 @@ CREATE SEQUENCE SEQ_MANUSCRIPT START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE SEQ_MANUSCRIPT_VERSION START WITH 1 INCREMENT BY 1;
 ```
 
-- [ ] **Step 4: Add role seed data**
+- [x] **Step 4: Add role seed data**
 
 ```sql
 INSERT INTO SYS_ROLE (ROLE_ID, ROLE_CODE, ROLE_NAME) VALUES (1, 'AUTHOR', 'Author');
@@ -206,7 +213,7 @@ INSERT INTO SYS_ROLE (ROLE_ID, ROLE_CODE, ROLE_NAME) VALUES (3, 'CHAIR', 'Chair'
 INSERT INTO SYS_ROLE (ROLE_ID, ROLE_CODE, ROLE_NAME) VALUES (4, 'ADMIN', 'Admin');
 ```
 
-- [ ] **Step 5: Add trigger/procedure examples required by the course**
+- [x] **Step 5: Add trigger/procedure examples required by the course**
 
 Use triggers for audit timestamp maintenance and procedures for reporting:
 
@@ -218,12 +225,12 @@ END;
 /
 ```
 
-- [ ] **Step 6: Verify schema creation**
+- [x] **Step 6: Verify schema creation**
 
 Run: `sqlplus < database/oracle/001_init.sql`  
 Expected: tables and sequences created with no Oracle errors.
 
-- [ ] **Step 7: Add a schema commit**
+- [x] **Step 7: Add a schema commit**
 
 ```bash
 git add database/oracle
@@ -240,7 +247,7 @@ git commit -m "feat: add oracle schema for review workflow"
 
 **Verification Run:** `bash scripts/oracle-demo-seed.sh`; `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AuthControllerTest test`; `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test`; `bash scripts/test-all.sh`. All completed successfully when run with local Oracle access.
 
-**Repository Constraint:** This workspace snapshot is not a git repository, so the plan's commit step could not be executed here.
+**Commit Note:** The current git history does not preserve a dedicated Task 3 feature commit, but the Task 3 code, review follow-up commit `04eed24`, and fresh verification evidence confirm the authentication task is complete.
 
 **Files:**
 - Create: `apps/api/src/main/java/com/example/review/auth/AuthController.java`
@@ -261,7 +268,7 @@ git commit -m "feat: add oracle schema for review workflow"
 - Modify: `apps/api/src/main/resources/application.yml`
 - Modify: `scripts/test-all.sh`
 
-- [ ] **Step 1: Write the failing auth tests**
+- [x] **Step 1: Write the failing auth tests**
 
 ```java
 @Test
@@ -289,19 +296,19 @@ void decisionEndpointAcceptsChairRole() {}
 void auditLogEndpointAcceptsOnlyAdminRole() {}
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run: `mvn -f apps/api/pom.xml -Dtest=AuthControllerTest test`  
 Expected: FAIL because auth classes do not exist yet.
 
-- [ ] **Step 3: Implement Oracle-backed auth and JWT login**
+- [x] **Step 3: Implement Oracle-backed auth and JWT login**
 
 ```java
 public record LoginRequest(String username, String password) {}
 public record LoginResponse(String token) {}
 ```
 
-- [ ] **Step 4: Add Spring Security route protection**
+- [x] **Step 4: Add Spring Security route protection**
 
 Allow anonymous:
 
@@ -317,7 +324,7 @@ Restrict by role for:
 - `/api/decisions/**` -> `CHAIR`, `ADMIN`
 - `/api/audit-logs/**` -> `ADMIN`
 
-- [ ] **Step 5: Add demo seed data and protected-route placeholders**
+- [x] **Step 5: Add demo seed data and protected-route placeholders**
 
 Add:
 
@@ -325,7 +332,7 @@ Add:
 - `scripts/oracle-demo-seed.sh`
 - placeholder controllers for protected route integration tests
 
-- [ ] **Step 6: Re-run auth tests against Oracle**
+- [x] **Step 6: Re-run auth tests against Oracle**
 
 Run:
 
@@ -334,12 +341,12 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 7: Run API regression suite**
+- [x] **Step 7: Run API regression suite**
 
 Run: `mvn -f apps/api/pom.xml test`
 Expected: PASS.
 
-- [ ] **Step 8: Record verification results**
+- [x] **Step 8: Record verification results**
 
 Write:
 
@@ -350,7 +357,7 @@ Write:
 
 to `docs/verification/2026-04-09-task3-auth-role-control.md`.
 
-- [ ] **Step 9: Update Task 3 execution status in this plan**
+- [x] **Step 9: Update Task 3 execution status in this plan**
 
 Record:
 
@@ -359,7 +366,7 @@ Record:
 - what verification ran
 - current completion state
 
-- [ ] **Step 10: Add commit**
+- [x] **Step 10: Add commit**
 
 ```bash
 git add apps/api/pom.xml apps/api/src/main/java/com/example/review/auth apps/api/src/main/java/com/example/review/config apps/api/src/main/resources/application.yml apps/api/src/test/java/com/example/review/auth database/oracle/006_seed_demo_users.sql scripts/oracle-demo-seed.sh docs/verification/2026-04-09-task3-auth-role-control.md docs/superpowers/specs/2026-04-09-task3-auth-role-control-design.md docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md
@@ -376,7 +383,7 @@ git commit -m "feat: add jwt authentication and role protection"
 
 **Verification Run:** `bash scripts/oracle-demo-seed.sh`; `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=ManuscriptServiceTest test`; `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test`; `bash scripts/test-all.sh`. All completed successfully with local Oracle access.
 
-**Commit Note:** This repository snapshot supports a normal git commit flow for Task 4 once the user requests integration.
+**Commit Note:** Task 4 was committed on 2026-04-09 as `40c12dd` with message `feat(api): add manuscript version and author management`.
 
 **Files:**
 - Create: `apps/api/src/main/java/com/example/review/manuscript/ManuscriptController.java`
@@ -386,7 +393,7 @@ git commit -m "feat: add jwt authentication and role protection"
 - Create: `apps/api/src/main/java/com/example/review/manuscript/AuthorRepository.java`
 - Create: `apps/api/src/main/java/com/example/review/manuscript/ManuscriptDtos.java`
 - Create: `apps/api/src/test/java/com/example/review/manuscript/ManuscriptServiceTest.java`
-- [ ] **Step 1: Write the failing manuscript integration tests**
+- [x] **Step 1: Write the failing manuscript integration tests**
 
 Add tests for:
 
@@ -419,12 +426,12 @@ void onlySubmitterCanAccessManuscript() {}
 void listManuscriptsAndVersionsReturnAuthorOwnedData() {}
 ```
 
-- [ ] **Step 2: Run manuscript tests to verify failure**
+- [x] **Step 2: Run manuscript tests to verify failure**
 
 Run: `mvn -f apps/api/pom.xml -Dtest=ManuscriptServiceTest test`  
 Expected: FAIL because the manuscript slice does not exist yet.
 
-- [ ] **Step 3: Implement manuscript DTOs and controller endpoints**
+- [x] **Step 3: Implement manuscript DTOs and controller endpoints**
 
 Add endpoints for:
 
@@ -444,7 +451,7 @@ Use request/response DTOs that carry:
 - version history fields
 - create-manuscript and create-version payloads with author snapshots
 
-- [ ] **Step 4: Implement repositories for manuscript, version, and author persistence**
+- [x] **Step 4: Implement repositories for manuscript, version, and author persistence**
 
 The persistence layer must support:
 
@@ -453,7 +460,7 @@ The persistence layer must support:
 - batch insert and ordered reads for `MANUSCRIPT_AUTHOR`
 - author-owned manuscript list queries joined to the current version title
 
-- [ ] **Step 5: Implement service validation, ownership checks, and transactions**
+- [x] **Step 5: Implement service validation, ownership checks, and transactions**
 
 Implement:
 
@@ -465,17 +472,17 @@ Implement:
 - `SELECT ... FOR UPDATE` locking for revision creation and submission
 - non-current-version and post-submit PDF overwrite guards
 
-- [ ] **Step 6: Re-run manuscript tests**
+- [x] **Step 6: Re-run manuscript tests**
 
 Run: `mvn -f apps/api/pom.xml -Dtest=ManuscriptServiceTest test`  
 Expected: PASS.
 
-- [ ] **Step 7: Run API regression suite**
+- [x] **Step 7: Run API regression suite**
 
 Run: `mvn -f apps/api/pom.xml test`  
 Expected: PASS.
 
-- [ ] **Step 8: Update Task 4 execution status in this plan**
+- [x] **Step 8: Update Task 4 execution status in this plan**
 
 Record:
 
@@ -484,7 +491,7 @@ Record:
 - what verification ran
 - current completion state
 
-- [ ] **Step 9: Add commit**
+- [x] **Step 9: Add commit**
 
 ```bash
 git add apps/api/src/main/java/com/example/review/manuscript apps/api/src/test/java/com/example/review/manuscript AGENTS.md docs/superpowers/specs/2026-04-09-task4-manuscript-version-author-design.md docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md
@@ -493,45 +500,80 @@ git commit -m "feat: add manuscript version and author management"
 
 ## Task 5: Implement Review Rounds, Assignments, and Conflict Checks
 
+**Status:** Completed in the working tree on 2026-04-09. Implemented chair-driven round creation, reviewer assignment lifecycle management, reviewer accept/decline actions, overdue reassignment, and round-scoped conflict check recording/querying on top of the Task 4 manuscript/version data.
+
+**Execution Summary:** Executed a short design pass against the existing Oracle schema, wrote Oracle-backed `MockMvc` integration tests for round creation and assignment lifecycle transitions, added the `com.example.review.review` controller/service/repository/DTO slice, enforced manuscript preconditions (`SUBMITTED` or `REVISED_SUBMITTED`) before round creation, promoted manuscripts to `UNDER_REVIEW` when a round is opened, implemented `ASSIGNED -> ACCEPTED`, `ASSIGNED/ACCEPTED -> DECLINED`, `ASSIGNED/ACCEPTED -> OVERDUE`, and `OVERDUE -> REASSIGNED`, recorded same-institution system conflicts plus optional self-declared conflicts, and finished with a follow-up test-isolation fix so full API regression clears review tables before manuscript rows. Task 5 intentionally skips the intermediate `UNDER_SCREENING` state; the screening entry and desk-reject path remain deferred to Task 6 and the later screening workflow.
+
+**Verification Run:** `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=ReviewWorkflowServiceTest test`; `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=ManuscriptServiceTest test`; `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test`; `bash scripts/test-all.sh`. All completed successfully with local Oracle access.
+
+**Commit Note:** Task 5 is complete in the working tree but has not been committed yet.
+
 **Files:**
 - Create: `apps/api/src/main/java/com/example/review/review/ReviewRoundController.java`
 - Create: `apps/api/src/main/java/com/example/review/review/AssignmentController.java`
+- Create: `apps/api/src/main/java/com/example/review/review/ReviewDtos.java`
 - Create: `apps/api/src/main/java/com/example/review/review/ReviewWorkflowService.java`
+- Create: `apps/api/src/main/java/com/example/review/review/ReviewRoundRepository.java`
+- Create: `apps/api/src/main/java/com/example/review/review/ReviewAssignmentRepository.java`
 - Create: `apps/api/src/main/java/com/example/review/review/ConflictCheckService.java`
+- Create: `apps/api/src/main/java/com/example/review/review/ConflictCheckRepository.java`
 - Create: `apps/api/src/test/java/com/example/review/review/ReviewWorkflowServiceTest.java`
+- Modify: `apps/api/src/test/java/com/example/review/manuscript/ManuscriptServiceTest.java`
 
-- [ ] **Step 1: Write failing assignment tests**
+- [x] **Step 1: Write failing review workflow integration tests**
 
 ```java
 @Test
 void assignReviewerCreatesAssignedTask() {}
 
 @Test
+void reviewerAcceptMovesAssignmentToAccepted() {}
+
+@Test
 void selfDeclaredConflictMovesTaskToDeclined() {}
 
 @Test
 void overdueTaskCanBeReassigned() {}
+
+@Test
+void systemConflictCheckIsReturnedForRound() {}
+
+@Test
+void roundCreationRejectsUnsupportedManuscriptState() {}
 ```
 
-- [ ] **Step 2: Implement round creation**
+- [x] **Step 2: Implement round creation and chair-facing endpoints**
 
-Create `REVIEW_ROUND` with:
+Add endpoints for:
 
-- `ROUND_STATUS`
-- `ASSIGNMENT_STRATEGY`
-- `SCREENING_REQUIRED`
-- `DEADLINE_AT`
+- `POST /api/review-rounds`
+- `POST /api/review-rounds/{roundId}/assignments`
+- `GET /api/review-rounds/{roundId}/conflict-checks`
 
-- [ ] **Step 3: Implement assignment state transitions**
+Round creation must:
+
+- require `CHAIR` or `ADMIN`
+- allow only `SUBMITTED` or `REVISED_SUBMITTED` manuscripts
+- create `REVIEW_ROUND` with `ROUND_STATUS = PENDING`
+- move the manuscript to `UNDER_REVIEW`
+
+- [x] **Step 3: Implement assignment repositories, reviewer actions, and state transitions**
 
 Support:
 
 - `ASSIGNED -> ACCEPTED`
-- `ASSIGNED -> DECLINED`
-- `ASSIGNED -> OVERDUE`
+- `ASSIGNED/ACCEPTED -> DECLINED`
+- `ASSIGNED/ACCEPTED -> OVERDUE`
 - `OVERDUE -> REASSIGNED`
 
-- [ ] **Step 4: Implement conflict check recording**
+Add reviewer/chair endpoints for:
+
+- `POST /api/review-assignments/{assignmentId}/accept`
+- `POST /api/review-assignments/{assignmentId}/decline`
+- `POST /api/review-assignments/{assignmentId}/mark-overdue`
+- `POST /api/review-assignments/{assignmentId}/reassign`
+
+- [x] **Step 4: Implement conflict check detection and recording**
 
 At minimum detect same institution:
 
@@ -541,19 +583,37 @@ if (Objects.equals(authorInstitution, reviewerInstitution)) {
 }
 ```
 
-- [ ] **Step 5: Add conflict check query endpoint**
+- [x] **Step 5: Enforce reviewer/chair permissions and optional self-declared conflict writes**
 
-Endpoint: `GET /api/review-rounds/{roundId}/conflict-checks`
+Implement:
 
-- [ ] **Step 6: Re-run review workflow tests**
+- `CHAIR` / `ADMIN` access for round creation, assignment, overdue marking, reassignment, and conflict queries
+- reviewer-owner enforcement for `accept` and `decline`
+- optional `conflictDeclared` handling on decline
+
+- [x] **Step 6: Re-run focused Task 5 tests**
 
 Run: `mvn -f apps/api/pom.xml -Dtest=ReviewWorkflowServiceTest test`  
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Re-run manuscript and full API regression, then fix any integration-level cleanup regressions**
+
+Run:
+
+- `mvn -f apps/api/pom.xml -Dtest=ManuscriptServiceTest test`
+- `mvn -f apps/api/pom.xml test`
+
+Expected: PASS. If full regression exposes cross-test table cleanup failures, update dependent-table cleanup order before closing the task.
+
+- [x] **Step 8: Run repository-level verification**
+
+Run: `bash scripts/test-all.sh`  
+Expected: PASS.
+
+- [ ] **Step 9: Commit**
 
 ```bash
-git add apps/api/src/main/java/com/example/review/review apps/api/src/test/java/com/example/review/review
+git add apps/api/src/main/java/com/example/review/review apps/api/src/test/java/com/example/review/review apps/api/src/test/java/com/example/review/manuscript/ManuscriptServiceTest.java docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md
 git commit -m "feat: add review rounds assignments and conflict checks"
 ```
 

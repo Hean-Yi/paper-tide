@@ -52,6 +52,8 @@ Current lessons captured from recent review cycles:
 - When a task spec is revised during review, update the authoritative plan file's concrete task steps in the same work cycle so the execution ledger stays aligned with the approved design instead of drifting behind it.
 - For actor-facing workflow tasks, include the minimal collection/list endpoint needed to render that actor's primary screen in the same backend slice; do not stop at detail endpoints if the UI cannot navigate without a "my items" query.
 - In service-layer error mapping, catch only the specific client-input exceptions you intend to translate to `4xx`. Do not wrap persistence or infrastructure failures in broad catches that misreport server faults as bad requests.
+- When Oracle-backed integration tests span workflow tables with foreign-key chains, clean seeded data in dependency order inside test setup or teardown, deleting child workflow rows before parent manuscript/version rows so later task slices do not break existing test isolation.
+- When a workflow task intentionally skips an intermediate state from the full state machine, record that deferral explicitly in the authoritative plan or spec in the same cycle so later tasks know which transition still needs a dedicated entry point.
 
 ## Plan File Discipline
 Execution work must stay anchored to one authoritative implementation plan file.

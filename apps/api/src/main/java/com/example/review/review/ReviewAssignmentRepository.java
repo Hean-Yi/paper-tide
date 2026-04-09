@@ -138,6 +138,26 @@ public class ReviewAssignmentRepository {
                 assignmentId
         );
     }
+
+    public void markSubmitted(long assignmentId, Timestamp submittedAt) {
+        jdbcTemplate.update(
+                "UPDATE REVIEW_ASSIGNMENT SET TASK_STATUS = 'SUBMITTED', SUBMITTED_AT = ? WHERE ASSIGNMENT_ID = ?",
+                submittedAt,
+                assignmentId
+        );
+    }
+
+    public void cancelOpenAssignmentsForRound(long roundId) {
+        jdbcTemplate.update(
+                """
+                UPDATE REVIEW_ASSIGNMENT
+                SET TASK_STATUS = 'CANCELLED'
+                WHERE ROUND_ID = ?
+                  AND TASK_STATUS IN ('ASSIGNED', 'ACCEPTED', 'IN_REVIEW', 'OVERDUE')
+                """,
+                roundId
+        );
+    }
 }
 
 record ReviewAssignmentRow(

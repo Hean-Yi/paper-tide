@@ -54,6 +54,7 @@ Current lessons captured from recent review cycles:
 - In service-layer error mapping, catch only the specific client-input exceptions you intend to translate to `4xx`. Do not wrap persistence or infrastructure failures in broad catches that misreport server faults as bad requests.
 - When Oracle-backed integration tests span workflow tables with foreign-key chains, clean seeded data in dependency order inside test setup or teardown, deleting child workflow rows before parent manuscript/version rows so later task slices do not break existing test isolation.
 - When a workflow task intentionally skips an intermediate state from the full state machine, record that deferral explicitly in the authoritative plan or spec in the same cycle so later tasks know which transition still needs a dedicated entry point.
+- For notifications in core workflow transactions, keep the notification call behind a separate service boundary and treat delivery as best-effort. Notification persistence failures must not roll back the primary business transaction unless the task explicitly requires synchronous guarantees.
 
 ## Plan File Discipline
 Execution work must stay anchored to one authoritative implementation plan file.

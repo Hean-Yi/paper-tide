@@ -37,6 +37,7 @@ class ReviewWorkflowServiceTest {
     @BeforeEach
     void cleanReviewTables() {
         jdbcTemplate.update("DELETE FROM CONFLICT_CHECK_RECORD");
+        jdbcTemplate.update("DELETE FROM REVIEW_REPORT");
         jdbcTemplate.update("DELETE FROM REVIEW_ASSIGNMENT");
         jdbcTemplate.update("DELETE FROM REVIEW_ROUND");
         jdbcTemplate.update("DELETE FROM MANUSCRIPT_AUTHOR");

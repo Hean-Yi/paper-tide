@@ -48,9 +48,10 @@ This plan assumes the implementation will use the following file layout:
 - Task 2 completed on 2026-04-09
 - Task 3 completed on 2026-04-09
 - Task 4 completed on 2026-04-09
-- Task 5 completed in the working tree on 2026-04-09
+- Task 5 completed on 2026-04-09
+- Task 6 completed on 2026-04-09
 - Local environment bootstrap completed on 2026-04-09. Java, Maven, Node/npm, project `.venv`, frontend dependencies, Colima/Docker, and a local Oracle Free container are ready. Oracle schema import and verification passed inside the container.
-- Next recommended implementation target is Task 6: review reports, chair decisions, notifications, and audit logging.
+- Next recommended implementation target is Task 7: agent task API and in-memory task store.
 
 ## Task 1: Scaffold the Monorepo
 
@@ -506,7 +507,7 @@ git commit -m "feat: add manuscript version and author management"
 
 **Verification Run:** `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=ReviewWorkflowServiceTest test`; `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=ManuscriptServiceTest test`; `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test`; `bash scripts/test-all.sh`. All completed successfully with local Oracle access.
 
-**Commit Note:** Task 5 is complete in the working tree but has not been committed yet.
+**Commit Note:** Task 5 was committed on 2026-04-09 as `776244d` with message `feat(api): add review rounds and conflict checks`.
 
 **Files:**
 - Create: `apps/api/src/main/java/com/example/review/review/ReviewRoundController.java`
@@ -619,16 +620,35 @@ git commit -m "feat: add review rounds assignments and conflict checks"
 
 ## Task 6: Implement Review Reports, Decisions, Notifications, and Audit
 
+**Status:** Completed in the working tree on 2026-04-09. Implemented reviewer review-report submission, chair decision transactions, decision notifications, and audit-log writes on top of the Task 5 round/assignment workflow.
+
+**Execution Summary:** Wrote Oracle-backed `MockMvc` integration tests for reviewer report submission, chair round decision, and desk rejection. Added the `com.example.review.decision` slice plus review-report persistence and submission endpoints, inserted `REVIEW_REPORT` rows with assignment state transitions to `SUBMITTED`, implemented chair decision transactions that complete the round, persist `DECISION_RECORD`, update manuscript status and `LAST_DECISION_CODE`, cancel still-open assignments, and write notification and audit rows through dedicated service boundaries. Notification writes are handled as best-effort so notification persistence failures do not roll back the primary review or decision transaction. A follow-up regression pass also updated older integration tests to delete `REVIEW_REPORT` before `REVIEW_ASSIGNMENT` so the expanded workflow dependency graph remains isolated across test classes. Desk reject is implemented for manuscripts already in `UNDER_SCREENING`; an explicit screening-start entry point remains deferred.
+
+**Verification Run:** `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=DecisionServiceTest test`; `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test`; `bash scripts/test-all.sh`. All completed successfully with local Oracle access.
+
+**Commit Note:** Task 6 is verified and committed in this work cycle with message `feat(api): add review submission decisions and notifications`.
+
 **Files:**
 - Create: `apps/api/src/main/java/com/example/review/decision/DecisionController.java`
+- Create: `apps/api/src/main/java/com/example/review/decision/DecisionService.java`
+- Create: `apps/api/src/main/java/com/example/review/decision/DecisionRepository.java`
 - Create: `apps/api/src/main/java/com/example/review/review/ReviewReportController.java`
+- Create: `apps/api/src/main/java/com/example/review/review/ReviewReportService.java`
+- Create: `apps/api/src/main/java/com/example/review/review/ReviewReportRepository.java`
 - Create: `apps/api/src/main/java/com/example/review/notification/NotificationService.java`
 - Create: `apps/api/src/main/java/com/example/review/audit/AuditLogService.java`
 - Create: `apps/api/src/test/java/com/example/review/decision/DecisionServiceTest.java`
+- Modify: `apps/api/src/main/java/com/example/review/review/ReviewAssignmentRepository.java`
+- Modify: `apps/api/src/main/java/com/example/review/placeholder/ProtectedResourcePlaceholderController.java`
+- Modify: `apps/api/src/test/java/com/example/review/manuscript/ManuscriptServiceTest.java`
+- Modify: `apps/api/src/test/java/com/example/review/review/ReviewWorkflowServiceTest.java`
 
-- [ ] **Step 1: Write failing decision tests**
+- [x] **Step 1: Write failing decision tests**
 
 ```java
+@Test
+void reviewerSubmitReviewReportPersistsScoresAndMarksAssignmentSubmitted() {}
+
 @Test
 void chairDecisionUpdatesManuscriptAndRoundWithinSingleTransaction() {}
 
@@ -636,7 +656,7 @@ void chairDecisionUpdatesManuscriptAndRoundWithinSingleTransaction() {}
 void deskRejectPersistsDecisionCode() {}
 ```
 
-- [ ] **Step 2: Implement review submission**
+- [x] **Step 2: Implement review submission**
 
 Persist:
 
@@ -645,7 +665,7 @@ Persist:
 - comments to author
 - comments to chair
 
-- [ ] **Step 3: Implement chair decision transaction**
+- [x] **Step 3: Implement chair decision transaction**
 
 Single transaction must:
 
@@ -654,19 +674,28 @@ Single transaction must:
 - close current assignments
 - insert `DECISION_RECORD`
 
-- [ ] **Step 4: Push notifications asynchronously**
+- [x] **Step 4: Push notifications through a separate service boundary**
 
 Use a service boundary so failure does not roll back the decision.
 
-- [ ] **Step 5: Re-run decision tests**
+- [x] **Step 5: Re-run decision tests and full API regression**
 
-Run: `mvn -f apps/api/pom.xml -Dtest=DecisionServiceTest test`  
+Run:
+
+- `mvn -f apps/api/pom.xml -Dtest=DecisionServiceTest test`
+- `mvn -f apps/api/pom.xml test`
+
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Run repository-level verification**
+
+Run: `bash scripts/test-all.sh`  
+Expected: PASS.
+
+- [x] **Step 7: Commit**
 
 ```bash
-git add apps/api/src/main/java/com/example/review/decision apps/api/src/main/java/com/example/review/notification apps/api/src/main/java/com/example/review/audit apps/api/src/test/java/com/example/review/decision
+git add apps/api/src/main/java/com/example/review/decision apps/api/src/main/java/com/example/review/review apps/api/src/main/java/com/example/review/notification apps/api/src/main/java/com/example/review/audit apps/api/src/test/java/com/example/review/decision apps/api/src/test/java/com/example/review/manuscript/ManuscriptServiceTest.java apps/api/src/test/java/com/example/review/review/ReviewWorkflowServiceTest.java docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md
 git commit -m "feat: add review submission decisions and notifications"
 ```
 

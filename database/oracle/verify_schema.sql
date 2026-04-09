@@ -1,0 +1,184 @@
+SET DEFINE OFF;
+SET SERVEROUTPUT ON;
+WHENEVER SQLERROR EXIT SQL.SQLCODE ROLLBACK;
+
+DECLARE
+  v_table_count NUMBER;
+  v_sequence_count NUMBER;
+  v_trigger_count NUMBER;
+  v_procedure_count NUMBER;
+  v_role_count NUMBER;
+  v_invalid_count NUMBER;
+  v_error_count NUMBER;
+BEGIN
+  SELECT COUNT(*)
+    INTO v_table_count
+    FROM USER_TABLES
+   WHERE TABLE_NAME IN (
+     'SYS_USER',
+     'SYS_ROLE',
+     'SYS_USER_ROLE',
+     'USER_RESEARCH_AREA',
+     'MANUSCRIPT',
+     'MANUSCRIPT_VERSION',
+     'MANUSCRIPT_AUTHOR',
+     'REVIEW_ROUND',
+     'REVIEW_ASSIGNMENT',
+     'CONFLICT_CHECK_RECORD',
+     'REVIEW_REPORT',
+     'DECISION_RECORD',
+     'AGENT_ANALYSIS_TASK',
+     'AGENT_ANALYSIS_RESULT',
+     'AGENT_FEEDBACK',
+     'SYS_NOTIFICATION',
+     'AUDIT_LOG'
+   );
+
+  SELECT COUNT(*)
+    INTO v_sequence_count
+    FROM USER_SEQUENCES
+   WHERE SEQUENCE_NAME IN (
+     'SEQ_SYS_USER',
+     'SEQ_SYS_ROLE',
+     'SEQ_SYS_USER_ROLE',
+     'SEQ_USER_RESEARCH_AREA',
+     'SEQ_MANUSCRIPT',
+     'SEQ_MANUSCRIPT_VERSION',
+     'SEQ_MANUSCRIPT_AUTHOR',
+     'SEQ_REVIEW_ROUND',
+     'SEQ_REVIEW_ASSIGNMENT',
+     'SEQ_CONFLICT_CHECK_RECORD',
+     'SEQ_REVIEW_REPORT',
+     'SEQ_DECISION_RECORD',
+     'SEQ_AGENT_ANALYSIS_TASK',
+     'SEQ_AGENT_ANALYSIS_RESULT',
+     'SEQ_AGENT_FEEDBACK',
+     'SEQ_SYS_NOTIFICATION',
+     'SEQ_AUDIT_LOG'
+   );
+
+  SELECT COUNT(*)
+    INTO v_trigger_count
+    FROM USER_TRIGGERS
+   WHERE TRIGGER_NAME IN (
+     'TRG_SYS_USER_BI',
+     'TRG_SYS_ROLE_BI',
+     'TRG_SYS_USER_ROLE_BI',
+     'TRG_USER_RESEARCH_AREA_BI',
+     'TRG_MANUSCRIPT_BI',
+     'TRG_MANUSCRIPT_VERSION_BI',
+     'TRG_MANUSCRIPT_AUTHOR_BI',
+     'TRG_REVIEW_ROUND_BI',
+     'TRG_REVIEW_ASSIGNMENT_BI',
+     'TRG_CONFLICT_CHECK_RECORD_BI',
+     'TRG_REVIEW_REPORT_BI',
+     'TRG_DECISION_RECORD_BI',
+     'TRG_AGENT_ANALYSIS_TASK_BI',
+     'TRG_AGENT_ANALYSIS_RESULT_BI',
+     'TRG_AGENT_FEEDBACK_BI',
+     'TRG_SYS_NOTIFICATION_BI',
+     'TRG_AUDIT_LOG_BIU',
+     'TRG_MANUSCRIPT_AUDIT_TRACE_AU'
+   );
+
+  SELECT COUNT(*)
+    INTO v_procedure_count
+    FROM USER_OBJECTS
+   WHERE OBJECT_TYPE = 'PROCEDURE'
+     AND OBJECT_NAME IN (
+       'PRC_REVIEW_COMPLETION_STATS',
+       'PRC_REVIEW_WORKLOAD_SUMMARY',
+       'PRC_AGENT_TASK_STATUS_SUMMARY'
+     );
+
+  SELECT COUNT(*)
+    INTO v_invalid_count
+    FROM USER_OBJECTS
+   WHERE OBJECT_TYPE IN ('TRIGGER', 'PROCEDURE')
+     AND OBJECT_NAME IN (
+       'TRG_SYS_USER_BI',
+       'TRG_SYS_ROLE_BI',
+       'TRG_SYS_USER_ROLE_BI',
+       'TRG_USER_RESEARCH_AREA_BI',
+       'TRG_MANUSCRIPT_BI',
+       'TRG_MANUSCRIPT_VERSION_BI',
+       'TRG_MANUSCRIPT_AUTHOR_BI',
+       'TRG_REVIEW_ROUND_BI',
+       'TRG_REVIEW_ASSIGNMENT_BI',
+       'TRG_CONFLICT_CHECK_RECORD_BI',
+       'TRG_REVIEW_REPORT_BI',
+       'TRG_DECISION_RECORD_BI',
+       'TRG_AGENT_ANALYSIS_TASK_BI',
+       'TRG_AGENT_ANALYSIS_RESULT_BI',
+       'TRG_AGENT_FEEDBACK_BI',
+       'TRG_SYS_NOTIFICATION_BI',
+       'TRG_AUDIT_LOG_BIU',
+       'TRG_MANUSCRIPT_AUDIT_TRACE_AU',
+       'PRC_REVIEW_COMPLETION_STATS',
+       'PRC_REVIEW_WORKLOAD_SUMMARY',
+       'PRC_AGENT_TASK_STATUS_SUMMARY'
+     )
+     AND STATUS <> 'VALID';
+
+  SELECT COUNT(*)
+    INTO v_error_count
+    FROM USER_ERRORS
+   WHERE NAME IN (
+     'TRG_SYS_USER_BI',
+     'TRG_SYS_ROLE_BI',
+     'TRG_SYS_USER_ROLE_BI',
+     'TRG_USER_RESEARCH_AREA_BI',
+     'TRG_MANUSCRIPT_BI',
+     'TRG_MANUSCRIPT_VERSION_BI',
+     'TRG_MANUSCRIPT_AUTHOR_BI',
+     'TRG_REVIEW_ROUND_BI',
+     'TRG_REVIEW_ASSIGNMENT_BI',
+     'TRG_CONFLICT_CHECK_RECORD_BI',
+     'TRG_REVIEW_REPORT_BI',
+     'TRG_DECISION_RECORD_BI',
+     'TRG_AGENT_ANALYSIS_TASK_BI',
+     'TRG_AGENT_ANALYSIS_RESULT_BI',
+     'TRG_AGENT_FEEDBACK_BI',
+     'TRG_SYS_NOTIFICATION_BI',
+     'TRG_AUDIT_LOG_BIU',
+     'TRG_MANUSCRIPT_AUDIT_TRACE_AU',
+     'PRC_REVIEW_COMPLETION_STATS',
+     'PRC_REVIEW_WORKLOAD_SUMMARY',
+     'PRC_AGENT_TASK_STATUS_SUMMARY'
+   );
+
+  SELECT COUNT(*)
+    INTO v_role_count
+    FROM SYS_ROLE;
+
+  IF v_table_count <> 17 THEN
+    RAISE_APPLICATION_ERROR(-20001, 'Expected 17 tables, found ' || v_table_count);
+  END IF;
+
+  IF v_sequence_count <> 17 THEN
+    RAISE_APPLICATION_ERROR(-20002, 'Expected 17 sequences, found ' || v_sequence_count);
+  END IF;
+
+  IF v_trigger_count <> 18 THEN
+    RAISE_APPLICATION_ERROR(-20003, 'Expected 18 triggers, found ' || v_trigger_count);
+  END IF;
+
+  IF v_procedure_count <> 3 THEN
+    RAISE_APPLICATION_ERROR(-20004, 'Expected 3 procedures, found ' || v_procedure_count);
+  END IF;
+
+  IF v_role_count <> 4 THEN
+    RAISE_APPLICATION_ERROR(-20005, 'Expected 4 role seeds, found ' || v_role_count);
+  END IF;
+
+  IF v_invalid_count <> 0 THEN
+    RAISE_APPLICATION_ERROR(-20006, 'Expected all verified triggers/procedures to be VALID, found ' || v_invalid_count || ' invalid object(s)');
+  END IF;
+
+  IF v_error_count <> 0 THEN
+    RAISE_APPLICATION_ERROR(-20007, 'Expected no USER_ERRORS rows for verified objects, found ' || v_error_count);
+  END IF;
+
+  DBMS_OUTPUT.PUT_LINE('Schema verification passed.');
+END;
+/

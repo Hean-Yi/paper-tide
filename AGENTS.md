@@ -1,0 +1,71 @@
+# Repository Guidelines
+
+## Project Structure & Module Organization
+This monorepo contains a paper review system. `apps/api` holds the Spring Boot API (`src/main/java`) and JUnit tests (`src/test/java`). `apps/web` holds the Vue 3 + Vite frontend in `src/`. `services/agent` holds the FastAPI service in `app/` and pytest tests in `tests/`. Oracle schema files live in `database/oracle`; helper scripts live in `scripts/`. Treat `apps/web/node_modules`, `apps/web/dist`, `apps/api/target`, and Python cache directories as generated output.
+
+## Build, Test, and Development Commands
+Run the full local stack with `bash scripts/dev-up.sh`; it starts whichever runtimes are installed. Run full verification with `bash scripts/test-all.sh`.
+
+- `cd apps/api && mvn spring-boot:run` starts the API.
+- `cd apps/api && mvn test` runs backend tests.
+- `cd services/agent && python3 -m uvicorn app.main:app --reload --port 8001` starts the agent service.
+- `cd services/agent && python3 -m pytest tests/` runs agent tests.
+- `cd apps/web && npm run dev` starts the frontend.
+- `cd apps/web && npm run test -- --run && npm run typecheck && npm run build` verifies the web app.
+
+## Coding Style & Naming Conventions
+Follow existing language conventions: 4 spaces in Python and Java, 2 spaces in Vue templates, JSON, and CSS. Use `PascalCase` for Vue components and Java classes, `snake_case` for Python modules and test files, and descriptive test names such as `test_health_endpoint_returns_ok`. Keep Java packages under `com.example.review`. SQL migration files should stay numbered, for example `003_indexes.sql`.
+
+No repo-wide formatter or linter config is committed yet, so rely on framework defaults and keep imports tidy. Always run `npm run typecheck` for frontend changes and the relevant test command for API or agent changes before opening a PR.
+
+## Testing Guidelines
+Frontend tests use Vitest (`*.spec.ts`), API tests use JUnit 5 (`*Test.java`), and agent tests use pytest (`test_*.py`). Add or update tests in the same service you change. Prefer small endpoint-focused tests for the current scaffold.
+
+## Commit & Pull Request Guidelines
+Git history is not available in this workspace snapshot, so use imperative commit messages with a scope when helpful, such as `feat(web): add reviewer dashboard` or `fix(agent): validate task payload`. Keep pull requests narrow. Include a short summary, the commands you ran, linked issues, and screenshots for visible frontend changes.
+
+## Security & Configuration Tips
+Do not commit real Oracle credentials, tokens, or `.env` files. Review `scripts/oracle-up.sh` before changing default passwords for local containers. When modifying database scripts, preserve execution order and re-run `database/oracle/verify_schema.sql`.
+
+## Review Feedback Learning Loop
+When review feedback identifies an execution mistake or a project design problem, treat it as reusable repository knowledge instead of a one-off fix.
+
+Required rule:
+- Every feedback-driven fix that falls into either of these categories must also be written back into `AGENTS.md` in the same work cycle:
+- `Execution error`: wrong dependency setup, incomplete verification, broken script assumptions, missing ignore rules, incorrect runtime/bootstrap behavior, or other implementation/process mistakes.
+- `Project design problem`: schema naming hazards, missing baseline test scaffolding, mismatches between selected stack and scaffold, missing high-value indexes, or other architectural/design issues that can recur.
+
+Working rule:
+- Do not stop at fixing code only. Update `AGENTS.md` with the generalized lesson before considering the feedback fully handled.
+- Write the lesson as a stable rule or heuristic, not as a one-time incident report.
+- Prefer rules that help future tasks avoid the same class of mistake.
+
+Current lessons captured from recent review cycles:
+- Add a root `.gitignore` early in scaffold work so generated files such as `.DS_Store`, `node_modules`, `dist`, `target`, `.m2`, `.venv`, and Python caches cannot drift back into the workspace.
+- When the frontend stack is already chosen, the scaffold must reflect it early: use TypeScript entrypoints and include baseline dependencies and verification hooks for `Vitest`, `Element Plus`, and `vue-router` instead of leaving them implicit for later.
+- For Oracle schema design, avoid quoted reserved identifiers in persistent columns. Prefer explicit business-safe names such as `FEEDBACK_COMMENT` over `"COMMENT"` to reduce friction in Java/MyBatis and future SQL work.
+- Add high-value lookup indexes as soon as the access pattern is obvious, especially version-scoped result lookups such as `AGENT_ANALYSIS_RESULT (MANUSCRIPT_ID, VERSION_ID)`.
+- Verification scripts should test the real selected toolchain when dependencies are present. For the frontend, that means `Vitest + vue-tsc + vite build`, not syntax-only checks once the project has moved past pure scaffold stage.
+
+## Plan File Discipline
+Execution work must stay anchored to one authoritative implementation plan file.
+
+Required rule:
+- Before starting any implementation task, first open the current plan markdown file and confirm which task is active.
+- Do not start coding, schema changes, environment work, or verification until the active task has been identified from the plan file.
+- After each task execution or meaningful sub-step, write the result back into the same plan file, including:
+- what was executed
+- what changed
+- what verification was run
+- the current completion state
+
+Single-plan rule:
+- Maintain exactly one authoritative plan markdown file for implementation tracking in this repository.
+- The current authoritative plan file is `docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md`.
+- Do not create additional plan-tracking markdown files for the same implementation stream unless the user explicitly asks to replace the current one.
+- If a new plan file is ever intentionally introduced, it must replace the old one as the sole authoritative plan, and `AGENTS.md` must be updated to point at the new path in the same change.
+
+Working rule:
+- Treat the plan file as the execution ledger: read before work, update after work.
+- Keep status updates concise but factual so later readers can reconstruct what was done without reading terminal logs.
+- Avoid parallel plan documents because they cause stale reads, duplicated status, and task-order confusion.

@@ -59,6 +59,7 @@ This plan assumes the implementation will use the following file layout:
 - Task 9 implemented and verified on 2026-04-13. The main Spring Boot system can create agent tasks from Oracle PDF BLOBs, poll the FastAPI agent service, persist raw/redacted results, expose result lookup endpoints, and assemble conflict-analysis payloads from Oracle review reports. The FastAPI agent service now accepts both JSON and multipart/PDF task creation and enriches paper-understanding input with extracted PDF text and coarse sections.
 - Task 1 through Task 9 audit on 2026-04-13 found no unchecked implementation steps before Task 10. Remaining items are explicit deferrals: screening-start entry point for later chair workflow work, agent feedback endpoints for a later feature slice, and durable agent queues/retries/provider failover for future hardening.
 - Task 10 completed on 2026-04-13. The Vue frontend now has login, JWT session persistence, route guards, an API helper with bearer-token injection, a role-aware app shell, and an authenticated dashboard landing page.
+- Task 11 design drafted on 2026-04-13 in `docs/superpowers/specs/2026-04-13-task11-workflow-screens-design.md`; implementation is awaiting design approval. The design identifies minimal backend query/action endpoints needed for reviewer, chair, and admin workflow pages so production pages do not rely on fake data.
 
 ## Task 1: Scaffold the Monorepo
 
@@ -1065,7 +1066,20 @@ git commit -m "feat: add frontend auth and application shell"
 
 ## Task 11: Build the Workflow Screens
 
+**Status:** Design drafted on 2026-04-13; implementation not started.
+
+**Design Note:** Detailed Task 11 design is documented in `docs/superpowers/specs/2026-04-13-task11-workflow-screens-design.md`.
+
+**Scope Decision (2026-04-13):** Implement real workflow pages with Element Plus `table`, `form`, `card`, and `descriptions` primitives. Before implementing each page, write a short page brief in this plan listing information elements, user actions, Element Plus components, endpoints, and deferred behavior. Do not use Figma or a separate visual design phase. Add only the minimal missing backend list/query/action endpoints required to render the actor-facing screens honestly.
+
 **Files:**
+- Create: `apps/api/src/main/java/com/example/review/workflow/WorkflowQueryController.java`
+- Create: `apps/api/src/main/java/com/example/review/workflow/WorkflowQueryService.java`
+- Create: `apps/api/src/test/java/com/example/review/workflow/WorkflowQueryServiceTest.java`
+- Modify: `apps/api/src/main/java/com/example/review/manuscript/ManuscriptController.java`
+- Modify: `apps/api/src/main/java/com/example/review/manuscript/ManuscriptService.java`
+- Modify: `apps/api/src/main/java/com/example/review/agent/AgentTaskController.java`
+- Modify: `apps/api/src/main/java/com/example/review/agent/AgentRepository.java`
 - Create: `apps/web/src/views/author/ManuscriptListView.vue`
 - Create: `apps/web/src/views/author/SubmitManuscriptView.vue`
 - Create: `apps/web/src/views/reviewer/AssignmentListView.vue`
@@ -1073,7 +1087,12 @@ git commit -m "feat: add frontend auth and application shell"
 - Create: `apps/web/src/views/chair/ScreeningQueueView.vue`
 - Create: `apps/web/src/views/chair/DecisionWorkbenchView.vue`
 - Create: `apps/web/src/views/admin/AgentMonitorView.vue`
+- Create: `apps/web/src/lib/workflow-api.ts`
 - Create: `apps/web/src/tests/workflow.spec.ts`
+- Modify: `apps/web/src/router/index.ts`
+- Modify: `apps/web/src/layouts/AppShell.vue`
+- Modify: `apps/web/src/views/DashboardView.vue`
+- Modify: `apps/web/src/style.css`
 
 - [ ] **Step 1: Write failing workflow UI tests**
 
@@ -1083,7 +1102,17 @@ it("shows redacted agent results for reviewer", () => {});
 it("shows raw agent results for chair", () => {});
 ```
 
-- [ ] **Step 2: Implement author screens**
+- [ ] **Step 2: Add minimal backend workflow query endpoints**
+
+Support:
+
+- reviewer assignment list/detail
+- chair screening queue
+- chair decision workbench
+- explicit start-screening action
+- admin agent task list
+
+- [ ] **Step 3: Write page brief and implement author screens**
 
 Support:
 
@@ -1092,7 +1121,7 @@ Support:
 - upload PDF
 - submit revision
 
-- [ ] **Step 3: Implement reviewer screens**
+- [ ] **Step 4: Write page brief and implement reviewer screens**
 
 Support:
 
@@ -1101,7 +1130,7 @@ Support:
 - submit review
 - view assignment history
 
-- [ ] **Step 4: Implement chair screens**
+- [ ] **Step 5: Write page brief and implement chair screens**
 
 Support:
 
@@ -1112,15 +1141,27 @@ Support:
 - submit decisions
 - reassign overdue tasks
 
-- [ ] **Step 5: Re-run workflow UI tests**
+- [ ] **Step 6: Write page brief and implement admin agent monitor**
 
-Run: `npm --prefix apps/web run test`  
+Support:
+
+- list agent tasks
+- filter by status/type
+- inspect task identifiers and summaries
+
+- [ ] **Step 7: Re-run workflow UI and backend tests**
+
+Run: `npm --prefix apps/web run test -- --run`
+Run: `npm --prefix apps/web run typecheck`
+Run: `npm --prefix apps/web run build`
+Run: `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test`
+Run: `bash scripts/test-all.sh`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add apps/web/src/views apps/web/src/tests
+git add apps/api/src/main/java/com/example/review apps/api/src/test/java/com/example/review apps/web/src docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md docs/superpowers/specs/2026-04-13-task11-workflow-screens-design.md
 git commit -m "feat: add manuscript review and chair workflow screens"
 ```
 

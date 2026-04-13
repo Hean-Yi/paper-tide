@@ -1315,12 +1315,14 @@ Only record deviations if implementation differs from spec.
 
 Execution note: Updated the Task 12 design doc to reflect the approved full visual scope. Updated `AGENTS.md` with two reusable lessons from verification: explicit frontend test `localStorage` shim on bleeding-edge Node runtimes, and the full Oracle workflow cleanup order around `SOURCE_DECISION_ID`, `DECISION_RECORD`, and `REVIEW_ROUND`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/test/java/com/example/review/e2e scripts apps/web/src docs/superpowers/specs/2026-04-09-paper-review-system-design.md docs/superpowers/specs/2026-04-13-task12-e2e-demo-and-visual-hardening-design.md docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md
 git commit -m "test: add end-to-end verification and demo seed"
 ```
+
+Execution note: Committed Task 12 implementation with message `test: harden end-to-end demo flow`.
 
 ## Delivery Order
 

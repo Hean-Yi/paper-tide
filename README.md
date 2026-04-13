@@ -99,3 +99,13 @@ Oracle SQL 需按顺序执行：
 ## 已知问题与改进计划
 
 见 `TODO.md`。
+
+## 项目文档
+
+- 总览：`docs/PROJECT_GUIDE.md`
+- 架构：`docs/ARCHITECTURE.md`
+- 代码结构：`docs/CODE_STRUCTURE.md`
+- 设计结构：`docs/DESIGN_STRUCTURE.md`
+- Workflow：`docs/WORKFLOW.md`
+- 测试说明：`docs/TESTING.md`
+- 测试快照：`docs/TEST_RESULTS_2026-04-13.md`

@@ -22,3 +22,11 @@ apps/web/coverage/
 .env
 .env.*
 !.env.example
+
+# Local agent/prompt guidance files (not project deliverables)
+AGENTS.md
+CLAUDE.md
+
+# Internal planning and verification notes (exclude from shared repo)
+docs/superpowers/
+docs/verification/

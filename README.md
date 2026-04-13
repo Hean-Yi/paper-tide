@@ -109,3 +109,4 @@ Oracle SQL 需按顺序执行：
 - Workflow：`docs/WORKFLOW.md`
 - 测试说明：`docs/TESTING.md`
 - 测试快照：`docs/TEST_RESULTS_2026-04-13.md`
+- 演示文档包：`docs/demo/README.md`

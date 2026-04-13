@@ -56,6 +56,7 @@ Already available:
 - `POST /api/review-assignments/{assignmentId}/mark-overdue`
 - `POST /api/review-assignments/{assignmentId}/reassign`
 - `POST /api/review-assignments/{assignmentId}/review-report`
+- `GET /api/decisions`
 - `POST /api/decisions`
 - `POST /api/manuscripts/{manuscriptId}/versions/{versionId}/agent-tasks`
 - `POST /api/review-rounds/{roundId}/conflict-analysis`
@@ -68,6 +69,7 @@ Missing but required for honest Task 11 screens:
 - chair decision workbench list/detail
 - explicit screening-start action
 - admin agent task list
+- PDF download authorization for reviewer and chair/admin users
 
 Task 11 should add minimal backend endpoints for these. This follows the repository rule that actor-facing workflow tasks need the collection/list endpoint required to render that actor's primary screen.
 
@@ -167,6 +169,16 @@ Fields:
 - `resultSummary`
 
 Do not add feedback endpoints in Task 11.
+
+### PDF Download Authorization
+
+The existing `GET /api/manuscripts/{id}/versions/{versionId}/pdf` endpoint only allows the submitting author because `ManuscriptService.downloadPdf` calls `requireAuthor` and checks ownership. Task 11 reviewer and chair pages need real PDF access:
+
+- authors may download their own manuscript PDFs, preserving current behavior
+- reviewers may download a version PDF only when they have a review assignment for that manuscript/version
+- chairs and admins may download manuscript PDFs for screening and decision work
+
+Implement this by extending the existing endpoint's service authorization rather than adding a parallel PDF URL. Keep the same response shape and file headers.
 
 ## Frontend API Client
 
@@ -335,6 +347,7 @@ Element Plus components:
 Backend:
 
 - requires assignment detail endpoint.
+- requires extended PDF download authorization for assigned reviewers.
 - uses existing review-report endpoint.
 - uses existing agent results endpoint; reviewer receives redacted result only by backend policy.
 
@@ -368,6 +381,7 @@ Backend:
 
 - requires chair screening queue endpoint.
 - requires start-screening endpoint.
+- requires extended PDF download authorization for chair/admin users.
 - uses existing agent task endpoint for `SCREENING_ANALYSIS`.
 - uses existing decisions endpoint for `DESK_REJECT`.
 - uses existing review-round creation endpoint.
@@ -467,6 +481,7 @@ Required tests:
 
 - author list renders manuscripts and exposes submit/PDF actions only for valid statuses
 - author submit flow sends create/upload/submit calls in order
+- reviewer or chair PDF download is allowed only through assignment or chair/admin role
 - reviewer assignment list shows accept/decline/editor actions
 - reviewer review editor submits scores and comments
 - reviewer sees redacted agent result only

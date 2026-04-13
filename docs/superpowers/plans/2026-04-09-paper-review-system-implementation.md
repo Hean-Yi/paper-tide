@@ -1070,7 +1070,7 @@ git commit -m "feat: add frontend auth and application shell"
 
 **Design Note:** Detailed Task 11 design is documented in `docs/superpowers/specs/2026-04-13-task11-workflow-screens-design.md`.
 
-**Scope Decision (2026-04-13):** Implement real workflow pages with Element Plus `table`, `form`, `card`, and `descriptions` primitives. Before implementing each page, write a short page brief in this plan listing information elements, user actions, Element Plus components, endpoints, and deferred behavior. Do not use Figma or a separate visual design phase. Add only the minimal missing backend list/query/action endpoints required to render the actor-facing screens honestly.
+**Scope Decision (2026-04-13):** Implement real workflow pages with Element Plus `table`, `form`, `card`, and `descriptions` primitives. Before implementing each page, write a short page brief in this plan listing information elements, user actions, Element Plus components, endpoints, and deferred behavior. Do not use Figma or a separate visual design phase. Add only the minimal missing backend list/query/action endpoints required to render the actor-facing screens honestly. Extend the existing PDF download authorization so assigned reviewers and chair/admin users can access manuscript PDFs; do not add a parallel PDF endpoint.
 
 **Files:**
 - Create: `apps/api/src/main/java/com/example/review/workflow/WorkflowQueryController.java`
@@ -1078,6 +1078,7 @@ git commit -m "feat: add frontend auth and application shell"
 - Create: `apps/api/src/test/java/com/example/review/workflow/WorkflowQueryServiceTest.java`
 - Modify: `apps/api/src/main/java/com/example/review/manuscript/ManuscriptController.java`
 - Modify: `apps/api/src/main/java/com/example/review/manuscript/ManuscriptService.java`
+- Modify: `apps/api/src/main/java/com/example/review/manuscript/ManuscriptRepository.java`
 - Modify: `apps/api/src/main/java/com/example/review/agent/AgentTaskController.java`
 - Modify: `apps/api/src/main/java/com/example/review/agent/AgentRepository.java`
 - Create: `apps/web/src/views/author/ManuscriptListView.vue`
@@ -1111,6 +1112,7 @@ Support:
 - chair decision workbench
 - explicit start-screening action
 - admin agent task list
+- PDF download authorization for assigned reviewers and chair/admin users
 
 - [ ] **Step 3: Write page brief and implement author screens**
 

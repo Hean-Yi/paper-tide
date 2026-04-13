@@ -1,62 +1,35 @@
-# 项目文档（Project Guide）
+# PROJECT GUIDE（总览）
 
-## 1. 项目定位
+本文档是项目文档入口，帮助新成员快速定位信息。
 
-PaperTide Review 是一个面向课程项目的智能论文评审系统。
+## 1. 项目一句话
 
-- 主流程：投稿 -> 筛选/分配 -> 评审 -> 主席决策
-- Agent 职责：提供分析建议，不替代人类评审结论
-- 核心原则：双盲合规、权限隔离、可追踪
+PaperTide Review（文澜审稿）是一个面向课程项目的智能论文评审系统，遵循“Agent 辅助，人类决策”的原则。
 
-## 2. 系统架构
+## 2. 阅读顺序（推荐）
 
-系统由三个服务组成：
+1. `docs/ARCHITECTURE.md`：系统架构与服务边界
+2. `docs/CODE_STRUCTURE.md`：当前代码结构与关键模块
+3. `docs/DESIGN_STRUCTURE.md`：领域模型、权限、状态机设计
+4. `docs/WORKFLOW.md`：角色视角流程与接口入口
+5. `docs/TESTING.md`：测试策略、命令与质量门槛
+6. `docs/TEST_RESULTS_2026-04-13.md`：当前测试结果快照
 
-- `apps/api`：主业务系统（Spring Boot）
-- `apps/web`：角色化前端（Vue + Element Plus）
-- `services/agent`：异步分析服务（FastAPI + LangGraph）
+补充文档：
 
-数据统一由 Oracle 承载，Agent 服务不直接访问数据库。
+- 根目录 `README.md`：环境与启动
+- 根目录 `CONTRIBUTING.md`：协作规范
+- 根目录 `TODO.md`：缺陷与优化清单
 
-## 3. 角色与权限
+## 3. 关键事实
 
-- `AUTHOR`：提交/查看自己论文与版本
-- `REVIEWER`：查看被分配稿件、提交评审
-- `CHAIR`：管理轮次、分配审稿、发起决策
-- `ADMIN`：系统管理与运维能力
+- 代码仓结构：`apps/api` + `apps/web` + `services/agent` + `database/oracle`
+- 技术栈：Spring Boot + Vue + FastAPI + Oracle
+- 统一验证入口：`bash scripts/test-all.sh`
 
-## 4. 关键目录
+## 4. 当前状态
 
-```text
-apps/api/src/main/java      # API 业务实现
-apps/api/src/test/java      # API 测试
-apps/web/src                # 前端页面与路由
-services/agent/app          # Agent 路由、模型、工作流
-services/agent/tests        # Agent 测试
-database/oracle             # Oracle DDL/DML/触发器/过程
-scripts                     # 启停、测试、数据库脚本
-```
-
-## 5. 本地开发流程
-
-1. 按 README 准备 Java/Node/Python/Oracle 环境
-2. 初始化数据库 schema 与种子数据
-3. 运行 `bash scripts/dev-up.sh` 启动服务
-4. 运行 `bash scripts/test-all.sh` 完整验证
-
-## 6. 质量门槛
-
-- 后端改动：至少通过受影响模块测试
-- 前端改动：必须通过 `test + typecheck + build`
-- Agent 改动：必须通过 pytest
-- 涉及权限/状态机改动：建议补充回归测试
-
-## 7. 协作建议
-
-- 一次 PR 聚焦一个主题（功能、修复或重构）
-- 对重复逻辑优先抽取共享组件/服务
-- 对高风险问题（状态机、安全策略）优先修复
-
-## 8. 已知缺陷
-
-当前问题清单与优先级见仓库根目录 `TODO.md`。
+- 主业务流程可运行
+- Agent 集成已上线并可查询分析结果
+- 自动化测试在当前快照中通过（详见测试结果文档）
+- 主要已知缺陷已整理为可执行待办（`TODO.md`）

@@ -158,6 +158,19 @@ describe("frontend authentication", () => {
     expect(new Headers(options.headers).get("Authorization")).toBe(`Bearer ${authToken}`);
   });
 
+  it("allows admin users to open chair workflow routes", async () => {
+    const router = createAppRouter();
+    localStorage.setItem("review.auth.token", futureToken(["ADMIN"]));
+    initializeAuth();
+
+    router.push("/chair/screening");
+    await router.isReady();
+    expect(router.currentRoute.value.path).toBe("/chair/screening");
+
+    await router.push("/chair/decisions");
+    expect(router.currentRoute.value.path).toBe("/chair/decisions");
+  });
+
   it("renders role-aware shell links and logs out", async () => {
     const router = createAppRouter();
     localStorage.setItem("review.auth.token", futureToken(["AUTHOR", "CHAIR", "ADMIN"]));

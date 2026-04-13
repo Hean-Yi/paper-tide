@@ -71,13 +71,13 @@ export function createAppRouter() {
             path: "chair/screening",
             name: "chair-screening",
             component: ScreeningQueueView,
-            meta: { requiresAuth: true, roles: ["CHAIR"] }
+            meta: { requiresAuth: true, roles: ["CHAIR", "ADMIN"] }
           },
           {
             path: "chair/decisions",
             name: "chair-decisions",
             component: DecisionWorkbenchView,
-            meta: { requiresAuth: true, roles: ["CHAIR"] }
+            meta: { requiresAuth: true, roles: ["CHAIR", "ADMIN"] }
           },
           {
             path: "admin/agents",

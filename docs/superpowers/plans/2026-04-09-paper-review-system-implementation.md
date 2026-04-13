@@ -60,6 +60,7 @@ This plan assumes the implementation will use the following file layout:
 - Task 1 through Task 9 audit on 2026-04-13 found no unchecked implementation steps before Task 10. Remaining items are explicit deferrals: screening-start entry point for later chair workflow work, agent feedback endpoints for a later feature slice, and durable agent queues/retries/provider failover for future hardening.
 - Task 10 completed on 2026-04-13. The Vue frontend now has login, JWT session persistence, route guards, an API helper with bearer-token injection, a role-aware app shell, and an authenticated dashboard landing page.
 - Task 11 completed on 2026-04-13. The frontend now has role-specific workflow pages for authors, reviewers, chairs, and admins; the API now exposes the minimal workflow query/action endpoints needed by those pages, including reviewer/chair PDF access and admin agent task listing.
+- Task 11 post-review fix completed on 2026-04-13. Chair workflow routes now allow both `CHAIR` and `ADMIN`, matching the backend `chair-or-admin` authorization model.
 
 ## Task 1: Scaffold the Monorepo
 
@@ -1230,6 +1231,8 @@ Actual (2026-04-13): PASS.
 - `npm --prefix apps/web run build`: passed with the existing Element Plus/Vite chunk size warning.
 - `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test`: 40 passed.
 - `bash scripts/test-all.sh`: passed; API 40 passed, agent health 1 passed with the existing Python 3.14/Pydantic v1 warning, web 11 passed, typecheck passed, build passed.
+
+Post-review fix (2026-04-13): The review found `ADMIN` users were blocked by frontend route guards from chair workflow pages even though backend endpoints allow chair-or-admin. Added a route-guard test for admin access to `/chair/screening` and `/chair/decisions`, changed both route meta entries to `roles: ["CHAIR", "ADMIN"]`, and recorded the reusable route/backend authorization alignment rule in `AGENTS.md`.
 
 - [x] **Step 8: Commit**
 

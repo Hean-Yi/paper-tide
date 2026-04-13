@@ -13,6 +13,7 @@ import {
   type AuthorInput,
   type ManuscriptSummary
 } from "../../lib/workflow-api";
+import { formatDateTime, statusTagType, workflowLabel } from "../../lib/workflow-format";
 
 const router = useRouter();
 const loading = ref(false);
@@ -96,7 +97,7 @@ async function submitRevision() {
 
 <template>
   <section class="workflow-page">
-    <div class="page-heading">
+    <div class="page-heading dossier-header">
       <div>
         <p class="eyebrow">Author</p>
         <h1>My manuscripts</h1>
@@ -116,10 +117,15 @@ async function submitRevision() {
       </el-table-column>
       <el-table-column prop="currentStatus" label="Status" width="170">
         <template #default="{ row }">
-          <el-tag>{{ row.currentStatus }}</el-tag>
+          <el-tag :type="statusTagType(row.currentStatus)">{{ workflowLabel(row.currentStatus) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="lastDecisionCode" label="Last decision" width="160" />
+      <el-table-column prop="submittedAt" label="Submitted" min-width="170">
+        <template #default="{ row }">{{ formatDateTime(row.submittedAt) }}</template>
+      </el-table-column>
+      <el-table-column prop="lastDecisionCode" label="Last decision" width="160">
+        <template #default="{ row }">{{ workflowLabel(row.lastDecisionCode) }}</template>
+      </el-table-column>
       <el-table-column label="Actions" width="410">
         <template #default="{ row }">
           <div class="action-row">
@@ -138,6 +144,9 @@ async function submitRevision() {
           </div>
         </template>
       </el-table-column>
+      <template #empty>
+        <el-empty description="No manuscripts yet." />
+      </template>
     </el-table>
 
     <el-dialog v-model="revisionDialogOpen" title="Create revision" width="640px">

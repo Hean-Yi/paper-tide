@@ -16,7 +16,7 @@ const navItems = computed(() => {
   if (roles.has("REVIEWER")) {
     items.push({ label: "Review assignments", target: "/reviewer/assignments" });
   }
-  if (roles.has("CHAIR")) {
+  if (roles.has("CHAIR") || roles.has("ADMIN")) {
     items.push({ label: "Screening", target: "/chair/screening" });
     items.push({ label: "Decisions", target: "/chair/decisions" });
   }

@@ -39,6 +39,7 @@ class DecisionServiceTest {
         jdbcTemplate.update("DELETE FROM AGENT_ANALYSIS_RESULT");
         jdbcTemplate.update("DELETE FROM AGENT_ANALYSIS_TASK");
         jdbcTemplate.update("DELETE FROM SYS_NOTIFICATION");
+        jdbcTemplate.update("UPDATE MANUSCRIPT_VERSION SET SOURCE_DECISION_ID = NULL");
         jdbcTemplate.update("DELETE FROM DECISION_RECORD");
         jdbcTemplate.update("DELETE FROM REVIEW_REPORT");
         jdbcTemplate.update("DELETE FROM CONFLICT_CHECK_RECORD");

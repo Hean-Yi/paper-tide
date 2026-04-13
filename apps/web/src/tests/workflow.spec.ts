@@ -3,6 +3,7 @@ import ElementPlus from "element-plus";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRouter, createWebHistory } from "vue-router";
 
+import { formatDateTime, statusTagType, workflowLabel } from "../lib/workflow-format";
 import { initializeAuth, resetAuthForTests } from "../stores/auth";
 import ScreeningQueueView from "../views/chair/ScreeningQueueView.vue";
 import DecisionWorkbenchView from "../views/chair/DecisionWorkbenchView.vue";
@@ -94,6 +95,15 @@ describe("workflow screens", () => {
     expect(wrapper.text()).toContain("Desk reject");
   });
 
+  it("formats workflow labels, dates, and status tag types", () => {
+    expect(workflowLabel("UNDER_SCREENING")).toBe("Under screening");
+    expect(workflowLabel("DECISION_CONFLICT_ANALYSIS")).toBe("Decision conflict analysis");
+    expect(formatDateTime(null)).toBe("Not set");
+    expect(statusTagType("SUCCESS")).toBe("success");
+    expect(statusTagType("FAILED")).toBe("danger");
+    expect(statusTagType("UNDER_SCREENING")).toBe("warning");
+  });
+
   it("shows redacted agent results for reviewer", async () => {
     installAuth(["REVIEWER"]);
     mockApi({
@@ -120,6 +130,8 @@ describe("workflow screens", () => {
 
     const wrapper = await mountWithRouter(ReviewEditorView, "/reviewer/reviews/9");
 
+    expect(wrapper.find(".agent-trace-panel").exists()).toBe(true);
+    expect(wrapper.text()).toContain("Review assist analysis");
     expect(wrapper.text()).toContain("Reviewer-visible signal");
     expect(wrapper.text()).not.toContain("rawResult");
   });
@@ -155,6 +167,8 @@ describe("workflow screens", () => {
 
     const wrapper = await mountWithRouter(DecisionWorkbenchView);
 
+    expect(wrapper.find(".agent-trace-panel").exists()).toBe(true);
+    expect(wrapper.text()).toContain("Decision conflict analysis");
     expect(wrapper.text()).toContain("Workflow Seed");
     expect(wrapper.text()).toContain("Chair raw signal");
   });

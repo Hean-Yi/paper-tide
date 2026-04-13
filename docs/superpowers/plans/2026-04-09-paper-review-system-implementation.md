@@ -1244,15 +1244,16 @@ git commit -m "feat: add manuscript review and chair workflow screens"
 
 ## Task 12: End-to-End Verification and Demo Hardening
 
-**Status:** Design drafted on 2026-04-13; implementation awaiting approval.
+**Status:** Implementation in progress on 2026-04-13.
 
 **Design Note:** Detailed Task 12 design is documented in `docs/superpowers/specs/2026-04-13-task12-e2e-demo-and-visual-hardening-design.md`.
 
-**Scope Decision (2026-04-13):** Use MockMvc + Oracle API e2e as the primary full-flow verification rather than introducing Playwright. Add demo seed data and integrate it with `scripts/test-all.sh`. Frontend visual polish is intentionally narrow: semantic status labels and agent trace panels are required; dossier headers, spacing harmonization, and formatting helpers are optional if verification is stable.
+**Scope Decision (2026-04-13):** Use MockMvc + Oracle API e2e as the primary full-flow verification rather than introducing Playwright. Add demo seed data and integrate it with `scripts/test-all.sh`. User approved full frontend polish for Task 12, so semantic status labels, agent trace panels, dossier headers, spacing harmonization, formatting helpers, and better empty states are all in scope.
 
 **Files:**
 - Create: `apps/api/src/test/java/com/example/review/e2e/ReviewFlowE2eTest.java`
 - Create: `scripts/demo-seed.sh`
+- Create: `database/oracle/007_seed_demo_workflow.sql`
 - Modify: `apps/web/src/style.css`
 - Modify: `apps/web/src/tests/workflow.spec.ts`
 - Optional Create: `apps/web/src/lib/workflow-format.ts`
@@ -1262,7 +1263,7 @@ git commit -m "feat: add manuscript review and chair workflow screens"
 - Create: `docs/superpowers/specs/2026-04-13-task12-e2e-demo-and-visual-hardening-design.md`
 - Modify: `docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md`
 
-- [ ] **Step 1: Create an end-to-end scenario test**
+- [x] **Step 1: Create an end-to-end scenario test**
 
 The scenario must cover:
 
@@ -1275,7 +1276,9 @@ The scenario must cover:
 - chair makes decision
 - author sees result
 
-- [ ] **Step 2: Add demo seed data**
+Execution note: Added `ReviewFlowE2eTest` with a MockMvc + Oracle happy path that logs in each actor, creates/uploads/submits a manuscript, verifies admin access to chair workbench endpoints, runs reviewer assignment and review submission, triggers review-assist and conflict analysis through a recording agent client, and verifies the author sees the revision decision. Targeted verification passed with `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=ReviewFlowE2eTest test`.
+
+- [x] **Step 2: Add demo seed data**
 
 Seed:
 
@@ -1286,7 +1289,15 @@ Seed:
 - one manuscript with sample PDF
 - sample PDF must be valid and text-extractable
 
-- [ ] **Step 3: Run the full verification script**
+Execution note: Added `database/oracle/007_seed_demo_workflow.sql` plus `scripts/demo-seed.sh`. The script first applies demo users, then merges a second reviewer, a submitted sample manuscript with a text-extractable PDF BLOB, authors, and a successful sample agent screening task/result. `scripts/test-all.sh` now runs `scripts/demo-seed.sh` when Docker is available. Verified `bash scripts/demo-seed.sh` twice against the local Oracle container with no duplicate-key failures.
+
+- [x] **Step 2.5: Apply full frontend visual polish**
+
+Execution note: Added `apps/web/src/lib/workflow-format.ts` and unified workflow pages around dossier headers, semantic status labels, formatted dates/file sizes, improved empty states, and Agent Trace panels for reviewer redacted results and chair raw results. Admin users now see chair workflow entries in the shell/dashboard to match the route authorization model. Added `apps/web/src/tests/setup.ts` because Node `v25.6.1` exposes an incomplete experimental `localStorage`; the Vitest setup now provides deterministic storage for auth tests. The reusable lesson was recorded in `AGENTS.md`.
+
+Verification note: `npm run test -- --run src/tests/workflow.spec.ts`, `npm run test -- --run`, `npm run typecheck`, and `npm run build` passed in `apps/web`. The production build still emits the pre-existing Element Plus chunk-size warning, accepted by the Task 12 design.
+
+- [x] **Step 3: Run the full verification script**
 
 Run: `bash scripts/test-all.sh`  
 Expected:
@@ -1296,9 +1307,13 @@ Expected:
 - frontend tests pass
 - e2e happy path passes
 
-- [ ] **Step 4: Update the design doc with implementation notes if needed**
+Execution note: Full verification passed on 2026-04-13. `scripts/test-all.sh` applied `scripts/demo-seed.sh`, ran API tests with 41 passing tests including `ReviewFlowE2eTest`, ran agent pytest health with 1 passing test, then ran web Vitest with 13 passing tests, `vue-tsc --noEmit`, and `vite build`. The build emitted the known Element Plus chunk-size warning only.
+
+- [x] **Step 4: Update the design doc with implementation notes if needed**
 
 Only record deviations if implementation differs from spec.
+
+Execution note: Updated the Task 12 design doc to reflect the approved full visual scope. Updated `AGENTS.md` with two reusable lessons from verification: explicit frontend test `localStorage` shim on bleeding-edge Node runtimes, and the full Oracle workflow cleanup order around `SOURCE_DECISION_ID`, `DECISION_RECORD`, and `REVIEW_ROUND`.
 
 - [ ] **Step 5: Commit**
 

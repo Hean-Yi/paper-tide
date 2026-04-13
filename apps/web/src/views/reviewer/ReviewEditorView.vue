@@ -12,6 +12,7 @@ import {
   type ReviewReportForm,
   type ReviewerAssignment
 } from "../../lib/workflow-api";
+import { formatDateTime, printableTrace, statusTagType, workflowLabel } from "../../lib/workflow-format";
 
 const route = useRoute();
 const router = useRouter();
@@ -67,14 +68,11 @@ async function submitReport() {
   }
 }
 
-function printable(value: unknown): string {
-  return JSON.stringify(value, null, 2);
-}
 </script>
 
 <template>
   <section class="workflow-page">
-    <div class="page-heading">
+    <div class="page-heading dossier-header">
       <div>
         <p class="eyebrow">Reviewer</p>
         <h1>Review editor</h1>
@@ -87,9 +85,11 @@ function printable(value: unknown): string {
     <template v-else-if="assignment">
       <el-descriptions title="Assignment" :column="2" border>
         <el-descriptions-item label="Title">{{ assignment.title }}</el-descriptions-item>
-        <el-descriptions-item label="Status">{{ assignment.taskStatus }}</el-descriptions-item>
+        <el-descriptions-item label="Status">
+          <el-tag :type="statusTagType(assignment.taskStatus)">{{ workflowLabel(assignment.taskStatus) }}</el-tag>
+        </el-descriptions-item>
         <el-descriptions-item label="Version">v{{ assignment.versionNo }}</el-descriptions-item>
-        <el-descriptions-item label="Deadline">{{ assignment.deadlineAt || "Not set" }}</el-descriptions-item>
+        <el-descriptions-item label="Deadline">{{ formatDateTime(assignment.deadlineAt) }}</el-descriptions-item>
         <el-descriptions-item label="Keywords">{{ assignment.keywords || "None" }}</el-descriptions-item>
         <el-descriptions-item label="PDF">
           <el-button v-if="assignment.pdfFileName" link @click="downloadCurrentPdf">{{ assignment.pdfFileName }}</el-button>
@@ -98,15 +98,27 @@ function printable(value: unknown): string {
         <el-descriptions-item label="Abstract" :span="2">{{ assignment.abstractText }}</el-descriptions-item>
       </el-descriptions>
 
-      <section class="subsection">
-        <h2>Agent assistance</h2>
+      <section class="agent-trace-panel">
+        <div class="agent-trace-header">
+          <div>
+            <p class="eyebrow">Agent Trace</p>
+            <h2>Review assist analysis</h2>
+          </div>
+          <el-tag type="info">Redacted</el-tag>
+        </div>
         <el-alert
           v-if="!agentResults.length"
           title="No agent assistance is available for this version."
           type="info"
           :closable="false"
         />
-        <pre v-for="result in agentResults" :key="result.resultId" class="json-block">{{ printable(result.redactedResult) }}</pre>
+        <article v-for="result in agentResults" :key="result.resultId" class="trace-entry">
+          <div class="trace-entry-heading">
+            <strong>{{ workflowLabel(result.resultType) }}</strong>
+            <el-tag :type="statusTagType(result.resultType)">Reviewer safe</el-tag>
+          </div>
+          <pre class="json-block">{{ printableTrace(result.redactedResult) }}</pre>
+        </article>
       </section>
 
       <el-form class="workflow-form" label-position="top" @submit.prevent="submitReport">

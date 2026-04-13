@@ -9,6 +9,7 @@ import {
   listReviewerAssignments,
   type ReviewerAssignment
 } from "../../lib/workflow-api";
+import { formatDateTime, statusTagType, workflowLabel } from "../../lib/workflow-format";
 
 const router = useRouter();
 const loading = ref(false);
@@ -52,7 +53,7 @@ async function submitDecline() {
 
 <template>
   <section class="workflow-page">
-    <div class="page-heading">
+    <div class="page-heading dossier-header">
       <div>
         <p class="eyebrow">Reviewer</p>
         <h1>Review assignments</h1>
@@ -66,11 +67,15 @@ async function submitDecline() {
       <el-table-column prop="title" label="Title" min-width="220" />
       <el-table-column prop="taskStatus" label="Status" width="140">
         <template #default="{ row }">
-          <el-tag>{{ row.taskStatus }}</el-tag>
+          <el-tag :type="statusTagType(row.taskStatus)">{{ workflowLabel(row.taskStatus) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="deadlineAt" label="Deadline" min-width="180" />
-      <el-table-column prop="recommendation" label="Recommendation" width="170" />
+      <el-table-column prop="deadlineAt" label="Deadline" min-width="180">
+        <template #default="{ row }">{{ formatDateTime(row.deadlineAt) }}</template>
+      </el-table-column>
+      <el-table-column prop="recommendation" label="Recommendation" width="170">
+        <template #default="{ row }">{{ workflowLabel(row.recommendation) }}</template>
+      </el-table-column>
       <el-table-column label="Actions" width="300">
         <template #default="{ row }">
           <div class="action-row">
@@ -82,6 +87,9 @@ async function submitDecline() {
           </div>
         </template>
       </el-table-column>
+      <template #empty>
+        <el-empty description="No review assignments." />
+      </template>
     </el-table>
 
     <el-dialog v-model="declineDialogOpen" title="Decline assignment" width="520px">

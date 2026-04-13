@@ -2,6 +2,7 @@
 import { onMounted, ref } from "vue";
 
 import { listAgentTasks, type AgentTask } from "../../lib/workflow-api";
+import { formatDateTime, statusTagType, workflowLabel } from "../../lib/workflow-format";
 
 const loading = ref(false);
 const tasks = ref<AgentTask[]>([]);
@@ -24,7 +25,7 @@ async function loadTasks() {
 
 <template>
   <section class="workflow-page">
-    <div class="page-heading">
+    <div class="page-heading dossier-header">
       <div>
         <p class="eyebrow">Admin</p>
         <h1>Agent monitor</h1>
@@ -57,10 +58,12 @@ async function loadTasks() {
     <el-table v-loading="loading" :data="tasks" empty-text="No agent tasks.">
       <el-table-column prop="taskId" label="Task" width="100" />
       <el-table-column prop="externalTaskId" label="External task" min-width="180" />
-      <el-table-column prop="taskType" label="Type" min-width="210" />
+      <el-table-column prop="taskType" label="Type" min-width="210">
+        <template #default="{ row }">{{ workflowLabel(row.taskType) }}</template>
+      </el-table-column>
       <el-table-column prop="taskStatus" label="Status" width="130">
         <template #default="{ row }">
-          <el-tag>{{ row.taskStatus }}</el-tag>
+          <el-tag :type="statusTagType(row.taskStatus)">{{ workflowLabel(row.taskStatus) }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="Scope" min-width="170">
@@ -68,9 +71,16 @@ async function loadTasks() {
           M{{ row.manuscriptId }} / V{{ row.versionId }}<span v-if="row.roundId"> / R{{ row.roundId }}</span>
         </template>
       </el-table-column>
-      <el-table-column prop="createdAt" label="Created" min-width="190" />
-      <el-table-column prop="finishedAt" label="Finished" min-width="190" />
+      <el-table-column prop="createdAt" label="Created" min-width="190">
+        <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+      </el-table-column>
+      <el-table-column prop="finishedAt" label="Finished" min-width="190">
+        <template #default="{ row }">{{ formatDateTime(row.finishedAt) }}</template>
+      </el-table-column>
       <el-table-column prop="resultSummary" label="Summary" min-width="220" />
+      <template #empty>
+        <el-empty description="No agent tasks." />
+      </template>
     </el-table>
   </section>
 </template>

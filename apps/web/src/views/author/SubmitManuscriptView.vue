@@ -11,6 +11,7 @@ import {
   type AuthorInput,
   type ManuscriptSummary
 } from "../../lib/workflow-api";
+import { statusTagType, workflowLabel } from "../../lib/workflow-format";
 
 const router = useRouter();
 const submitting = ref(false);
@@ -87,7 +88,7 @@ async function submitCurrentVersion() {
 
 <template>
   <section class="workflow-page">
-    <div class="page-heading">
+    <div class="page-heading dossier-header">
       <div>
         <p class="eyebrow">Author</p>
         <h1>Submit manuscript</h1>
@@ -135,10 +136,17 @@ async function submitCurrentVersion() {
     <el-alert
       v-if="created"
       class="workflow-alert"
-      title="Manuscript record created. Upload the PDF before final submission."
       type="success"
       :closable="false"
-    />
+    >
+      <template #title>
+        Manuscript record created.
+        <el-tag class="inline-status" :type="statusTagType(created.currentStatus)">
+          {{ workflowLabel(created.currentStatus) }}
+        </el-tag>
+      </template>
+      Upload the PDF before final submission.
+    </el-alert>
 
     <div v-if="created" class="upload-actions">
       <el-upload :auto-upload="false" :limit="1" :on-change="selectPdf">

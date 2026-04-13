@@ -5,7 +5,7 @@
 Approved direction with two adjustments from review:
 
 - Main verification should use Oracle-backed API end-to-end testing rather than adding Playwright.
-- Frontend visual polish should be scoped tightly: agent trace panels and semantic status labels are required; broader layout refinements are optional after verification is stable.
+- Frontend visual polish was initially scoped tightly, then expanded by user approval: agent trace panels, semantic status labels, dossier headers, spacing harmonization, workflow formatting helpers, and improved empty states are all in scope for Task 12.
 
 ## Goal
 
@@ -158,17 +158,10 @@ Required visual changes:
   - danger/rejected/failed/overdue states
   - neutral draft/in-progress states
 - Ensure these mappings are centralized enough that pages do not all invent their own status color logic.
-
-### Optional Polish
-
-Optional if verification work is already stable:
-
 - Dossier-like page headers for workflow pages.
 - More consistent spacing between tables, forms, and descriptions.
 - A small `workflow-format.ts` helper for date, file size, status tag type, and JSON formatting.
 - Better empty states for demo screens.
-
-Optional polish should be skipped if it risks destabilizing Task 12 verification.
 
 ## Implementation Slices
 
@@ -184,10 +177,11 @@ Optional polish should be skipped if it risks destabilizing Task 12 verification
 - Integrate it into `scripts/test-all.sh`.
 - Keep seeded PDF valid and extractable.
 
-### Slice 3: Required Frontend Polish
+### Slice 3: Frontend Polish
 
 - Add semantic status formatting.
 - Add agent trace panel styling.
+- Add dossier headers, spacing harmonization, formatting helpers, and empty states across the workflow screens.
 - Add or adjust Vitest coverage for the visual/role behaviors that matter for demo safety.
 
 ### Slice 4: Verification
@@ -219,7 +213,7 @@ Expected:
   Control: Use a valid minimal PDF with extractable text, not arbitrary bytes.
 
 - Risk: Visual polish expands into redesign.
-  Control: Required polish is limited to status labels and agent trace panels; all broader spacing/header work is optional.
+  Control: Apply the approved dossier/trace language through shared CSS and formatting helpers without changing workflow behavior or adding new product features.
 
 - Risk: Frontend route roles drift from backend authorization.
   Control: Include admin chair-route API and frontend route coverage in Task 12 verification.

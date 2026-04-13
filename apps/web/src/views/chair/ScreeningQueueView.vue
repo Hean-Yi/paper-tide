@@ -11,6 +11,7 @@ import {
   startScreening,
   type ScreeningQueueItem
 } from "../../lib/workflow-api";
+import { formatDateTime, formatFileSize, statusTagType, workflowLabel } from "../../lib/workflow-format";
 
 const loading = ref(false);
 const queue = ref<ScreeningQueueItem[]>([]);
@@ -93,7 +94,7 @@ async function submitDeskReject() {
 
 <template>
   <section class="workflow-page">
-    <div class="page-heading">
+    <div class="page-heading dossier-header">
       <div>
         <p class="eyebrow">Chair</p>
         <h1>Screening queue</h1>
@@ -107,13 +108,20 @@ async function submitDeskReject() {
       <el-table-column prop="title" label="Title" min-width="220" />
       <el-table-column prop="currentStatus" label="Status" width="160">
         <template #default="{ row }">
-          <el-tag>{{ row.currentStatus }}</el-tag>
+          <el-tag :type="statusTagType(row.currentStatus)">{{ workflowLabel(row.currentStatus) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="blindMode" label="Blind mode" width="150" />
+      <el-table-column prop="blindMode" label="Blind mode" width="150">
+        <template #default="{ row }">{{ workflowLabel(row.blindMode) }}</template>
+      </el-table-column>
+      <el-table-column prop="submittedAt" label="Submitted" min-width="170">
+        <template #default="{ row }">{{ formatDateTime(row.submittedAt) }}</template>
+      </el-table-column>
       <el-table-column label="PDF" min-width="160">
         <template #default="{ row }">
-          <el-button v-if="row.pdfFileName" link @click="download(row)">{{ row.pdfFileName }}</el-button>
+          <el-button v-if="row.pdfFileName" link @click="download(row)">
+            {{ row.pdfFileName }} · {{ formatFileSize(row.pdfFileSize) }}
+          </el-button>
           <span v-else>Missing</span>
         </template>
       </el-table-column>
@@ -127,6 +135,9 @@ async function submitDeskReject() {
           </div>
         </template>
       </el-table-column>
+      <template #empty>
+        <el-empty description="No manuscripts are waiting for screening." />
+      </template>
     </el-table>
 
     <el-dialog v-model="roundDialogOpen" title="Create review round" width="520px">

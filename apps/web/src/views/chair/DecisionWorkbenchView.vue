@@ -12,6 +12,7 @@ import {
   type AgentResult,
   type DecisionWorkbenchItem
 } from "../../lib/workflow-api";
+import { formatDateTime, printableTrace, statusTagType, workflowLabel } from "../../lib/workflow-format";
 
 const loading = ref(false);
 const rows = ref<DecisionWorkbenchItem[]>([]);
@@ -88,14 +89,11 @@ async function submitDecision() {
   await loadWorkbench();
 }
 
-function printable(value: unknown): string {
-  return JSON.stringify(value, null, 2);
-}
 </script>
 
 <template>
   <section class="workflow-page">
-    <div class="page-heading">
+    <div class="page-heading dossier-header">
       <div>
         <p class="eyebrow">Chair</p>
         <h1>Decision workbench</h1>
@@ -112,15 +110,22 @@ function printable(value: unknown): string {
               <el-descriptions-item label="Assignments">{{ row.assignmentCount }}</el-descriptions-item>
               <el-descriptions-item label="Submitted reviews">{{ row.submittedReviewCount }}</el-descriptions-item>
               <el-descriptions-item label="Conflicts">{{ row.conflictCount }}</el-descriptions-item>
-              <el-descriptions-item label="Deadline">{{ row.deadlineAt || "Not set" }}</el-descriptions-item>
-              <el-descriptions-item label="Last decision">{{ row.lastDecisionCode || "None" }}</el-descriptions-item>
+              <el-descriptions-item label="Deadline">{{ formatDateTime(row.deadlineAt) }}</el-descriptions-item>
+              <el-descriptions-item label="Last decision">{{ workflowLabel(row.lastDecisionCode) }}</el-descriptions-item>
             </el-descriptions>
 
             <h2>Assignments</h2>
             <el-table :data="row.assignments" size="small">
               <el-table-column prop="assignmentId" label="Assignment" width="120" />
               <el-table-column prop="reviewerId" label="Reviewer" width="120" />
-              <el-table-column prop="taskStatus" label="Status" width="140" />
+              <el-table-column prop="taskStatus" label="Status" width="140">
+                <template #default="{ row: assignment }">
+                  <el-tag :type="statusTagType(assignment.taskStatus)">{{ workflowLabel(assignment.taskStatus) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="deadlineAt" label="Deadline" min-width="170">
+                <template #default="{ row: assignment }">{{ formatDateTime(assignment.deadlineAt) }}</template>
+              </el-table-column>
               <el-table-column label="Actions" width="180">
                 <template #default="{ row: assignment }">
                   <el-button size="small" @click="overdue(assignment.assignmentId)">Mark overdue</el-button>
@@ -135,7 +140,13 @@ function printable(value: unknown): string {
               type="info"
               :closable="false"
             />
-            <pre v-for="result in agentResults[row.roundId]" :key="result.resultId" class="json-block">{{ printable(result.rawResult || result.redactedResult) }}</pre>
+            <article v-for="result in agentResults[row.roundId]" :key="result.resultId" class="trace-entry">
+              <div class="trace-entry-heading">
+                <strong>{{ workflowLabel(result.resultType) }}</strong>
+                <el-tag :type="statusTagType(result.resultType)">Raw</el-tag>
+              </div>
+              <pre class="json-block">{{ printableTrace(result.rawResult || result.redactedResult) }}</pre>
+            </article>
           </div>
         </template>
       </el-table-column>
@@ -143,10 +154,14 @@ function printable(value: unknown): string {
       <el-table-column prop="title" label="Title" min-width="220" />
       <el-table-column prop="roundStatus" label="Round status" width="150">
         <template #default="{ row }">
-          <el-tag>{{ row.roundStatus }}</el-tag>
+          <el-tag :type="statusTagType(row.roundStatus)">{{ workflowLabel(row.roundStatus) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="currentStatus" label="Manuscript status" width="170" />
+      <el-table-column prop="currentStatus" label="Manuscript status" width="170">
+        <template #default="{ row }">
+          <el-tag :type="statusTagType(row.currentStatus)">{{ workflowLabel(row.currentStatus) }}</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="Counts" width="180">
         <template #default="{ row }">
           {{ row.submittedReviewCount }}/{{ row.assignmentCount }} reviews, {{ row.conflictCount }} conflicts
@@ -161,10 +176,19 @@ function printable(value: unknown): string {
           </div>
         </template>
       </el-table-column>
+      <template #empty>
+        <el-empty description="No active review rounds." />
+      </template>
     </el-table>
 
-    <section class="subsection">
-      <h2>Raw agent results</h2>
+    <section class="agent-trace-panel">
+      <div class="agent-trace-header">
+        <div>
+          <p class="eyebrow">Agent Trace</p>
+          <h2>Raw agent results</h2>
+        </div>
+        <el-tag type="warning">Chair only</el-tag>
+      </div>
       <el-alert
         v-if="!Object.values(agentResults).some((results) => results.length)"
         title="No raw agent results are available for active rounds."
@@ -172,7 +196,13 @@ function printable(value: unknown): string {
         :closable="false"
       />
       <template v-for="row in rows" :key="row.roundId">
-        <pre v-for="result in agentResults[row.roundId]" :key="result.resultId" class="json-block">{{ printable(result.rawResult || result.redactedResult) }}</pre>
+        <article v-for="result in agentResults[row.roundId]" :key="result.resultId" class="trace-entry">
+          <div class="trace-entry-heading">
+            <strong>{{ workflowLabel(result.resultType) }}</strong>
+            <span>Round {{ row.roundNo }} · Manuscript {{ row.manuscriptId }}</span>
+          </div>
+          <pre class="json-block">{{ printableTrace(result.rawResult || result.redactedResult) }}</pre>
+        </article>
       </template>
     </section>
 

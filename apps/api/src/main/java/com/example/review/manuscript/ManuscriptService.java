@@ -115,10 +115,13 @@ public class ManuscriptService {
     }
 
     public PdfPayload downloadPdf(CurrentUserPrincipal principal, long manuscriptId, long versionId) {
-        requireAuthor(principal);
-        findOwnedManuscript(principal, manuscriptId);
+        ManuscriptRow manuscript = manuscriptRepository.findById(manuscriptId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
         VersionRow version = findVersion(versionId);
         ensureVersionBelongsToManuscript(version, manuscriptId);
+        if (!canDownloadPdf(principal, manuscript, version)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Forbidden manuscript PDF access");
+        }
         if (version.pdfFile() == null || version.pdfFile().length == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "PDF not found");
         }
@@ -153,6 +156,28 @@ public class ManuscriptService {
         versionRepository.updateSubmittedAt(versionId, now);
 
         return getManuscript(principal, manuscriptId);
+    }
+
+    @Transactional
+    public ManuscriptResponse startScreening(CurrentUserPrincipal principal, long manuscriptId, long versionId) {
+        requireChairOrAdmin(principal);
+        ManuscriptRow manuscript = manuscriptRepository.findByIdForUpdate(manuscriptId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
+        VersionRow version = findVersion(versionId);
+        ensureVersionBelongsToManuscript(version, manuscriptId);
+        if (manuscript.currentVersionId() == null || manuscript.currentVersionId() != versionId) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only the current version can enter screening");
+        }
+        if ("UNDER_SCREENING".equals(manuscript.currentStatus())) {
+            return toResponse(manuscriptRepository.findById(manuscriptId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found")));
+        }
+        if (!Set.of("SUBMITTED", "REVISED_SUBMITTED").contains(manuscript.currentStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Manuscript is not ready for screening");
+        }
+        manuscriptRepository.updateStatus(manuscriptId, "UNDER_SCREENING");
+        return toResponse(manuscriptRepository.findById(manuscriptId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found")));
     }
 
     public ManuscriptResponse getManuscript(CurrentUserPrincipal principal, long manuscriptId) {
@@ -238,6 +263,30 @@ public class ManuscriptService {
         if (principal.userId() != manuscript.submitterId()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Forbidden manuscript access");
         }
+    }
+
+    private boolean canDownloadPdf(CurrentUserPrincipal principal, ManuscriptRow manuscript, VersionRow version) {
+        if (principal == null) {
+            return false;
+        }
+        if (hasRole(principal, "ADMIN") || hasRole(principal, "CHAIR")) {
+            return true;
+        }
+        if (hasRole(principal, "AUTHOR") && principal.userId() == manuscript.submitterId()) {
+            return true;
+        }
+        return hasRole(principal, "REVIEWER")
+                && manuscriptRepository.reviewerHasAssignment(manuscript.manuscriptId(), version.versionId(), principal.userId());
+    }
+
+    private void requireChairOrAdmin(CurrentUserPrincipal principal) {
+        if (!hasRole(principal, "CHAIR") && !hasRole(principal, "ADMIN")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chair or admin role is required");
+        }
+    }
+
+    private boolean hasRole(CurrentUserPrincipal principal, String role) {
+        return principal != null && principal.roles().contains(role);
     }
 
     private void requireAuthor(CurrentUserPrincipal principal) {

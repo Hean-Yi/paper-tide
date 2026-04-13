@@ -1,6 +1,7 @@
 package com.example.review.agent;
 
 import com.example.review.agent.AgentDtos.AgentResultResponse;
+import com.example.review.agent.AgentDtos.AgentTaskListResponse;
 import com.example.review.agent.AgentDtos.AgentTaskResponse;
 import com.example.review.agent.AgentDtos.CreateAgentTaskRequest;
 import com.example.review.auth.CurrentUserPrincipal;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -58,5 +60,14 @@ public class AgentTaskController {
             @PathVariable long versionId
     ) {
         return agentIntegrationService.listResults(principal, manuscriptId, versionId);
+    }
+
+    @GetMapping("/agent-tasks")
+    public List<AgentTaskListResponse> listTasks(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String taskType
+    ) {
+        return agentIntegrationService.listTasks(principal, status, taskType);
     }
 }

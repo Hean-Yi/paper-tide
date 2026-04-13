@@ -1,5 +1,6 @@
 package com.example.review.agent;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -19,6 +20,20 @@ public final class AgentDtos {
             String taskType,
             String taskStatus,
             String step
+    ) {
+    }
+
+    public record AgentTaskListResponse(
+            long taskId,
+            String externalTaskId,
+            String taskType,
+            String taskStatus,
+            long manuscriptId,
+            long versionId,
+            Long roundId,
+            Instant createdAt,
+            Instant finishedAt,
+            String resultSummary
     ) {
     }
 

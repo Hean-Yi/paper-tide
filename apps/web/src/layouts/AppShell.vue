@@ -10,18 +10,18 @@ const navItems = computed(() => {
   const roles = new Set(authState.user?.roles ?? []);
   const items = [];
   if (roles.has("AUTHOR")) {
-    items.push({ label: "My manuscripts", target: "/dashboard#manuscripts" });
+    items.push({ label: "My manuscripts", target: "/author/manuscripts" });
+    items.push({ label: "Submit manuscript", target: "/author/submit" });
   }
   if (roles.has("REVIEWER")) {
-    items.push({ label: "Review assignments", target: "/dashboard#assignments" });
+    items.push({ label: "Review assignments", target: "/reviewer/assignments" });
   }
   if (roles.has("CHAIR")) {
-    items.push({ label: "Screening", target: "/dashboard#screening" });
-    items.push({ label: "Decisions", target: "/dashboard#decisions" });
+    items.push({ label: "Screening", target: "/chair/screening" });
+    items.push({ label: "Decisions", target: "/chair/decisions" });
   }
   if (roles.has("ADMIN")) {
-    items.push({ label: "Audit logs", target: "/dashboard#audit" });
-    items.push({ label: "Agent monitor", target: "/dashboard#agents" });
+    items.push({ label: "Agent monitor", target: "/admin/agents" });
   }
   return items;
 });

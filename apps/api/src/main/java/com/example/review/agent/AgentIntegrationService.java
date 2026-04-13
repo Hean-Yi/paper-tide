@@ -3,6 +3,7 @@ package com.example.review.agent;
 import com.example.review.agent.AgentDtos.AgentResultResponse;
 import com.example.review.agent.AgentDtos.AgentServiceCreateRequest;
 import com.example.review.agent.AgentDtos.AgentServiceTaskSummary;
+import com.example.review.agent.AgentDtos.AgentTaskListResponse;
 import com.example.review.agent.AgentDtos.AgentTaskResponse;
 import com.example.review.agent.AgentDtos.AgentVersionData;
 import com.example.review.auth.CurrentUserPrincipal;
@@ -54,6 +55,11 @@ public class AgentIntegrationService {
             return agentRepository.listResults(manuscriptId, versionId, false);
         }
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not allowed to view agent results");
+    }
+
+    public List<AgentTaskListResponse> listTasks(CurrentUserPrincipal principal, String status, String taskType) {
+        requireAdmin(principal);
+        return agentRepository.listTasks(status, taskType);
     }
 
     private AgentTaskResponse createAndSubmitTask(
@@ -130,7 +136,13 @@ public class AgentIntegrationService {
         }
     }
 
+    private void requireAdmin(CurrentUserPrincipal principal) {
+        if (!hasRole(principal, "ADMIN")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin role is required");
+        }
+    }
+
     private boolean hasRole(CurrentUserPrincipal principal, String role) {
-        return principal.roles().contains(role);
+        return principal != null && principal.roles().contains(role);
     }
 }

@@ -59,7 +59,7 @@ This plan assumes the implementation will use the following file layout:
 - Task 9 implemented and verified on 2026-04-13. The main Spring Boot system can create agent tasks from Oracle PDF BLOBs, poll the FastAPI agent service, persist raw/redacted results, expose result lookup endpoints, and assemble conflict-analysis payloads from Oracle review reports. The FastAPI agent service now accepts both JSON and multipart/PDF task creation and enriches paper-understanding input with extracted PDF text and coarse sections.
 - Task 1 through Task 9 audit on 2026-04-13 found no unchecked implementation steps before Task 10. Remaining items are explicit deferrals: screening-start entry point for later chair workflow work, agent feedback endpoints for a later feature slice, and durable agent queues/retries/provider failover for future hardening.
 - Task 10 completed on 2026-04-13. The Vue frontend now has login, JWT session persistence, route guards, an API helper with bearer-token injection, a role-aware app shell, and an authenticated dashboard landing page.
-- Task 11 design drafted on 2026-04-13 in `docs/superpowers/specs/2026-04-13-task11-workflow-screens-design.md`; implementation is awaiting design approval. The design identifies minimal backend query/action endpoints needed for reviewer, chair, and admin workflow pages so production pages do not rely on fake data.
+- Task 11 completed on 2026-04-13. The frontend now has role-specific workflow pages for authors, reviewers, chairs, and admins; the API now exposes the minimal workflow query/action endpoints needed by those pages, including reviewer/chair PDF access and admin agent task listing.
 
 ## Task 1: Scaffold the Monorepo
 
@@ -1066,7 +1066,7 @@ git commit -m "feat: add frontend auth and application shell"
 
 ## Task 11: Build the Workflow Screens
 
-**Status:** Design drafted on 2026-04-13; implementation not started.
+**Status:** Completed on 2026-04-13 after backend/frontend implementation and repository-level verification.
 
 **Design Note:** Detailed Task 11 design is documented in `docs/superpowers/specs/2026-04-13-task11-workflow-screens-design.md`.
 
@@ -1080,7 +1080,11 @@ git commit -m "feat: add frontend auth and application shell"
 - Modify: `apps/api/src/main/java/com/example/review/manuscript/ManuscriptService.java`
 - Modify: `apps/api/src/main/java/com/example/review/manuscript/ManuscriptRepository.java`
 - Modify: `apps/api/src/main/java/com/example/review/agent/AgentTaskController.java`
+- Modify: `apps/api/src/main/java/com/example/review/agent/AgentDtos.java`
+- Modify: `apps/api/src/main/java/com/example/review/agent/AgentIntegrationService.java`
 - Modify: `apps/api/src/main/java/com/example/review/agent/AgentRepository.java`
+- Modify: `apps/api/src/main/java/com/example/review/review/ReviewWorkflowService.java`
+- Modify: `apps/api/src/test/java/com/example/review/review/ReviewWorkflowServiceTest.java`
 - Create: `apps/web/src/views/author/ManuscriptListView.vue`
 - Create: `apps/web/src/views/author/SubmitManuscriptView.vue`
 - Create: `apps/web/src/views/reviewer/AssignmentListView.vue`
@@ -1090,12 +1094,72 @@ git commit -m "feat: add frontend auth and application shell"
 - Create: `apps/web/src/views/admin/AgentMonitorView.vue`
 - Create: `apps/web/src/lib/workflow-api.ts`
 - Create: `apps/web/src/tests/workflow.spec.ts`
+- Modify: `apps/web/src/lib/api.ts`
+- Modify: `apps/web/src/tests/login.spec.ts`
 - Modify: `apps/web/src/router/index.ts`
 - Modify: `apps/web/src/layouts/AppShell.vue`
 - Modify: `apps/web/src/views/DashboardView.vue`
 - Modify: `apps/web/src/style.css`
+- Modify: `AGENTS.md`
 
-- [ ] **Step 1: Write failing workflow UI tests**
+**Page Briefs (2026-04-13):**
+
+Author manuscript list:
+- Information elements: manuscript title, manuscript id, current version id/no, current status, blind mode, submitted date, last decision, PDF/version indicators.
+- User actions: create manuscript, create revision when `REVISION_REQUIRED`, upload PDF for current draft/revision, submit current version, download PDF.
+- Element Plus components: `el-table`, `el-tag`, `el-button`, `el-upload`, `el-empty`, `el-dialog`, `el-descriptions`.
+- Endpoints: `GET /api/manuscripts`, `GET /api/manuscripts/{id}/versions`, `POST /api/manuscripts/{id}/versions`, `POST /api/manuscripts/{id}/versions/{versionId}/pdf`, `GET /api/manuscripts/{id}/versions/{versionId}/pdf`, `POST /api/manuscripts/{id}/versions/{versionId}/submit`.
+- Deferred behavior: rich manuscript detail timeline and decision letter rendering remain out of scope.
+
+Author submit manuscript:
+- Information elements: title, abstract, keywords, blind mode, author rows, PDF file, create/submit state.
+- User actions: create initial manuscript, add/remove author rows, upload PDF after creation, submit version.
+- Element Plus components: `el-form`, `el-input`, `el-select`, `el-upload`, `el-button`, `el-alert`, repeated author row controls.
+- Endpoints: `POST /api/manuscripts`, `POST /api/manuscripts/{id}/versions/{versionId}/pdf`, `POST /api/manuscripts/{id}/versions/{versionId}/submit`.
+- Deferred behavior: co-author lookup/autocomplete and draft autosave remain out of scope.
+
+Reviewer assignment list:
+- Information elements: assignment id, manuscript title, round id, version id/no, task status, deadline, accepted date, submitted date, recommendation.
+- User actions: accept assigned task, decline with reason/conflict declaration, open review editor.
+- Element Plus components: `el-table`, `el-tag`, `el-button`, `el-dialog`, `el-form`, `el-input`.
+- Endpoints: `GET /api/review-assignments`, `POST /api/review-assignments/{assignmentId}/accept`, `POST /api/review-assignments/{assignmentId}/decline`.
+- Deferred behavior: reviewer calendar and bulk actions remain out of scope.
+
+Reviewer review editor:
+- Information elements: assignment detail, title, abstract, keywords, PDF file name, five scores, confidence, recommendation, strengths/weaknesses/comments, redacted agent results.
+- User actions: download PDF, submit review report, return to assignment list.
+- Element Plus components: `el-descriptions`, `el-form`, `el-select`, `el-input`, `el-button`, `el-alert`, `el-card`.
+- Endpoints: `GET /api/review-assignments/{assignmentId}`, `GET /api/manuscripts/{id}/versions/{versionId}/pdf`, `POST /api/review-assignments/{assignmentId}/review-report`, `GET /api/manuscripts/{id}/versions/{versionId}/agent-results`.
+- Deferred behavior: autosave drafts and rich PDF preview remain out of scope.
+
+Chair screening queue:
+- Information elements: manuscript id, version id, title, status, blind mode, submitted date, PDF status/size, current round number.
+- User actions: start screening, trigger screening agent analysis, desk reject, create review round.
+- Element Plus components: `el-table`, `el-tag`, `el-button`, `el-dialog`, `el-form`, `el-descriptions`.
+- Endpoints: `GET /api/chair/screening-queue`, `POST /api/manuscripts/{manuscriptId}/versions/{versionId}/start-screening`, `POST /api/manuscripts/{manuscriptId}/versions/{versionId}/agent-tasks`, `POST /api/decisions`, `POST /api/review-rounds`.
+- Deferred behavior: plagiarism integrations and batch screening remain out of scope.
+
+Chair decision workbench:
+- Information elements: round id/no/status, manuscript title/status, assignment count, submitted review count, conflict count, deadline, assignments, conflict checks, raw agent results, decision form.
+- User actions: assign reviewer, mark overdue, reassign overdue, view conflict checks, trigger conflict analysis, submit decision.
+- Element Plus components: `el-table`, `el-dialog`, `el-descriptions`, `el-form`, `el-select`, `el-input`, `el-button`, `el-tag`, `el-card`.
+- Endpoints: `GET /api/chair/decision-workbench`, `POST /api/review-rounds/{roundId}/assignments`, `POST /api/review-assignments/{assignmentId}/mark-overdue`, `POST /api/review-assignments/{assignmentId}/reassign`, `GET /api/review-rounds/{roundId}/conflict-checks`, `POST /api/review-rounds/{roundId}/conflict-analysis`, `GET /api/manuscripts/{id}/versions/{versionId}/agent-results`, `POST /api/decisions`.
+- Deferred behavior: side-by-side full review report comparison remains out of scope.
+
+Admin agent monitor:
+- Information elements: task id, external task id, type, status, manuscript/version/round ids, created/finished time, summary.
+- User actions: filter by status/type, refresh list, inspect identifiers.
+- Element Plus components: `el-table`, `el-select`, `el-button`, `el-tag`, `el-descriptions`.
+- Endpoints: `GET /api/agent-tasks`.
+- Deferred behavior: feedback, retries, cancel/requeue, provider failover controls remain out of scope.
+
+**Implementation Result (2026-04-13):**
+- Backend added `WorkflowQueryController` / `WorkflowQueryService` for reviewer assignment list/detail, chair screening queue, chair decision workbench, and admin agent task list.
+- Backend extended existing manuscript PDF download authorization to authors, assigned reviewers, chair, and admin users; added `start-screening`; and aligned review round creation so a manuscript can move from `UNDER_SCREENING` into a review round.
+- Frontend added workflow API helpers and seven role-specific pages wired into real guarded routes and role-aware navigation.
+- Tests added: backend workflow query integration coverage, review round creation after screening starts, and frontend workflow screen coverage for desk reject action, reviewer redacted results, and chair raw results.
+
+- [x] **Step 1: Write failing workflow UI tests**
 
 ```ts
 it("shows desk reject action in chair screening queue", () => {});
@@ -1103,7 +1167,7 @@ it("shows redacted agent results for reviewer", () => {});
 it("shows raw agent results for chair", () => {});
 ```
 
-- [ ] **Step 2: Add minimal backend workflow query endpoints**
+- [x] **Step 2: Add minimal backend workflow query endpoints**
 
 Support:
 
@@ -1114,7 +1178,7 @@ Support:
 - admin agent task list
 - PDF download authorization for assigned reviewers and chair/admin users
 
-- [ ] **Step 3: Write page brief and implement author screens**
+- [x] **Step 3: Write page brief and implement author screens**
 
 Support:
 
@@ -1123,7 +1187,7 @@ Support:
 - upload PDF
 - submit revision
 
-- [ ] **Step 4: Write page brief and implement reviewer screens**
+- [x] **Step 4: Write page brief and implement reviewer screens**
 
 Support:
 
@@ -1132,7 +1196,7 @@ Support:
 - submit review
 - view assignment history
 
-- [ ] **Step 5: Write page brief and implement chair screens**
+- [x] **Step 5: Write page brief and implement chair screens**
 
 Support:
 
@@ -1143,7 +1207,7 @@ Support:
 - submit decisions
 - reassign overdue tasks
 
-- [ ] **Step 6: Write page brief and implement admin agent monitor**
+- [x] **Step 6: Write page brief and implement admin agent monitor**
 
 Support:
 
@@ -1151,7 +1215,7 @@ Support:
 - filter by status/type
 - inspect task identifiers and summaries
 
-- [ ] **Step 7: Re-run workflow UI and backend tests**
+- [x] **Step 7: Re-run workflow UI and backend tests**
 
 Run: `npm --prefix apps/web run test -- --run`
 Run: `npm --prefix apps/web run typecheck`
@@ -1160,7 +1224,14 @@ Run: `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repo
 Run: `bash scripts/test-all.sh`
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+Actual (2026-04-13): PASS.
+- `npm --prefix apps/web run test -- --run`: 11 passed.
+- `npm --prefix apps/web run typecheck`: passed.
+- `npm --prefix apps/web run build`: passed with the existing Element Plus/Vite chunk size warning.
+- `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test`: 40 passed.
+- `bash scripts/test-all.sh`: passed; API 40 passed, agent health 1 passed with the existing Python 3.14/Pydantic v1 warning, web 11 passed, typecheck passed, build passed.
+
+- [x] **Step 8: Commit**
 
 ```bash
 git add apps/api/src/main/java/com/example/review apps/api/src/test/java/com/example/review apps/web/src docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md docs/superpowers/specs/2026-04-13-task11-workflow-screens-design.md

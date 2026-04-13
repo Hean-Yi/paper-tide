@@ -176,7 +176,7 @@ describe("frontend authentication", () => {
 
     expect(wrapper.text()).toContain("My manuscripts");
     expect(wrapper.text()).toContain("Screening");
-    expect(wrapper.text()).toContain("Audit logs");
+    expect(wrapper.text()).toContain("Agent monitor");
     expect(wrapper.text()).not.toContain("Review assignments");
 
     await wrapper.get('[data-test="logout"]').trigger("click");

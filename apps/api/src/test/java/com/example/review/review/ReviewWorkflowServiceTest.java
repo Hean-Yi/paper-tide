@@ -220,6 +220,26 @@ class ReviewWorkflowServiceTest {
     }
 
     @Test
+    void roundCreationAllowsManuscriptAfterScreeningStarts() throws Exception {
+        TestManuscript manuscript = seedSubmittedManuscript();
+        jdbcTemplate.update(
+                "UPDATE MANUSCRIPT SET CURRENT_STATUS = 'UNDER_SCREENING' WHERE MANUSCRIPT_ID = ?",
+                manuscript.manuscriptId()
+        );
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+
+        long roundId = createRound(chairToken, manuscript.manuscriptId(), manuscript.versionId(), 1);
+
+        Map<String, Object> manuscriptRow = jdbcTemplate.queryForMap(
+                "SELECT CURRENT_STATUS, CURRENT_ROUND_NO FROM MANUSCRIPT WHERE MANUSCRIPT_ID = ?",
+                manuscript.manuscriptId()
+        );
+        org.junit.jupiter.api.Assertions.assertTrue(roundId > 0);
+        org.junit.jupiter.api.Assertions.assertEquals("UNDER_REVIEW", manuscriptRow.get("CURRENT_STATUS"));
+        org.junit.jupiter.api.Assertions.assertEquals(1, ((Number) manuscriptRow.get("CURRENT_ROUND_NO")).intValue());
+    }
+
+    @Test
     void roundCreationRejectsUnsupportedManuscriptState() throws Exception {
         long manuscriptId = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT.NEXTVAL FROM DUAL", Long.class);
         long versionId = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT_VERSION.NEXTVAL FROM DUAL", Long.class);

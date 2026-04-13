@@ -98,4 +98,13 @@ public class ManuscriptController {
     ) {
         return manuscriptService.submitVersion(principal, id, versionId);
     }
+
+    @PostMapping("/{id}/versions/{versionId}/start-screening")
+    public ManuscriptResponse startScreening(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long id,
+            @PathVariable long versionId
+    ) {
+        return manuscriptService.startScreening(principal, id, versionId);
+    }
 }

@@ -55,6 +55,14 @@ public class ManuscriptRepository {
         );
     }
 
+    public void updateStatus(long manuscriptId, String currentStatus) {
+        jdbcTemplate.update(
+                "UPDATE MANUSCRIPT SET CURRENT_STATUS = ? WHERE MANUSCRIPT_ID = ?",
+                currentStatus,
+                manuscriptId
+        );
+    }
+
     public Optional<ManuscriptRow> findById(long manuscriptId) {
         List<ManuscriptRow> rows = jdbcTemplate.query(
                 """
@@ -158,6 +166,23 @@ public class ManuscriptRepository {
                 ),
                 submitterId
         );
+    }
+
+    public boolean reviewerHasAssignment(long manuscriptId, long versionId, long reviewerId) {
+        Integer count = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM REVIEW_ASSIGNMENT
+                WHERE MANUSCRIPT_ID = ?
+                  AND VERSION_ID = ?
+                  AND REVIEWER_ID = ?
+                """,
+                Integer.class,
+                manuscriptId,
+                versionId,
+                reviewerId
+        );
+        return count != null && count > 0;
     }
 }
 

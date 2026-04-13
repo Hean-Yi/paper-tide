@@ -2,6 +2,7 @@ package com.example.review.agent;
 
 import com.example.review.agent.AgentDtos.AgentResultResponse;
 import com.example.review.agent.AgentDtos.AgentServiceResult;
+import com.example.review.agent.AgentDtos.AgentTaskListResponse;
 import com.example.review.agent.AgentDtos.AgentTaskResponse;
 import com.example.review.agent.AgentDtos.AgentVersionData;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -11,6 +12,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -230,6 +232,52 @@ public class AgentRepository {
                 ),
                 manuscriptId,
                 versionId
+        );
+    }
+
+    public List<AgentTaskListResponse> listTasks(String status, String taskType) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT TASK_ID,
+                       EXTERNAL_TASK_ID,
+                       TASK_TYPE,
+                       TASK_STATUS,
+                       MANUSCRIPT_ID,
+                       VERSION_ID,
+                       ROUND_ID,
+                       CREATED_AT,
+                       FINISHED_AT,
+                       RESULT_SUMMARY
+                FROM AGENT_ANALYSIS_TASK
+                WHERE 1 = 1
+                """);
+        List<Object> args = new ArrayList<>();
+        if (status != null && !status.isBlank()) {
+            sql.append(" AND TASK_STATUS = ?");
+            args.add(status);
+        }
+        if (taskType != null && !taskType.isBlank()) {
+            sql.append(" AND TASK_TYPE = ?");
+            args.add(taskType);
+        }
+        sql.append(" ORDER BY TASK_ID");
+        return jdbcTemplate.query(
+                sql.toString(),
+                (rs, rowNum) -> {
+                    Timestamp finishedAt = rs.getTimestamp("FINISHED_AT");
+                    return new AgentTaskListResponse(
+                            rs.getLong("TASK_ID"),
+                            rs.getString("EXTERNAL_TASK_ID"),
+                            rs.getString("TASK_TYPE"),
+                            rs.getString("TASK_STATUS"),
+                            rs.getLong("MANUSCRIPT_ID"),
+                            rs.getLong("VERSION_ID"),
+                            rs.getObject("ROUND_ID", Long.class),
+                            rs.getTimestamp("CREATED_AT").toInstant(),
+                            finishedAt == null ? null : finishedAt.toInstant(),
+                            rs.getString("RESULT_SUMMARY")
+                    );
+                },
+                args.toArray()
         );
     }
 

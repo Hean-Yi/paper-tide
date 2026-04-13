@@ -2,8 +2,15 @@ import { createRouter, createWebHistory, type RouteLocationNormalized } from "vu
 
 import AppShell from "../layouts/AppShell.vue";
 import { hasRole, initializeAuth, isAuthenticated } from "../stores/auth";
+import AgentMonitorView from "../views/admin/AgentMonitorView.vue";
+import ManuscriptListView from "../views/author/ManuscriptListView.vue";
+import SubmitManuscriptView from "../views/author/SubmitManuscriptView.vue";
+import DecisionWorkbenchView from "../views/chair/DecisionWorkbenchView.vue";
+import ScreeningQueueView from "../views/chair/ScreeningQueueView.vue";
 import DashboardView from "../views/DashboardView.vue";
 import LoginView from "../views/LoginView.vue";
+import AssignmentListView from "../views/reviewer/AssignmentListView.vue";
+import ReviewEditorView from "../views/reviewer/ReviewEditorView.vue";
 
 declare module "vue-router" {
   interface RouteMeta {
@@ -35,6 +42,48 @@ export function createAppRouter() {
             name: "dashboard",
             component: DashboardView,
             meta: { requiresAuth: true }
+          },
+          {
+            path: "author/manuscripts",
+            name: "author-manuscripts",
+            component: ManuscriptListView,
+            meta: { requiresAuth: true, roles: ["AUTHOR"] }
+          },
+          {
+            path: "author/submit",
+            name: "author-submit",
+            component: SubmitManuscriptView,
+            meta: { requiresAuth: true, roles: ["AUTHOR"] }
+          },
+          {
+            path: "reviewer/assignments",
+            name: "reviewer-assignments",
+            component: AssignmentListView,
+            meta: { requiresAuth: true, roles: ["REVIEWER"] }
+          },
+          {
+            path: "reviewer/reviews/:assignmentId",
+            name: "reviewer-review-editor",
+            component: ReviewEditorView,
+            meta: { requiresAuth: true, roles: ["REVIEWER"] }
+          },
+          {
+            path: "chair/screening",
+            name: "chair-screening",
+            component: ScreeningQueueView,
+            meta: { requiresAuth: true, roles: ["CHAIR"] }
+          },
+          {
+            path: "chair/decisions",
+            name: "chair-decisions",
+            component: DecisionWorkbenchView,
+            meta: { requiresAuth: true, roles: ["CHAIR"] }
+          },
+          {
+            path: "admin/agents",
+            name: "admin-agent-monitor",
+            component: AgentMonitorView,
+            meta: { requiresAuth: true, roles: ["ADMIN"] }
           }
         ]
       }

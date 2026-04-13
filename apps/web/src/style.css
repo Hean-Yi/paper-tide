@@ -139,6 +139,7 @@ h1 {
   border-radius: 8px;
   background: #ffffff;
   border: 1px solid #d9ded4;
+  text-decoration: none;
 }
 
 .entry-card h2 {
@@ -150,6 +151,81 @@ h1 {
   margin: 0;
   line-height: 1.5;
   color: #526057;
+}
+
+.workflow-page {
+  display: grid;
+  gap: 24px;
+}
+
+.page-heading,
+.subsection-heading,
+.upload-actions,
+.action-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.page-heading {
+  justify-content: space-between;
+}
+
+.workflow-form,
+.subsection,
+.filter-bar,
+.expanded-panel {
+  padding: 20px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #d9ded4;
+}
+
+.workflow-form {
+  display: grid;
+  gap: 4px;
+}
+
+.workflow-alert {
+  margin-top: 4px;
+}
+
+.subsection {
+  display: grid;
+  gap: 14px;
+}
+
+.subsection h2,
+.expanded-panel h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.author-row,
+.score-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.author-row {
+  grid-template-columns: minmax(120px, 1fr) minmax(160px, 1fr) minmax(140px, 1fr) auto auto;
+  align-items: center;
+}
+
+.score-grid {
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+}
+
+.json-block {
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  border-radius: 8px;
+  border: 1px solid #d9ded4;
+  background: #f9faf7;
+  color: #17211b;
+  white-space: pre-wrap;
 }
 
 @media (max-width: 720px) {
@@ -166,5 +242,18 @@ h1 {
   .content {
     width: min(100% - 32px, 1040px);
     padding: 28px 0;
+  }
+
+  .page-heading,
+  .subsection-heading,
+  .upload-actions,
+  .action-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .author-row,
+  .score-grid {
+    grid-template-columns: 1fr;
   }
 }

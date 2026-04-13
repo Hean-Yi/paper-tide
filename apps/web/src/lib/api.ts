@@ -47,6 +47,21 @@ export async function apiRequest<T = unknown>(path: string, options: ApiRequestO
   return response.json() as Promise<T>;
 }
 
+export async function apiBlob(path: string, options: RequestInit = {}): Promise<Blob> {
+  const requestHeaders = new Headers(options.headers);
+  if (authState.token && !requestHeaders.has("Authorization")) {
+    requestHeaders.set("Authorization", `Bearer ${authState.token}`);
+  }
+  const response = await fetch(`${apiBaseUrl()}${path}`, {
+    ...options,
+    headers: Object.fromEntries(requestHeaders.entries())
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, await errorMessage(response));
+  }
+  return response.blob();
+}
+
 export function login(username: string, password: string): Promise<LoginResponse> {
   return apiRequest<LoginResponse>("/auth/login", {
     method: "POST",

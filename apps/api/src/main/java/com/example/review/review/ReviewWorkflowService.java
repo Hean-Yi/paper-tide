@@ -12,7 +12,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class ReviewWorkflowService {
-    private static final Set<String> ROUND_CREATION_ALLOWED_MANUSCRIPT_STATUSES = Set.of("SUBMITTED", "REVISED_SUBMITTED");
+    private static final Set<String> ROUND_CREATION_ALLOWED_MANUSCRIPT_STATUSES = Set.of(
+            "SUBMITTED",
+            "REVISED_SUBMITTED",
+            "UNDER_SCREENING"
+    );
     private static final Set<String> ROUND_STRATEGIES = Set.of("REUSE_REVIEWERS", "REALLOCATE_REVIEWERS");
 
     private final JdbcTemplate jdbcTemplate;

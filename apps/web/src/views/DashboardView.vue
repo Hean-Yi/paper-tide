@@ -7,18 +7,18 @@ const entries = computed(() => {
   const roles = new Set(authState.user?.roles ?? []);
   const items = [];
   if (roles.has("AUTHOR")) {
-    items.push({ label: "My manuscripts", detail: "Drafts, submissions, and revisions." });
+    items.push({ label: "My manuscripts", detail: "Drafts, submissions, and revisions.", target: "/author/manuscripts" });
+    items.push({ label: "Submit manuscript", detail: "Create a paper record and upload the PDF.", target: "/author/submit" });
   }
   if (roles.has("REVIEWER")) {
-    items.push({ label: "Review assignments", detail: "Assigned papers and review deadlines." });
+    items.push({ label: "Review assignments", detail: "Assigned papers and review deadlines.", target: "/reviewer/assignments" });
   }
   if (roles.has("CHAIR")) {
-    items.push({ label: "Screening", detail: "Submission checks and reviewer coordination." });
-    items.push({ label: "Decisions", detail: "Round decisions and conflict analysis." });
+    items.push({ label: "Screening", detail: "Submission checks and reviewer coordination.", target: "/chair/screening" });
+    items.push({ label: "Decisions", detail: "Round decisions and conflict analysis.", target: "/chair/decisions" });
   }
   if (roles.has("ADMIN")) {
-    items.push({ label: "Audit logs", detail: "System activity and protected records." });
-    items.push({ label: "Agent monitor", detail: "Agent task status and result checks." });
+    items.push({ label: "Agent monitor", detail: "Agent task status and result checks.", target: "/admin/agents" });
   }
   return items;
 });
@@ -31,10 +31,10 @@ const entries = computed(() => {
     <p class="body">Choose an entry point to continue.</p>
 
     <div class="entry-grid">
-      <article v-for="entry in entries" :key="entry.label" class="entry-card">
+      <RouterLink v-for="entry in entries" :key="entry.label" class="entry-card" :to="entry.target">
         <h2>{{ entry.label }}</h2>
         <p>{{ entry.detail }}</p>
-      </article>
+      </RouterLink>
     </div>
   </section>
 </template>

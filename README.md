@@ -1,4 +1,4 @@
-# PaperTide Review (文澜审稿)
+# PaperTide Review
 
 智能论文评审系统（课程项目）。系统支持论文投稿、双盲评审、主席决策与 Agent 辅助分析，遵循 **Agent 辅助、人类决策** 原则。
 

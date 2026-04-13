@@ -50,10 +50,12 @@ This plan assumes the implementation will use the following file layout:
 - Task 4 completed on 2026-04-09
 - Task 5 completed on 2026-04-09
 - Task 6 completed on 2026-04-09
-- Task 7 completed in the working tree on 2026-04-09
-- Task 8 completed in the working tree on 2026-04-13
+- Task 7 completed and committed on 2026-04-13 as part of commit `250b841`; it does not have a standalone Task 7 commit.
+- Task 8 completed and committed on 2026-04-13 as commit `250b841` (`feat: add agent workflows schemas and redaction`).
 - Local environment bootstrap completed on 2026-04-09. Java, Maven, Node/npm, project `.venv`, frontend dependencies, Colima/Docker, and a local Oracle Free container are ready. Oracle schema import and verification passed inside the container.
-- Next recommended implementation target is Task 9: main-system integration with the agent service.
+- Current status check on 2026-04-13 found a clean git working tree before this plan-ledger update.
+- Fresh status verification on 2026-04-13 ran `./.venv/bin/python -m pytest services/agent/tests -q`: 20 passed, 23 warnings. The warnings are from LangGraph/LangChain dependencies on Python 3.14 Pydantic v1 compatibility and deprecated `asyncio.iscoroutinefunction`; no test failures were reported.
+- Task 9 implemented and verified on 2026-04-13. The main Spring Boot system can create agent tasks from Oracle PDF BLOBs, poll the FastAPI agent service, persist raw/redacted results, expose result lookup endpoints, and assemble conflict-analysis payloads from Oracle review reports. The FastAPI agent service now accepts both JSON and multipart/PDF task creation and enriches paper-understanding input with extracted PDF text and coarse sections.
 
 ## Task 1: Scaffold the Monorepo
 
@@ -613,7 +615,7 @@ Expected: PASS. If full regression exposes cross-test table cleanup failures, up
 Run: `bash scripts/test-all.sh`  
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add apps/api/src/main/java/com/example/review/review apps/api/src/test/java/com/example/review/review apps/api/src/test/java/com/example/review/manuscript/ManuscriptServiceTest.java docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md
@@ -703,13 +705,13 @@ git commit -m "feat: add review submission decisions and notifications"
 
 ## Task 7: Scaffold the Agent Service API and Task Store
 
-**Status:** Completed in the working tree on 2026-04-09. Implemented the FastAPI task API skeleton and an in-memory task store that is ready for Task 8 workflow execution to drive status transitions.
+**Status:** Completed and committed on 2026-04-13 as part of commit `250b841`. Implemented the FastAPI task API skeleton and an in-memory task store that is ready for Task 8 workflow execution to drive status transitions.
 
 **Execution Summary:** Wrote failing FastAPI tests for task creation, task lookup, unknown-task handling, and result-not-ready behavior. Added `app.models`, `app.task_store`, and `app.routes.tasks`, mounted the new router in `app.main`, and implemented a lock-protected in-memory `TaskStore` keyed by UUID task IDs. Task creation now persists `task_type`, manuscript/version/round identifiers, and `request_payload` so Task 8 can consume the original analysis input without changing the store contract. Task 7 intentionally keeps the API JSON-only; the future main-system integration that sends PDF files remains deferred to the later multipart upgrade task.
 
 **Verification Run:** `./.venv/bin/python -m pytest services/agent/tests/test_tasks_api.py -q`; `./.venv/bin/python -m pytest services/agent/tests -q`. Both completed successfully.
 
-**Commit Note:** Task 7 is complete in the working tree but has not been committed yet.
+**Commit Note:** Task 7 did not receive a standalone commit; its task API and task-store files were committed together with Task 8 in `250b841` (`feat: add agent workflows schemas and redaction`).
 
 **Files:**
 - Create: `services/agent/app/routes/tasks.py`
@@ -760,7 +762,7 @@ Expected: PASS.
 Run: `pytest services/agent/tests -q`  
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add services/agent/app services/agent/tests
@@ -769,13 +771,13 @@ git commit -m "feat: add agent task api and in-memory task store"
 
 ## Task 8: Implement LangGraph Workflows and Result Schemas
 
-**Status:** Completed in the working tree on 2026-04-13. Implemented the minimal safe live-agent slice approved in the revised Task 8 spec.
+**Status:** Completed and committed on 2026-04-13 as commit `250b841` (`feat: add agent workflows schemas and redaction`). Implemented the minimal safe live-agent slice approved in the revised Task 8 spec.
 
 **Design Note:** Task 8 design is drafted in `docs/superpowers/specs/2026-04-09-task8-agent-workflows-design.md` and targets the smallest safe live-agent slice: real LangGraph execution through OpenRouter, internal API-key protection, input-fingerprint cache reuse with `force` override, bounded in-process concurrency, authoritative schema validation, and content-aware redacted result generation. Multipart PDF upload, Oracle persistence, durable queues, retries, and Java polling integration remain deferred.
 
 **Execution Summary:** Wrote red tests for authoritative result schemas, router selection, conflict `roundId` validation, content redaction, internal API-key enforcement, unset-key `503`, request-payload fingerprinting, cache reuse, `force=true`, single-start behavior for cached pending tasks, and stable `PENDING/queued` create responses. Added `langgraph`, `openai`, and `python-dotenv`; implemented TaskRecord cache metadata, deterministic input fingerprints, in-memory cache reuse, internal API-key checks, bounded in-process background execution, real LangGraph workflows, OpenRouter JSON-call hooks, Pydantic validation, and deterministic reviewer-facing redaction.
 
-**Verification Run:** `./.venv/bin/python -m pytest services/agent/tests/test_workflow_schemas.py -q`; `./.venv/bin/python -m pytest services/agent/tests/test_tasks_api.py -q`; `./.venv/bin/python -m pytest services/agent/tests -q`. All completed successfully. The test run reports warnings from LangGraph/LangChain dependencies on Python 3.14 Pydantic v1 compatibility and deprecated `asyncio.iscoroutinefunction`, but no test failures.
+**Verification Run:** `./.venv/bin/python -m pytest services/agent/tests/test_workflow_schemas.py -q`; `./.venv/bin/python -m pytest services/agent/tests/test_tasks_api.py -q`; `./.venv/bin/python -m pytest services/agent/tests -q`. All completed successfully. Fresh status verification on 2026-04-13 ran `./.venv/bin/python -m pytest services/agent/tests -q` and reported 20 passed, 23 warnings. The warnings are from LangGraph/LangChain dependencies on Python 3.14 Pydantic v1 compatibility and deprecated `asyncio.iscoroutinefunction`, but no test failures.
 
 **Files:**
 - Modify: `services/agent/app/main.py`
@@ -871,7 +873,7 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add services/agent/app services/agent/tests services/agent/pyproject.toml AGENTS.md docs/superpowers/specs/2026-04-09-task8-agent-workflows-design.md docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md
@@ -880,13 +882,35 @@ git commit -m "feat: add agent workflows schemas and redaction"
 
 ## Task 9: Integrate the Main System with Agent Service
 
+**Status:** Completed on 2026-04-13 after agent-service and API integration verification.
+
+**Design Note:** Detailed Task 9 design is documented in `docs/superpowers/specs/2026-04-13-task9-agent-integration-design.md`.
+
+**Start Note (2026-04-13):** Begin with failing integration tests and use the multipart/PDF contract from the overall design. Task 8 intentionally kept `/agent/tasks` JSON-only, so Task 9 must extend the FastAPI agent service to accept `multipart/form-data` before the Java API uploads Oracle BLOB bytes. Do not implement Java-side multipart upload against the current agent API without adding the matching FastAPI endpoint and tests in the same task.
+
+**Task 9 Scope Decision (2026-04-13):** Implement only the required Tool-layer subset as deterministic Python helpers called directly by workflow-adjacent code. Keep `PdfExtractTool` and `SectionSplitTool`. Do not add a general autonomous tool-calling framework. Do not implement `MetadataFetchTool`; route-level multipart parsing must normalize metadata before creating the task. Do not implement `ConflictCompareTool`; Java must aggregate Oracle review reports into `requestPayload.reviewReports` before calling the agent service. Feedback endpoints are deferred out of Task 9.
+
+**Execution Summary:** Added FastAPI multipart parsing for `/agent/tasks`, deterministic PDF extraction and section splitting helpers, richer `PaperUnderstanding` fields, and JSON compatibility coverage. Added the Spring Boot agent integration slice with controller/service/repository, multipart HTTP client, polling scheduler, Oracle result persistence, role-scoped result visibility, conflict-analysis review-report aggregation, timeout handling, and idempotent `EXTERNAL_TASK_ID` attachment. Updated legacy Oracle integration-test cleanup to delete agent child rows before manuscript/version parent rows.
+
+**Verification Run:** `./.venv/bin/python -m pytest services/agent/tests/test_multipart_tasks_api.py -q`; `./.venv/bin/python -m pytest services/agent/tests -q`; `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AgentIntegrationServiceTest test`; `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test`; `bash scripts/test-all.sh`. All completed successfully with local Oracle access.
+
 **Files:**
 - Create: `apps/api/src/main/java/com/example/review/agent/AgentTaskController.java`
 - Create: `apps/api/src/main/java/com/example/review/agent/AgentIntegrationService.java`
 - Create: `apps/api/src/main/java/com/example/review/agent/AgentPollingScheduler.java`
+- Create: `apps/api/src/main/java/com/example/review/agent/AgentRepository.java`
 - Create: `apps/api/src/test/java/com/example/review/agent/AgentIntegrationServiceTest.java`
+- Create: `services/agent/app/pdf_tools.py`
+- Create: `services/agent/tests/test_multipart_tasks_api.py`
+- Modify: `apps/api/src/main/resources/application.yml`
+- Modify: `apps/api/src/test/java/com/example/review/decision/DecisionServiceTest.java`
+- Modify: `apps/api/src/test/java/com/example/review/manuscript/ManuscriptServiceTest.java`
+- Modify: `apps/api/src/test/java/com/example/review/review/ReviewWorkflowServiceTest.java`
+- Modify: `services/agent/pyproject.toml`
+- Modify: `services/agent/app/routes/tasks.py`
+- Modify: `services/agent/app/workflows/paper_understanding.py`
 
-- [ ] **Step 1: Write failing integration tests**
+- [x] **Step 1: Write failing integration tests**
 
 ```java
 @Test
@@ -896,7 +920,24 @@ void reviewAssistTaskUploadsPdfAndStoresPendingTask() {}
 void pollingCompletedTaskPersistsRawAndRedactedResults() {}
 ```
 
-- [ ] **Step 2: Implement multipart upload from Oracle BLOB**
+Also add focused FastAPI tests for `multipart/form-data` task creation with:
+
+- `metadata` JSON field
+- `file` PDF part
+- internal API-key enforcement
+- extracted text and section data flowing into the task `requestPayload`
+- JSON task creation compatibility
+
+Also add Java tests for:
+
+- missing PDF rejection
+- completed polling result persistence
+- timeout-to-failed transition
+- external task idempotency
+- reviewer redacted-only result visibility
+- conflict-analysis payload assembly from Oracle review reports
+
+- [x] **Step 2: Implement multipart upload from Oracle BLOB**
 
 The integration service must:
 
@@ -904,31 +945,52 @@ The integration service must:
 - send `metadata` JSON
 - send PDF bytes as multipart file
 
-- [ ] **Step 3: Implement polling and timeout failure**
+The matching FastAPI endpoint must parse the multipart request, run the scoped PDF/tool ingestion helpers, and store the normalized request payload before background workflow execution starts.
+
+- [x] **Step 3: Implement PDF ingestion helpers and richer Paper Understanding**
+
+Implement:
+
+- `PdfExtractTool` as deterministic PDF text extraction
+- `SectionSplitTool` as deterministic coarse section splitting
+- route-level metadata normalization, not `MetadataFetchTool`
+- richer `PaperUnderstanding` fields for keywords, sections, `pdfText`, research problem, main results, limitations, and citation signals
+
+- [x] **Step 4: Implement polling and timeout failure**
 
 If polling exceeds 10 minutes:
 
 - mark task `FAILED`
 - allow manual retry later
 
-- [ ] **Step 4: Implement result query and feedback endpoints**
+- [x] **Step 5: Implement result query endpoints**
 
 Expose:
 
 - `GET /api/manuscripts/{id}/versions/{versionId}/agent-results`
-- `POST /api/agent-results/{resultId}/feedback`
-- `GET /api/manuscripts/{id}/agent-feedback`
 - `POST /api/review-rounds/{roundId}/conflict-analysis`
 
-- [ ] **Step 5: Re-run integration tests**
+Task 9 intentionally defers:
 
-Run: `mvn -f apps/api/pom.xml -Dtest=AgentIntegrationServiceTest test`  
+- `POST /api/agent-results/{resultId}/feedback`
+- `GET /api/manuscripts/{id}/agent-feedback`
+
+- [x] **Step 6: Re-run integration tests**
+
+Run:
+
+- `./.venv/bin/python -m pytest services/agent/tests/test_multipart_tasks_api.py -q`
+- `./.venv/bin/python -m pytest services/agent/tests -q`
+- `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AgentIntegrationServiceTest test`
+- `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test`
+- `bash scripts/test-all.sh`
+
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
-git add apps/api/src/main/java/com/example/review/agent apps/api/src/test/java/com/example/review/agent
+git add apps/api/src/main/java/com/example/review/agent apps/api/src/test/java/com/example/review/agent apps/api/src/main/resources/application.yml apps/api/src/test/java/com/example/review/decision/DecisionServiceTest.java apps/api/src/test/java/com/example/review/manuscript/ManuscriptServiceTest.java apps/api/src/test/java/com/example/review/review/ReviewWorkflowServiceTest.java services/agent/app services/agent/tests services/agent/pyproject.toml AGENTS.md docs/superpowers/specs/2026-04-13-task9-agent-integration-design.md docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md
 git commit -m "feat: integrate main system with agent service"
 ```
 
@@ -1122,7 +1184,7 @@ Implement in this order:
 - Manuscript/version/author model: Task 4
 - Review rounds, assignments, conflicts, deadlines: Task 5
 - Reviews, decisions, notifications, audit: Task 6
-- Agent task types, schemas, redaction, feedback: Tasks 8 and 9
+- Agent task types, schemas, redaction, PDF ingestion, and result persistence: Tasks 8 and 9. Agent feedback is deferred out of Task 9.
 - API surface and frontend views: Tasks 9, 10, 11
 - Deployment/demo readiness: Task 12
 

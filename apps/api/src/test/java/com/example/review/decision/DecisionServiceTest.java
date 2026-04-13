@@ -36,6 +36,8 @@ class DecisionServiceTest {
 
     @BeforeEach
     void cleanDecisionTables() {
+        jdbcTemplate.update("DELETE FROM AGENT_ANALYSIS_RESULT");
+        jdbcTemplate.update("DELETE FROM AGENT_ANALYSIS_TASK");
         jdbcTemplate.update("DELETE FROM SYS_NOTIFICATION");
         jdbcTemplate.update("DELETE FROM DECISION_RECORD");
         jdbcTemplate.update("DELETE FROM REVIEW_REPORT");

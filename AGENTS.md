@@ -56,6 +56,7 @@ Current lessons captured from recent review cycles:
 - When a workflow task intentionally skips an intermediate state from the full state machine, record that deferral explicitly in the authoritative plan or spec in the same cycle so later tasks know which transition still needs a dedicated entry point.
 - For notifications in core workflow transactions, keep the notification call behind a separate service boundary and treat delivery as best-effort. Notification persistence failures must not roll back the primary business transaction unless the task explicitly requires synchronous guarantees.
 - For live external-cost agent execution, prefer the smallest necessary safety controls before adding workflow complexity: service authentication, deterministic input-aware de-duplication, a simple concurrency cap, and explicit deferral of durable queues, retries, and provider failover unless the task requires them.
+- For agent-service tool designs, keep business data aggregation on the owning system side and normalize transport metadata at the route boundary. Workflow nodes should consume clean payloads, and helper-style tools should stay deterministic unless a task explicitly requires autonomous tool calling.
 
 ## Plan File Discipline
 Execution work must stay anchored to one authoritative implementation plan file.

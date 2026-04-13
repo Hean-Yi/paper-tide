@@ -36,6 +36,8 @@ class ReviewWorkflowServiceTest {
 
     @BeforeEach
     void cleanReviewTables() {
+        jdbcTemplate.update("DELETE FROM AGENT_ANALYSIS_RESULT");
+        jdbcTemplate.update("DELETE FROM AGENT_ANALYSIS_TASK");
         jdbcTemplate.update("DELETE FROM CONFLICT_CHECK_RECORD");
         jdbcTemplate.update("DELETE FROM REVIEW_REPORT");
         jdbcTemplate.update("DELETE FROM REVIEW_ASSIGNMENT");

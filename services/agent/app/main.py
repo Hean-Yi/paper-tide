@@ -5,9 +5,14 @@ from app.task_store import TaskStore
 from app.workflows.coordinator import WorkflowCoordinator
 
 
-def create_app(*, enable_background_execution: bool = True, require_internal_api_key: bool = True) -> FastAPI:
+def create_app(
+    *,
+    enable_background_execution: bool = True,
+    require_internal_api_key: bool = True,
+    task_store: TaskStore | None = None,
+) -> FastAPI:
     app = FastAPI(title="review-agent")
-    task_store = TaskStore()
+    task_store = task_store or TaskStore()
     coordinator = WorkflowCoordinator(task_store, enable_background_execution=enable_background_execution)
 
     @app.get("/health")

@@ -17,3 +17,7 @@ apps/web/dist/
 apps/web/coverage/
 
 /tmp/review-*.log
+
+.env
+.env.*
+!.env.example

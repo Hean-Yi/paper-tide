@@ -51,8 +51,9 @@ This plan assumes the implementation will use the following file layout:
 - Task 5 completed on 2026-04-09
 - Task 6 completed on 2026-04-09
 - Task 7 completed in the working tree on 2026-04-09
+- Task 8 completed in the working tree on 2026-04-13
 - Local environment bootstrap completed on 2026-04-09. Java, Maven, Node/npm, project `.venv`, frontend dependencies, Colima/Docker, and a local Oracle Free container are ready. Oracle schema import and verification passed inside the container.
-- Next recommended implementation target is Task 8: LangGraph workflows, result schemas, service authentication, and cache-aware task execution.
+- Next recommended implementation target is Task 9: main-system integration with the agent service.
 
 ## Task 1: Scaffold the Monorepo
 
@@ -768,16 +769,24 @@ git commit -m "feat: add agent task api and in-memory task store"
 
 ## Task 8: Implement LangGraph Workflows and Result Schemas
 
-**Design Note:** Task 8 design is drafted in `docs/superpowers/specs/2026-04-09-task8-agent-workflows-design.md` and targets real LangGraph execution with OpenAI-compatible OpenRouter access, immediate background execution after authenticated task creation, cache-aware task reuse, schema validation aligned with the authoritative system design, and content-aware redacted result generation. Multipart PDF upload remains deferred to Task 9.
+**Status:** Completed in the working tree on 2026-04-13. Implemented the minimal safe live-agent slice approved in the revised Task 8 spec.
+
+**Design Note:** Task 8 design is drafted in `docs/superpowers/specs/2026-04-09-task8-agent-workflows-design.md` and targets the smallest safe live-agent slice: real LangGraph execution through OpenRouter, internal API-key protection, input-fingerprint cache reuse with `force` override, bounded in-process concurrency, authoritative schema validation, and content-aware redacted result generation. Multipart PDF upload, Oracle persistence, durable queues, retries, and Java polling integration remain deferred.
+
+**Execution Summary:** Wrote red tests for authoritative result schemas, router selection, conflict `roundId` validation, content redaction, internal API-key enforcement, unset-key `503`, request-payload fingerprinting, cache reuse, `force=true`, single-start behavior for cached pending tasks, and stable `PENDING/queued` create responses. Added `langgraph`, `openai`, and `python-dotenv`; implemented TaskRecord cache metadata, deterministic input fingerprints, in-memory cache reuse, internal API-key checks, bounded in-process background execution, real LangGraph workflows, OpenRouter JSON-call hooks, Pydantic validation, and deterministic reviewer-facing redaction.
+
+**Verification Run:** `./.venv/bin/python -m pytest services/agent/tests/test_workflow_schemas.py -q`; `./.venv/bin/python -m pytest services/agent/tests/test_tasks_api.py -q`; `./.venv/bin/python -m pytest services/agent/tests -q`. All completed successfully. The test run reports warnings from LangGraph/LangChain dependencies on Python 3.14 Pydantic v1 compatibility and deprecated `asyncio.iscoroutinefunction`, but no test failures.
 
 **Files:**
 - Modify: `services/agent/app/main.py`
 - Modify: `services/agent/app/routes/tasks.py`
 - Modify: `services/agent/app/models.py`
 - Modify: `services/agent/app/task_store.py`
+- Modify: `services/agent/pyproject.toml`
 - Create: `services/agent/app/workflows/router.py`
 - Create: `services/agent/app/workflows/schemas.py`
 - Create: `services/agent/app/workflows/coordinator.py`
+- Create: `services/agent/app/workflows/llm.py`
 - Create: `services/agent/app/workflows/paper_understanding.py`
 - Create: `services/agent/app/workflows/review_assist.py`
 - Create: `services/agent/app/workflows/conflict_analysis.py`
@@ -785,7 +794,7 @@ git commit -m "feat: add agent task api and in-memory task store"
 - Create: `services/agent/tests/test_workflow_schemas.py`
 - Modify: `services/agent/tests/test_tasks_api.py`
 
-- [ ] **Step 1: Write failing schema tests**
+- [x] **Step 1: Write failing schema tests**
 
 ```python
 def test_review_assist_schema_requires_integer_scores(): ...
@@ -797,9 +806,19 @@ def test_conflict_schema_has_consensus_and_conflicts(): ...
 def test_decision_conflict_requires_round_id(): ...
 
 def test_redaction_sanitizes_identity_clues(): ...
+
+def test_changed_request_payload_changes_cache_key(): ...
+
+def test_tasks_require_internal_api_key(): ...
+
+def test_missing_internal_api_key_config_returns_503(): ...
+
+def test_duplicate_task_reuses_existing_cache_entry(): ...
+
+def test_force_creates_fresh_task(): ...
 ```
 
-- [ ] **Step 2: Define the Paper Understanding intermediate representation**
+- [x] **Step 2: Define the Paper Understanding intermediate representation**
 
 ```python
 class PaperUnderstanding(TypedDict):
@@ -813,7 +832,7 @@ class PaperUnderstanding(TypedDict):
     possibleBlindnessRisks: list[str]
 ```
 
-- [ ] **Step 3: Implement workflow selection by `TASK_TYPE`**
+- [x] **Step 3: Implement workflow selection by `TASK_TYPE`**
 
 Support:
 
@@ -821,16 +840,19 @@ Support:
 - `REVIEW_ASSIST_ANALYSIS`
 - `DECISION_CONFLICT_ANALYSIS`
 
-- [ ] **Step 4: Add service authentication, cache reuse, and background execution hooks**
+- [x] **Step 4: Add service authentication, cache reuse, bounded concurrency, and background execution hooks**
 
 Implement:
 
 - `X-Agent-Api-Key` protection for `/agent/tasks*`
-- cache-aware task reuse keyed by task type + manuscript/version/round + workflow revision
+- `503` for `/agent/tasks*` when auth is required but `AGENT_INTERNAL_API_KEY` is unset
+- cache-aware task reuse keyed by task type + manuscript/version/round + workflow revision + request payload fingerprint
+- `force=true` to bypass cache reuse and create a fresh task
+- bounded in-process live execution using `AGENT_MAX_CONCURRENT_TASKS`
 - immediate background workflow execution after authenticated task creation
 - stable `step` enum updates
 
-- [ ] **Step 5: Implement redaction and validation**
+- [x] **Step 5: Implement redaction and validation**
 
 The final result path must:
 
@@ -839,7 +861,7 @@ The final result path must:
 - require `roundId` for `DECISION_CONFLICT_ANALYSIS`
 - generate content-sanitized redacted output for reviewer-facing result
 
-- [ ] **Step 6: Re-run workflow and agent API tests**
+- [x] **Step 6: Re-run workflow and agent API tests**
 
 Run:
 
@@ -852,7 +874,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add services/agent/app/workflows services/agent/app/redaction.py services/agent/tests
+git add services/agent/app services/agent/tests services/agent/pyproject.toml AGENTS.md docs/superpowers/specs/2026-04-09-task8-agent-workflows-design.md docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md
 git commit -m "feat: add agent workflows schemas and redaction"
 ```
 

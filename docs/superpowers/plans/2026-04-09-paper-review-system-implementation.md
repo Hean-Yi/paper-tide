@@ -52,10 +52,13 @@ This plan assumes the implementation will use the following file layout:
 - Task 6 completed on 2026-04-09
 - Task 7 completed and committed on 2026-04-13 as part of commit `250b841`; it does not have a standalone Task 7 commit.
 - Task 8 completed and committed on 2026-04-13 as commit `250b841` (`feat: add agent workflows schemas and redaction`).
+- Task 9 completed and committed on 2026-04-13 as commit `44f9481` (`feat: integrate main system with agent service`), with post-review optimization commit `2209067` (`fix: align agent task reuse semantics`).
 - Local environment bootstrap completed on 2026-04-09. Java, Maven, Node/npm, project `.venv`, frontend dependencies, Colima/Docker, and a local Oracle Free container are ready. Oracle schema import and verification passed inside the container.
-- Current status check on 2026-04-13 found a clean git working tree before this plan-ledger update.
+- Current status check on 2026-04-13 found a clean git working tree before the Task 10 design update.
 - Fresh status verification on 2026-04-13 ran `./.venv/bin/python -m pytest services/agent/tests -q`: 20 passed, 23 warnings. The warnings are from LangGraph/LangChain dependencies on Python 3.14 Pydantic v1 compatibility and deprecated `asyncio.iscoroutinefunction`; no test failures were reported.
 - Task 9 implemented and verified on 2026-04-13. The main Spring Boot system can create agent tasks from Oracle PDF BLOBs, poll the FastAPI agent service, persist raw/redacted results, expose result lookup endpoints, and assemble conflict-analysis payloads from Oracle review reports. The FastAPI agent service now accepts both JSON and multipart/PDF task creation and enriches paper-understanding input with extracted PDF text and coarse sections.
+- Task 1 through Task 9 audit on 2026-04-13 found no unchecked implementation steps before Task 10. Remaining items are explicit deferrals: screening-start entry point for later chair workflow work, agent feedback endpoints for a later feature slice, and durable agent queues/retries/provider failover for future hardening.
+- Task 10 design drafted on 2026-04-13 in `docs/superpowers/specs/2026-04-13-task10-frontend-auth-shell-design.md`; implementation is awaiting design approval.
 
 ## Task 1: Scaffold the Monorepo
 
@@ -1000,12 +1003,23 @@ git commit -m "feat: integrate main system with agent service"
 
 ## Task 10: Build the Frontend Authentication and Shell
 
+**Status:** Design drafted on 2026-04-13; implementation not started.
+
+**Design Note:** Detailed Task 10 design is documented in `docs/superpowers/specs/2026-04-13-task10-frontend-auth-shell-design.md`.
+
+**Scope Decision (2026-04-13):** Use a lightweight Vue reactive auth store rather than adding Pinia. Task 10 should implement login, JWT persistence, route guards, API helper, and a role-aware app shell only. Do not implement Task 11 workflow screens, screening-start backend work, or agent feedback in this slice.
+
 **Files:**
 - Create: `apps/web/src/router/index.ts`
 - Create: `apps/web/src/stores/auth.ts`
+- Create: `apps/web/src/lib/api.ts`
 - Create: `apps/web/src/views/LoginView.vue`
+- Create: `apps/web/src/views/DashboardView.vue`
 - Create: `apps/web/src/layouts/AppShell.vue`
 - Create: `apps/web/src/tests/login.spec.ts`
+- Modify: `apps/web/src/main.ts`
+- Modify: `apps/web/src/App.vue`
+- Modify: `apps/web/vite.config.ts`
 
 - [ ] **Step 1: Write failing frontend auth tests**
 
@@ -1035,7 +1049,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/web/src/router apps/web/src/stores apps/web/src/views apps/web/src/layouts apps/web/src/tests
+git add apps/web/src/router apps/web/src/stores apps/web/src/lib apps/web/src/views apps/web/src/layouts apps/web/src/tests apps/web/src/main.ts apps/web/src/App.vue apps/web/vite.config.ts docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md
 git commit -m "feat: add frontend auth and application shell"
 ```
 

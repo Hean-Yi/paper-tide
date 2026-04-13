@@ -183,6 +183,10 @@ Minimal authenticated landing view:
 - Does not implement workflow behavior.
 - Gives Task 11 stable places to replace with real screens.
 
+### `apps/web/src/App.spec.ts`
+
+Replace the scaffold-title assertion. After Task 10, `App.vue` becomes a router outlet and must no longer render "Monorepo scaffold is running." The updated test should mount the app with the router and assert that an anonymous visit lands on the login view.
+
 ## Data Flow
 
 1. App startup calls `initializeAuth()`.
@@ -215,6 +219,7 @@ Use Vitest and Vue Test Utils. Mock `fetch` and `localStorage`.
 
 Required tests:
 
+- Existing `App.spec.ts` is rewritten from scaffold-title rendering to app/router auth entry behavior.
 - Anonymous users visiting a protected route are redirected to `/login`.
 - Successful login posts to `/api/auth/login`, stores the token, and routes to `/dashboard`.
 - Invalid login shows an error and does not store a token.

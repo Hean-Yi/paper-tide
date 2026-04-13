@@ -58,7 +58,7 @@ This plan assumes the implementation will use the following file layout:
 - Fresh status verification on 2026-04-13 ran `./.venv/bin/python -m pytest services/agent/tests -q`: 20 passed, 23 warnings. The warnings are from LangGraph/LangChain dependencies on Python 3.14 Pydantic v1 compatibility and deprecated `asyncio.iscoroutinefunction`; no test failures were reported.
 - Task 9 implemented and verified on 2026-04-13. The main Spring Boot system can create agent tasks from Oracle PDF BLOBs, poll the FastAPI agent service, persist raw/redacted results, expose result lookup endpoints, and assemble conflict-analysis payloads from Oracle review reports. The FastAPI agent service now accepts both JSON and multipart/PDF task creation and enriches paper-understanding input with extracted PDF text and coarse sections.
 - Task 1 through Task 9 audit on 2026-04-13 found no unchecked implementation steps before Task 10. Remaining items are explicit deferrals: screening-start entry point for later chair workflow work, agent feedback endpoints for a later feature slice, and durable agent queues/retries/provider failover for future hardening.
-- Task 10 design drafted on 2026-04-13 in `docs/superpowers/specs/2026-04-13-task10-frontend-auth-shell-design.md`; implementation is awaiting design approval.
+- Task 10 completed on 2026-04-13. The Vue frontend now has login, JWT session persistence, route guards, an API helper with bearer-token injection, a role-aware app shell, and an authenticated dashboard landing page.
 
 ## Task 1: Scaffold the Monorepo
 
@@ -1003,11 +1003,15 @@ git commit -m "feat: integrate main system with agent service"
 
 ## Task 10: Build the Frontend Authentication and Shell
 
-**Status:** Design drafted on 2026-04-13; implementation not started.
+**Status:** Completed on 2026-04-13 after frontend auth and shell verification.
 
 **Design Note:** Detailed Task 10 design is documented in `docs/superpowers/specs/2026-04-13-task10-frontend-auth-shell-design.md`.
 
 **Scope Decision (2026-04-13):** Use a lightweight Vue reactive auth store rather than adding Pinia. Task 10 should implement login, JWT persistence, route guards, API helper, and a role-aware app shell only. Do not implement Task 11 workflow screens, screening-start backend work, or agent feedback in this slice.
+
+**Execution Summary:** Replaced the scaffold `App.vue` with a router outlet, added a lightweight auth store that decodes JWT claims and clears expired or malformed tokens, added an API helper with configurable base URL and bearer-token injection, added Vite `/api` dev proxying, implemented login/dashboard/shell views, and rewrote the old scaffold `App.spec.ts` to assert anonymous users land on login. Added focused Vitest coverage for route guards, successful and failed login, stored-token restoration, authenticated API headers, role-aware navigation, and logout.
+
+**Verification Run:** `npm --prefix apps/web run test -- --run`; `npm --prefix apps/web run typecheck`; `npm --prefix apps/web run build`; `bash scripts/test-all.sh`. All completed successfully. The production build still reports Vite's large chunk warning after Element Plus bundling; it is not a build failure.
 
 **Files:**
 - Create: `apps/web/src/router/index.ts`
@@ -1019,20 +1023,22 @@ git commit -m "feat: integrate main system with agent service"
 - Create: `apps/web/src/tests/login.spec.ts`
 - Modify: `apps/web/src/main.ts`
 - Modify: `apps/web/src/App.vue`
+- Modify: `apps/web/src/App.spec.ts`
+- Modify: `apps/web/src/style.css`
 - Modify: `apps/web/vite.config.ts`
 
-- [ ] **Step 1: Write failing frontend auth tests**
+- [x] **Step 1: Write failing frontend auth tests**
 
 ```ts
 it("redirects anonymous users to login", () => {});
 it("stores token after successful login", () => {});
 ```
 
-- [ ] **Step 2: Implement login and route guards**
+- [x] **Step 2: Implement login and route guards**
 
 Use JWT-bearing requests from the store to API endpoints.
 
-- [ ] **Step 3: Implement the role-based shell**
+- [x] **Step 3: Implement the role-based shell**
 
 Provide navigation items for:
 
@@ -1041,15 +1047,15 @@ Provide navigation items for:
 - chair
 - admin
 
-- [ ] **Step 4: Re-run frontend auth tests**
+- [x] **Step 4: Re-run frontend auth tests**
 
-Run: `npm --prefix apps/web run test`  
+Run: `npm --prefix apps/web run test -- --run`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-git add apps/web/src/router apps/web/src/stores apps/web/src/lib apps/web/src/views apps/web/src/layouts apps/web/src/tests apps/web/src/main.ts apps/web/src/App.vue apps/web/vite.config.ts docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md
+git add apps/web/src/router apps/web/src/stores apps/web/src/lib apps/web/src/views apps/web/src/layouts apps/web/src/tests apps/web/src/main.ts apps/web/src/App.vue apps/web/src/App.spec.ts apps/web/src/style.css apps/web/vite.config.ts docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md docs/superpowers/specs/2026-04-13-task10-frontend-auth-shell-design.md
 git commit -m "feat: add frontend auth and application shell"
 ```
 

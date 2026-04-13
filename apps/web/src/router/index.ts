@@ -58,10 +58,6 @@ export function createAppRouter() {
   return router;
 }
 
-const router = createAppRouter();
-
-export default router;
-
 function canUseRoute(route: RouteLocationNormalized): boolean {
   const roles = route.meta.roles;
   return !roles || roles.some((role) => hasRole(role));

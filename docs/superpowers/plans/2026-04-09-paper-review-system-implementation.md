@@ -1013,6 +1013,10 @@ git commit -m "feat: integrate main system with agent service"
 
 **Verification Run:** `npm --prefix apps/web run test -- --run`; `npm --prefix apps/web run typecheck`; `npm --prefix apps/web run build`; `bash scripts/test-all.sh`. All completed successfully. The production build still reports Vite's large chunk warning after Element Plus bundling; it is not a build failure.
 
+**Post-Review Optimization (2026-04-13):** Removed the module-level router singleton from `apps/web/src/router/index.ts`; the module now exports only `createAppRouter()`, and `apps/web/src/main.ts` creates the production router instance explicitly. Added a regression test proving that importing the router module does not call `createRouter`.
+
+**Post-Review Verification:** `npm --prefix apps/web run test -- --run src/tests/login.spec.ts`; `npm --prefix apps/web run test -- --run`; `npm --prefix apps/web run typecheck`; `npm --prefix apps/web run build`. All completed successfully.
+
 **Files:**
 - Create: `apps/web/src/router/index.ts`
 - Create: `apps/web/src/stores/auth.ts`

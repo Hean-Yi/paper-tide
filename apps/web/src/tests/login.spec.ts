@@ -47,6 +47,23 @@ describe("frontend authentication", () => {
     expect(router.currentRoute.value.path).toBe("/login");
   });
 
+  it("does not create a router instance as an import side effect", async () => {
+    vi.resetModules();
+    const createRouter = vi.fn(() => ({
+      beforeEach: vi.fn()
+    }));
+    vi.doMock("vue-router", async (importOriginal) => ({
+      ...await importOriginal<typeof import("vue-router")>(),
+      createRouter,
+      createWebHistory: vi.fn(() => ({}))
+    }));
+
+    await import("../router");
+
+    expect(createRouter).not.toHaveBeenCalled();
+    vi.doUnmock("vue-router");
+  });
+
   it("stores the token and routes to dashboard after successful login", async () => {
     const authToken = futureToken(["CHAIR"]);
     const fetchMock = vi.fn().mockResolvedValue({

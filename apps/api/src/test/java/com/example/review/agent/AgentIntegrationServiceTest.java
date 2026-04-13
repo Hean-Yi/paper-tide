@@ -235,6 +235,29 @@ class AgentIntegrationServiceTest {
     }
 
     @Test
+    void failedTaskIsReusedWhenForceIsFalse() throws Exception {
+        ManuscriptFixture fixture = seedSubmittedManuscript(true);
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        long failedTaskId = seedAgentTask(fixture, "external-failed", "SCREENING_ANALYSIS", "FAILED", Instant.now());
+
+        MvcResult result = mockMvc.perform(post("/api/manuscripts/{id}/versions/{versionId}/agent-tasks", fixture.manuscriptId(), fixture.versionId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "taskType": "SCREENING_ANALYSIS"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.taskStatus").value("FAILED"))
+                .andReturn();
+
+        long returnedTaskId = objectMapper.readTree(result.getResponse().getContentAsString()).get("taskId").asLong();
+        Assertions.assertEquals(failedTaskId, returnedTaskId);
+        Assertions.assertEquals(0, agentClient.createRequests.get());
+    }
+
+    @Test
     void conflictAnalysisPayloadIncludesReviewReports() throws Exception {
         ManuscriptFixture fixture = seedUnderReviewManuscriptWithSubmittedReports();
         String chairToken = loginAndExtractToken("chair_demo", "demo123");

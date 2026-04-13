@@ -7,6 +7,8 @@ import com.example.review.agent.AgentDtos.AgentVersionData;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
@@ -61,11 +63,11 @@ public class AgentRepository {
                   AND VERSION_ID = ?
                   AND TASK_TYPE = ?
                   AND ROUND_ID = ?
-                  AND TASK_STATUS IN ('PENDING', 'PROCESSING', 'SUCCESS')
+                  AND TASK_STATUS IN ('PENDING', 'PROCESSING', 'SUCCESS', 'FAILED')
                 ORDER BY TASK_ID
                 FETCH FIRST 1 ROWS ONLY
                 """,
-                (rs, rowNum) -> mapTaskRow(rs.getLong("TASK_ID")),
+                (rs, rowNum) -> mapTaskRow(rs),
                 manuscriptId,
                 versionId,
                 taskType,
@@ -83,11 +85,11 @@ public class AgentRepository {
                   AND VERSION_ID = ?
                   AND TASK_TYPE = ?
                   AND ROUND_ID IS NULL
-                  AND TASK_STATUS IN ('PENDING', 'PROCESSING', 'SUCCESS')
+                  AND TASK_STATUS IN ('PENDING', 'PROCESSING', 'SUCCESS', 'FAILED')
                 ORDER BY TASK_ID
                 FETCH FIRST 1 ROWS ONLY
                 """,
-                (rs, rowNum) -> mapTaskRow(rs.getLong("TASK_ID")),
+                (rs, rowNum) -> mapTaskRow(rs),
                 manuscriptId,
                 versionId,
                 taskType
@@ -119,11 +121,11 @@ public class AgentRepository {
     public Optional<AgentTaskRow> findByExternalTaskId(String externalTaskId) {
         List<AgentTaskRow> rows = jdbcTemplate.query(
                 """
-                SELECT TASK_ID
+                SELECT TASK_ID, MANUSCRIPT_ID, VERSION_ID, ROUND_ID, TASK_TYPE, TASK_STATUS, EXTERNAL_TASK_ID, CREATED_AT
                 FROM AGENT_ANALYSIS_TASK
                 WHERE EXTERNAL_TASK_ID = ?
                 """,
-                (rs, rowNum) -> mapTaskRow(rs.getLong("TASK_ID")),
+                (rs, rowNum) -> mapTaskRow(rs),
                 externalTaskId
         );
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
@@ -165,13 +167,13 @@ public class AgentRepository {
     public List<AgentTaskRow> listPollableTasks() {
         return jdbcTemplate.query(
                 """
-                SELECT TASK_ID
+                SELECT TASK_ID, MANUSCRIPT_ID, VERSION_ID, ROUND_ID, TASK_TYPE, TASK_STATUS, EXTERNAL_TASK_ID, CREATED_AT
                 FROM AGENT_ANALYSIS_TASK
                 WHERE TASK_STATUS IN ('PENDING', 'PROCESSING')
                   AND EXTERNAL_TASK_ID IS NOT NULL
                 ORDER BY TASK_ID
                 """,
-                (rs, rowNum) -> mapTaskRow(rs.getLong("TASK_ID"))
+                (rs, rowNum) -> mapTaskRow(rs)
         );
     }
 
@@ -293,17 +295,21 @@ public class AgentRepository {
                 FROM AGENT_ANALYSIS_TASK
                 WHERE TASK_ID = ?
                 """,
-                (rs, rowNum) -> new AgentTaskRow(
-                        rs.getLong("TASK_ID"),
-                        rs.getLong("MANUSCRIPT_ID"),
-                        rs.getLong("VERSION_ID"),
-                        rs.getObject("ROUND_ID", Long.class),
-                        rs.getString("TASK_TYPE"),
-                        rs.getString("TASK_STATUS"),
-                        rs.getString("EXTERNAL_TASK_ID"),
-                        rs.getTimestamp("CREATED_AT").toInstant()
-                ),
+                (rs, rowNum) -> mapTaskRow(rs),
                 taskId
+        );
+    }
+
+    private AgentTaskRow mapTaskRow(ResultSet rs) throws SQLException {
+        return new AgentTaskRow(
+                rs.getLong("TASK_ID"),
+                rs.getLong("MANUSCRIPT_ID"),
+                rs.getLong("VERSION_ID"),
+                rs.getObject("ROUND_ID", Long.class),
+                rs.getString("TASK_TYPE"),
+                rs.getString("TASK_STATUS"),
+                rs.getString("EXTERNAL_TASK_ID"),
+                rs.getTimestamp("CREATED_AT").toInstant()
         );
     }
 

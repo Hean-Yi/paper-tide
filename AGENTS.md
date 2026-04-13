@@ -57,6 +57,7 @@ Current lessons captured from recent review cycles:
 - For notifications in core workflow transactions, keep the notification call behind a separate service boundary and treat delivery as best-effort. Notification persistence failures must not roll back the primary business transaction unless the task explicitly requires synchronous guarantees.
 - For live external-cost agent execution, prefer the smallest necessary safety controls before adding workflow complexity: service authentication, deterministic input-aware de-duplication, a simple concurrency cap, and explicit deferral of durable queues, retries, and provider failover unless the task requires them.
 - For agent-service tool designs, keep business data aggregation on the owning system side and normalize transport metadata at the route boundary. Workflow nodes should consume clean payloads, and helper-style tools should stay deterministic unless a task explicitly requires autonomous tool calling.
+- When the main system mirrors agent-service task caching, keep `force` and terminal-status reuse semantics aligned on both sides and cover intentional divergences with tests. Remove assertions that are not wired to the system under test rather than keeping always-true checks.
 
 ## Plan File Discipline
 Execution work must stay anchored to one authoritative implementation plan file.

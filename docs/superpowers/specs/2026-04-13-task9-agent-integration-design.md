@@ -238,6 +238,7 @@ For each task:
 8. On agent error or invalid result, mark local task `FAILED` with a readable summary.
 
 Task 9 does not add automatic retry scheduling.
+Creation with `force=false` should reuse existing local tasks in any terminal or non-terminal state, including `FAILED`, so Java and the agent service share the same cache semantics. A manual re-run after failure must use `force=true`.
 
 ## Authorization
 

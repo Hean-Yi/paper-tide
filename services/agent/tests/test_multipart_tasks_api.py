@@ -54,7 +54,6 @@ startxref
 
 def test_multipart_task_creation_normalizes_pdf_payload() -> None:
     task_store = TaskStore()
-    started_task_ids: list[str] = []
     app = create_app(enable_background_execution=False, require_internal_api_key=False, task_store=task_store)
     client = TestClient(app)
 
@@ -88,7 +87,6 @@ def test_multipart_task_creation_normalizes_pdf_payload() -> None:
     assert task.request_payload["sections"]["method"]
     assert task.request_payload["pdfExtraction"]["fileName"] == "paper.pdf"
     assert task.request_payload["pdfExtraction"]["status"] == "EXTRACTED"
-    assert started_task_ids == []
 
 
 def test_multipart_tasks_require_internal_api_key(monkeypatch) -> None:

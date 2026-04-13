@@ -894,6 +894,10 @@ git commit -m "feat: add agent workflows schemas and redaction"
 
 **Verification Run:** `./.venv/bin/python -m pytest services/agent/tests/test_multipart_tasks_api.py -q`; `./.venv/bin/python -m pytest services/agent/tests -q`; `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AgentIntegrationServiceTest test`; `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test`; `bash scripts/test-all.sh`. All completed successfully with local Oracle access.
 
+**Post-Review Optimization (2026-04-13):** Aligned Java task reuse with agent-service cache semantics by reusing existing `FAILED` tasks when `force=false`; manual rerun after failure remains `force=true`. Added a regression test for this behavior, removed a no-op multipart test assertion, and refactored pollable/reusable task queries to map full rows directly instead of issuing N+1 task lookups.
+
+**Post-Review Verification:** `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AgentIntegrationServiceTest#failedTaskIsReusedWhenForceIsFalse test`; `./.venv/bin/python -m pytest services/agent/tests/test_multipart_tasks_api.py -q`; `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AgentIntegrationServiceTest test`; `./.venv/bin/python -m pytest services/agent/tests -q`; `mvn -f apps/api/pom.xml -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test`; `bash scripts/test-all.sh`. All completed successfully with local Oracle access.
+
 **Files:**
 - Create: `apps/api/src/main/java/com/example/review/agent/AgentTaskController.java`
 - Create: `apps/api/src/main/java/com/example/review/agent/AgentIntegrationService.java`

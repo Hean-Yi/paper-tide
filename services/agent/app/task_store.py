@@ -60,7 +60,7 @@ class TaskStore:
             if not force:
                 cached_task_id = self._cache_index.get(cache_key)
                 cached_task = self._tasks.get(cached_task_id) if cached_task_id else None
-                if cached_task is not None and cached_task.status in {"PENDING", "PROCESSING", "SUCCESS", "FAILED"}:
+                if cached_task is not None and cached_task.status in {"PENDING", "PROCESSING", "SUCCESS"}:
                     return cached_task
 
             task = TaskRecord(

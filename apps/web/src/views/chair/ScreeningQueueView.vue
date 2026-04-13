@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { onMounted, ref } from "vue";
 
 import {
@@ -46,6 +46,7 @@ async function download(row: ScreeningQueueItem) {
   const blob = await downloadPdf(row.manuscriptId, row.versionId);
   const url = URL.createObjectURL(blob);
   window.open(url, "_blank", "noopener");
+  URL.revokeObjectURL(url);
 }
 
 function openRound(row: ScreeningQueueItem) {
@@ -79,6 +80,15 @@ function openDeskReject(row: ScreeningQueueItem) {
 }
 
 async function submitDeskReject() {
+  try {
+    await ElMessageBox.confirm(
+      "Desk reject will close this manuscript before external review. Continue?",
+      "Confirm desk reject",
+      { type: "warning", confirmButtonText: "Desk reject" }
+    );
+  } catch {
+    return;
+  }
   await decide({
     manuscriptId: deskRejectForm.value.manuscriptId,
     versionId: deskRejectForm.value.versionId,
@@ -143,7 +153,12 @@ async function submitDeskReject() {
     <el-dialog v-model="roundDialogOpen" title="Create review round" width="520px">
       <el-form label-position="top">
         <el-form-item label="Deadline">
-          <el-input v-model="roundForm.deadlineAt" />
+          <el-date-picker
+            v-model="roundForm.deadlineAt"
+            type="datetime"
+            value-format="YYYY-MM-DDTHH:mm:ss[Z]"
+            placeholder="Select deadline"
+          />
         </el-form-item>
       </el-form>
       <template #footer>

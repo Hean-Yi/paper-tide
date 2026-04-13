@@ -73,6 +73,15 @@ class AuthControllerTest {
     }
 
     @Test
+    void nonApiFallbackRoutesAreDenied() throws Exception {
+        String token = loginAndExtractToken("author_demo", "demo123");
+
+        mockMvc.perform(get("/internal/debug")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void manuscriptEndpointAcceptsValidJwt() throws Exception {
         String token = loginAndExtractToken("author_demo", "demo123");
 

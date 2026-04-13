@@ -64,6 +64,24 @@ describe("frontend authentication", () => {
     vi.doUnmock("vue-router");
   });
 
+  it("lazy-loads workflow route views", () => {
+    const router = createAppRouter();
+    const routeNames = [
+      "author-manuscripts",
+      "author-submit",
+      "reviewer-assignments",
+      "reviewer-review-editor",
+      "chair-screening",
+      "chair-decisions",
+      "admin-agent-monitor"
+    ];
+
+    for (const routeName of routeNames) {
+      const route = router.getRoutes().find((entry) => entry.name === routeName);
+      expect(typeof route?.components?.default).toBe("function");
+    }
+  });
+
   it("stores the token and routes to dashboard after successful login", async () => {
     const authToken = futureToken(["CHAIR"]);
     const fetchMock = vi.fn().mockResolvedValue({
@@ -84,6 +102,7 @@ describe("frontend authentication", () => {
     await wrapper.get('input[autocomplete="username"]').setValue("chair_demo");
     await wrapper.get('input[autocomplete="current-password"]').setValue("demo123");
     await wrapper.get('[data-test="login-submit"]').trigger("submit");
+    await flushPromises();
     await flushPromises();
 
     expect(fetchMock).toHaveBeenCalledWith(

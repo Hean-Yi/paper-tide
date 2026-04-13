@@ -65,7 +65,7 @@ public class AgentRepository {
                   AND VERSION_ID = ?
                   AND TASK_TYPE = ?
                   AND ROUND_ID = ?
-                  AND TASK_STATUS IN ('PENDING', 'PROCESSING', 'SUCCESS', 'FAILED')
+                  AND TASK_STATUS IN ('PENDING', 'PROCESSING', 'SUCCESS')
                 ORDER BY TASK_ID
                 FETCH FIRST 1 ROWS ONLY
                 """,
@@ -87,7 +87,7 @@ public class AgentRepository {
                   AND VERSION_ID = ?
                   AND TASK_TYPE = ?
                   AND ROUND_ID IS NULL
-                  AND TASK_STATUS IN ('PENDING', 'PROCESSING', 'SUCCESS', 'FAILED')
+                  AND TASK_STATUS IN ('PENDING', 'PROCESSING', 'SUCCESS')
                 ORDER BY TASK_ID
                 FETCH FIRST 1 ROWS ONLY
                 """,

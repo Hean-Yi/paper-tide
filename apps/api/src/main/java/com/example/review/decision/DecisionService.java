@@ -2,6 +2,7 @@ package com.example.review.decision;
 
 import com.example.review.audit.AuditLogService;
 import com.example.review.auth.CurrentUserPrincipal;
+import com.example.review.auth.RoleGuard;
 import com.example.review.notification.NotificationService;
 import com.example.review.review.ReviewAssignmentRepository;
 import java.sql.Timestamp;
@@ -44,7 +45,7 @@ public class DecisionService {
 
     @Transactional
     public DecisionResponse decide(CurrentUserPrincipal principal, DecisionRequest request) {
-        requireChairOrAdmin(principal);
+        RoleGuard.requireChairOrAdmin(principal);
         validateRequest(request);
 
         ManuscriptDecisionRow manuscript = findManuscriptForUpdate(request.manuscriptId());
@@ -156,11 +157,6 @@ public class DecisionService {
         ).stream().findFirst().orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Review round not found"));
     }
 
-    private void requireChairOrAdmin(CurrentUserPrincipal principal) {
-        if (principal == null || !(principal.roles().contains("CHAIR") || principal.roles().contains("ADMIN"))) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chair or admin role is required");
-        }
-    }
 }
 
 record DecisionRequest(

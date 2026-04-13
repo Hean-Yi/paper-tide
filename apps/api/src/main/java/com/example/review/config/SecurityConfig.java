@@ -31,7 +31,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/decisions/**").hasAnyRole("CHAIR", "ADMIN")
                         .requestMatchers("/api/audit-logs/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").authenticated()
-                        .anyRequest().permitAll()
+                        .anyRequest().denyAll()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .cors(Customizer.withDefaults());

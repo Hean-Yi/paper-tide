@@ -243,7 +243,7 @@ def test_changed_request_payload_changes_cache_key() -> None:
     assert second.json()["taskId"] != first.json()["taskId"]
 
 
-def test_failed_task_is_reused_without_force() -> None:
+def test_failed_task_is_replaced_without_force() -> None:
     store = TaskStore()
     task = store.create_or_reuse_task(
         task_type="SCREENING_ANALYSIS",
@@ -254,15 +254,15 @@ def test_failed_task_is_reused_without_force() -> None:
     )
     store.update_status(task.task_id, status="FAILED", step="failed", error="timeout")
 
-    reused = store.create_or_reuse_task(
+    fresh = store.create_or_reuse_task(
         task_type="SCREENING_ANALYSIS",
         manuscript_id=101,
         version_id=201,
         round_id=None,
         request_payload={"title": "A paper"},
     )
-    assert reused.task_id == task.task_id
-    assert reused.status == "FAILED"
+    assert fresh.task_id != task.task_id
+    assert fresh.status == "PENDING"
 
 
 def test_failed_task_is_replaced_with_force() -> None:

@@ -55,6 +55,7 @@ async function downloadCurrentPdf() {
   const blob = await downloadPdf(assignment.value.manuscriptId, assignment.value.versionId);
   const url = URL.createObjectURL(blob);
   window.open(url, "_blank", "noopener");
+  URL.revokeObjectURL(url);
 }
 
 async function submitReport() {

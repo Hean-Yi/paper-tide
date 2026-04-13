@@ -71,6 +71,7 @@ async function download(row: ManuscriptSummary) {
   const blob = await downloadPdf(row.manuscriptId, row.currentVersionId);
   const url = URL.createObjectURL(blob);
   window.open(url, "_blank", "noopener");
+  URL.revokeObjectURL(url);
 }
 
 function openRevision(row: ManuscriptSummary) {

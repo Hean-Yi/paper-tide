@@ -7,6 +7,7 @@ import com.example.review.agent.AgentDtos.AgentTaskListResponse;
 import com.example.review.agent.AgentDtos.AgentTaskResponse;
 import com.example.review.agent.AgentDtos.AgentVersionData;
 import com.example.review.auth.CurrentUserPrincipal;
+import com.example.review.auth.RoleGuard;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,14 +32,14 @@ public class AgentIntegrationService {
             String taskType,
             boolean force
     ) {
-        requireChairOrAdmin(principal);
+        RoleGuard.requireChairOrAdmin(principal);
         AgentVersionData version = loadVersionWithPdf(manuscriptId, versionId);
         Map<String, Object> payload = basePayload(version);
         return createAndSubmitTask(version, null, taskType, payload, force);
     }
 
     public AgentTaskResponse createConflictAnalysis(CurrentUserPrincipal principal, long roundId, boolean force) {
-        requireChairOrAdmin(principal);
+        RoleGuard.requireChairOrAdmin(principal);
         RoundData round = agentRepository.findRound(roundId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Review round not found"));
         AgentVersionData version = loadVersionWithPdf(round.manuscriptId(), round.versionId());
@@ -48,10 +49,10 @@ public class AgentIntegrationService {
     }
 
     public List<AgentResultResponse> listResults(CurrentUserPrincipal principal, long manuscriptId, long versionId) {
-        if (hasRole(principal, "CHAIR") || hasRole(principal, "ADMIN")) {
+        if (RoleGuard.hasRole(principal, "CHAIR") || RoleGuard.hasRole(principal, "ADMIN")) {
             return agentRepository.listResults(manuscriptId, versionId, true);
         }
-        if (hasRole(principal, "REVIEWER") && agentRepository.reviewerHasAssignment(principal.userId(), manuscriptId, versionId)) {
+        if (RoleGuard.hasRole(principal, "REVIEWER") && agentRepository.reviewerHasAssignment(principal.userId(), manuscriptId, versionId)) {
             return agentRepository.listResults(manuscriptId, versionId, false);
         }
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not allowed to view agent results");
@@ -130,19 +131,7 @@ public class AgentIntegrationService {
         };
     }
 
-    private void requireChairOrAdmin(CurrentUserPrincipal principal) {
-        if (!hasRole(principal, "CHAIR") && !hasRole(principal, "ADMIN")) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chair or admin role is required");
-        }
-    }
-
     private void requireAdmin(CurrentUserPrincipal principal) {
-        if (!hasRole(principal, "ADMIN")) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin role is required");
-        }
-    }
-
-    private boolean hasRole(CurrentUserPrincipal principal, String role) {
-        return principal != null && principal.roles().contains(role);
+        RoleGuard.requireRole(principal, "ADMIN");
     }
 }

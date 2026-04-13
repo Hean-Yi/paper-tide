@@ -1,6 +1,7 @@
 package com.example.review.workflow;
 
 import com.example.review.auth.CurrentUserPrincipal;
+import com.example.review.auth.RoleGuard;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -19,7 +20,7 @@ public class WorkflowQueryService {
     }
 
     public List<ReviewerAssignmentSummary> listReviewerAssignments(CurrentUserPrincipal principal) {
-        requireRole(principal, "REVIEWER");
+        RoleGuard.requireRole(principal, "REVIEWER");
         return jdbcTemplate.query(
                 """
                 SELECT A.ASSIGNMENT_ID,
@@ -93,15 +94,15 @@ public class WorkflowQueryService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Review assignment not found");
         }
         ReviewerAssignmentDetail detail = rows.getFirst();
-        if (!hasRole(principal, "CHAIR") && !hasRole(principal, "ADMIN")
-                && (!hasRole(principal, "REVIEWER") || detail.reviewerId() != principal.userId())) {
+        if (!RoleGuard.hasRole(principal, "CHAIR") && !RoleGuard.hasRole(principal, "ADMIN")
+                && (!RoleGuard.hasRole(principal, "REVIEWER") || detail.reviewerId() != principal.userId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not allowed to view review assignment");
         }
         return detail;
     }
 
     public List<ScreeningQueueItem> listScreeningQueue(CurrentUserPrincipal principal) {
-        requireChairOrAdmin(principal);
+        RoleGuard.requireChairOrAdmin(principal);
         return jdbcTemplate.query(
                 """
                 SELECT M.MANUSCRIPT_ID,
@@ -135,7 +136,7 @@ public class WorkflowQueryService {
     }
 
     public List<DecisionWorkbenchItem> listDecisionWorkbench(CurrentUserPrincipal principal) {
-        requireChairOrAdmin(principal);
+        RoleGuard.requireChairOrAdmin(principal);
         List<DecisionWorkbenchBase> rounds = jdbcTemplate.query(
                 """
                 SELECT R.ROUND_ID,
@@ -249,21 +250,6 @@ public class WorkflowQueryService {
         );
     }
 
-    private void requireChairOrAdmin(CurrentUserPrincipal principal) {
-        if (!hasRole(principal, "CHAIR") && !hasRole(principal, "ADMIN")) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chair or admin role is required");
-        }
-    }
-
-    private void requireRole(CurrentUserPrincipal principal, String role) {
-        if (!hasRole(principal, role)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, role + " role is required");
-        }
-    }
-
-    private boolean hasRole(CurrentUserPrincipal principal, String role) {
-        return principal != null && principal.roles().contains(role);
-    }
 }
 
 record ReviewerAssignmentSummary(

@@ -121,7 +121,7 @@ class ManuscriptServiceTest {
         String token = loginAndExtractToken("author_demo", "demo123");
         ManuscriptIds ids = createDraftManuscript(token, "Temporal Graphs", "OPEN");
 
-        uploadPdf(token, ids.manuscriptId(), ids.versionId(), "paper.pdf", "application/pdf", "draft pdf".getBytes(StandardCharsets.UTF_8));
+        uploadPdf(token, ids.manuscriptId(), ids.versionId(), "paper.pdf", "application/pdf", validPdfBytes("draft pdf"));
 
         mockMvc.perform(post("/api/manuscripts/{id}/versions/{versionId}/submit", ids.manuscriptId(), ids.versionId())
                         .header("Authorization", "Bearer " + token))
@@ -194,7 +194,7 @@ class ManuscriptServiceTest {
                 .path("currentVersionId")
                 .asLong();
 
-        uploadPdf(token, initialIds.manuscriptId(), revisionVersionId, "revision.pdf", "application/pdf", "revision pdf".getBytes(StandardCharsets.UTF_8));
+        uploadPdf(token, initialIds.manuscriptId(), revisionVersionId, "revision.pdf", "application/pdf", validPdfBytes("revision pdf"));
 
         mockMvc.perform(post("/api/manuscripts/{id}/versions/{versionId}/submit", initialIds.manuscriptId(), revisionVersionId)
                         .header("Authorization", "Bearer " + token))
@@ -226,10 +226,41 @@ class ManuscriptServiceTest {
     }
 
     @Test
+    void uploadPdfRejectsPdfContentWithoutPdfMagic() throws Exception {
+        String token = loginAndExtractToken("author_demo", "demo123");
+        ManuscriptIds ids = createDraftManuscript(token, "Spoofed PDF", "DOUBLE_BLIND");
+
+        uploadPdf(token, ids.manuscriptId(), ids.versionId(), "spoofed.pdf", "application/pdf", "not a pdf".getBytes(StandardCharsets.UTF_8))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void uploadPdfRejectsFilesOverFiftyMegabytesBeforeReadingBody() throws Exception {
+        String token = loginAndExtractToken("author_demo", "demo123");
+        ManuscriptIds ids = createDraftManuscript(token, "Huge PDF", "DOUBLE_BLIND");
+        MockMultipartFile largeFile = new MockMultipartFile(
+                "file",
+                "huge.pdf",
+                "application/pdf",
+                validPdfBytes("small body")
+        ) {
+            @Override
+            public long getSize() {
+                return 50L * 1024L * 1024L + 1L;
+            }
+        };
+
+        mockMvc.perform(multipart("/api/manuscripts/{id}/versions/{versionId}/pdf", ids.manuscriptId(), ids.versionId())
+                        .file(largeFile)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void downloadPdfReturnsStoredFileForSubmitter() throws Exception {
         String token = loginAndExtractToken("author_demo", "demo123");
         ManuscriptIds ids = createDraftManuscript(token, "Downloadable", "DOUBLE_BLIND");
-        byte[] pdfBytes = "stored pdf".getBytes(StandardCharsets.UTF_8);
+        byte[] pdfBytes = validPdfBytes("stored pdf");
 
         uploadPdf(token, ids.manuscriptId(), ids.versionId(), "downloadable.pdf", "application/pdf", pdfBytes)
                 .andExpect(status().isOk());
@@ -327,6 +358,10 @@ class ManuscriptServiceTest {
         return mockMvc.perform(multipart("/api/manuscripts/{id}/versions/{versionId}/pdf", manuscriptId, versionId)
                 .file(file)
                 .header("Authorization", "Bearer " + token));
+    }
+
+    private byte[] validPdfBytes(String marker) {
+        return ("%PDF-1.4\n% " + marker + "\n").getBytes(StandardCharsets.UTF_8);
     }
 
     private ManuscriptIds createDraftManuscript(String token, String title, String blindMode) throws Exception {

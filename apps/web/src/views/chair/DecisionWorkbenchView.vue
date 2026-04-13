@@ -185,7 +185,7 @@ async function submitDecision() {
       <div class="agent-trace-header">
         <div>
           <p class="eyebrow">Agent Trace</p>
-          <h2>Raw agent results</h2>
+          <h2>Agent result coverage</h2>
         </div>
         <el-tag type="warning">Chair only</el-tag>
       </div>
@@ -196,12 +196,20 @@ async function submitDecision() {
         :closable="false"
       />
       <template v-for="row in rows" :key="row.roundId">
-        <article v-for="result in agentResults[row.roundId]" :key="result.resultId" class="trace-entry">
+        <article v-if="agentResults[row.roundId]?.length" class="trace-entry">
           <div class="trace-entry-heading">
-            <strong>{{ workflowLabel(result.resultType) }}</strong>
-            <span>Round {{ row.roundNo }} · Manuscript {{ row.manuscriptId }}</span>
+            <strong>Round {{ row.roundNo }} · Manuscript {{ row.manuscriptId }}</strong>
+            <span>{{ agentResults[row.roundId].length }} agent result{{ agentResults[row.roundId].length === 1 ? "" : "s" }}</span>
           </div>
-          <pre class="json-block">{{ printableTrace(result.rawResult || result.redactedResult) }}</pre>
+          <div class="action-row">
+            <el-tag
+              v-for="result in agentResults[row.roundId]"
+              :key="result.resultId"
+              :type="statusTagType(result.resultType)"
+            >
+              {{ workflowLabel(result.resultType) }}
+            </el-tag>
+          </div>
         </article>
       </template>
     </section>
@@ -212,7 +220,12 @@ async function submitDecision() {
           <el-input-number v-model="assignForm.reviewerId" :min="1" />
         </el-form-item>
         <el-form-item label="Deadline">
-          <el-input v-model="assignForm.deadlineAt" />
+          <el-date-picker
+            v-model="assignForm.deadlineAt"
+            type="datetime"
+            value-format="YYYY-MM-DDTHH:mm:ss[Z]"
+            placeholder="Select deadline"
+          />
         </el-form-item>
       </el-form>
       <template #footer>

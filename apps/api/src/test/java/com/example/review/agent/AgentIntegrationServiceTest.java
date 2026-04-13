@@ -236,7 +236,7 @@ class AgentIntegrationServiceTest {
     }
 
     @Test
-    void failedTaskIsReusedWhenForceIsFalse() throws Exception {
+    void failedTaskIsReplacedWhenForceIsFalse() throws Exception {
         ManuscriptFixture fixture = seedSubmittedManuscript(true);
         String chairToken = loginAndExtractToken("chair_demo", "demo123");
         long failedTaskId = seedAgentTask(fixture, "external-failed", "SCREENING_ANALYSIS", "FAILED", Instant.now());
@@ -250,12 +250,12 @@ class AgentIntegrationServiceTest {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.taskStatus").value("FAILED"))
+                .andExpect(jsonPath("$.taskStatus").value("PENDING"))
                 .andReturn();
 
         long returnedTaskId = objectMapper.readTree(result.getResponse().getContentAsString()).get("taskId").asLong();
-        Assertions.assertEquals(failedTaskId, returnedTaskId);
-        Assertions.assertEquals(0, agentClient.createRequests.get());
+        Assertions.assertNotEquals(failedTaskId, returnedTaskId);
+        Assertions.assertEquals(1, agentClient.createRequests.get());
     }
 
     @Test

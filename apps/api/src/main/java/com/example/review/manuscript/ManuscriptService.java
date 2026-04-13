@@ -1,7 +1,9 @@
 package com.example.review.manuscript;
 
 import com.example.review.auth.CurrentUserPrincipal;
+import com.example.review.auth.RoleGuard;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.HashSet;
@@ -15,8 +17,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class ManuscriptService {
+    private static final long MAX_PDF_BYTES = 50L * 1024L * 1024L;
     private static final Set<String> VALID_BLIND_MODES = Set.of("DOUBLE_BLIND", "SINGLE_BLIND", "OPEN");
     private static final Set<String> DRAFT_STATUSES = Set.of("DRAFT", "REVISION_REQUIRED");
+    private static final byte[] PDF_MAGIC = "%PDF-".getBytes(StandardCharsets.US_ASCII);
 
     private final ManuscriptRepository manuscriptRepository;
     private final VersionRepository versionRepository;
@@ -98,6 +102,9 @@ public class ManuscriptService {
         if (!isPdf(file)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only PDF uploads are supported");
         }
+        if (file.getSize() > MAX_PDF_BYTES) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "PDF uploads must be 50MB or smaller");
+        }
         if (manuscript.currentVersionId() == null || manuscript.currentVersionId() != versionId) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "PDF upload is allowed only for the current version");
         }
@@ -110,6 +117,9 @@ public class ManuscriptService {
             pdfBytes = file.getBytes();
         } catch (IOException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Failed to read PDF upload", ex);
+        }
+        if (!hasPdfMagic(pdfBytes)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Uploaded file is not a valid PDF");
         }
         versionRepository.updatePdf(versionId, pdfBytes, file.getOriginalFilename(), file.getSize());
     }
@@ -160,7 +170,7 @@ public class ManuscriptService {
 
     @Transactional
     public ManuscriptResponse startScreening(CurrentUserPrincipal principal, long manuscriptId, long versionId) {
-        requireChairOrAdmin(principal);
+        RoleGuard.requireChairOrAdmin(principal);
         ManuscriptRow manuscript = manuscriptRepository.findByIdForUpdate(manuscriptId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
         VersionRow version = findVersion(versionId);
@@ -269,24 +279,14 @@ public class ManuscriptService {
         if (principal == null) {
             return false;
         }
-        if (hasRole(principal, "ADMIN") || hasRole(principal, "CHAIR")) {
+        if (RoleGuard.hasRole(principal, "ADMIN") || RoleGuard.hasRole(principal, "CHAIR")) {
             return true;
         }
-        if (hasRole(principal, "AUTHOR") && principal.userId() == manuscript.submitterId()) {
+        if (RoleGuard.hasRole(principal, "AUTHOR") && principal.userId() == manuscript.submitterId()) {
             return true;
         }
-        return hasRole(principal, "REVIEWER")
+        return RoleGuard.hasRole(principal, "REVIEWER")
                 && manuscriptRepository.reviewerHasAssignment(manuscript.manuscriptId(), version.versionId(), principal.userId());
-    }
-
-    private void requireChairOrAdmin(CurrentUserPrincipal principal) {
-        if (!hasRole(principal, "CHAIR") && !hasRole(principal, "ADMIN")) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chair or admin role is required");
-        }
-    }
-
-    private boolean hasRole(CurrentUserPrincipal principal, String role) {
-        return principal != null && principal.roles().contains(role);
     }
 
     private void requireAuthor(CurrentUserPrincipal principal) {
@@ -325,6 +325,18 @@ public class ManuscriptService {
         String lowerFileName = fileName == null ? "" : fileName.toLowerCase();
         String contentType = file.getContentType();
         return "application/pdf".equalsIgnoreCase(contentType) || lowerFileName.endsWith(".pdf");
+    }
+
+    private boolean hasPdfMagic(byte[] pdfBytes) {
+        if (pdfBytes.length < PDF_MAGIC.length) {
+            return false;
+        }
+        for (int index = 0; index < PDF_MAGIC.length; index++) {
+            if (pdfBytes[index] != PDF_MAGIC[index]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     record PdfPayload(byte[] bytes, String fileName) {

@@ -1,6 +1,7 @@
 package com.example.review.review;
 
 import com.example.review.auth.CurrentUserPrincipal;
+import com.example.review.auth.RoleGuard;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Set;
@@ -38,7 +39,7 @@ public class ReviewWorkflowService {
 
     @Transactional
     public ReviewRoundResponse createRound(CurrentUserPrincipal principal, CreateReviewRoundRequest request) {
-        requireChairOrAdmin(principal);
+        RoleGuard.requireChairOrAdmin(principal);
         validateRoundRequest(request);
 
         ManuscriptReviewRow manuscript = findManuscriptForUpdate(request.manuscriptId());
@@ -74,7 +75,7 @@ public class ReviewWorkflowService {
 
     @Transactional
     public AssignmentActionResponse assignReviewer(CurrentUserPrincipal principal, long roundId, CreateAssignmentRequest request) {
-        requireChairOrAdmin(principal);
+        RoleGuard.requireChairOrAdmin(principal);
 
         ReviewRoundRow round = reviewRoundRepository.findByIdForUpdate(roundId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Review round not found"));
@@ -129,7 +130,7 @@ public class ReviewWorkflowService {
 
     @Transactional
     public AssignmentActionResponse markOverdue(CurrentUserPrincipal principal, long assignmentId) {
-        requireChairOrAdmin(principal);
+        RoleGuard.requireChairOrAdmin(principal);
         ReviewAssignmentRow assignment = reviewAssignmentRepository.findByIdForUpdate(assignmentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found"));
         if (!Set.of("ASSIGNED", "ACCEPTED").contains(assignment.taskStatus())) {
@@ -141,7 +142,7 @@ public class ReviewWorkflowService {
 
     @Transactional
     public AssignmentActionResponse reassign(CurrentUserPrincipal principal, long assignmentId, CreateAssignmentRequest request) {
-        requireChairOrAdmin(principal);
+        RoleGuard.requireChairOrAdmin(principal);
         ReviewAssignmentRow assignment = reviewAssignmentRepository.findByIdForUpdate(assignmentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found"));
         if (!"OVERDUE".equals(assignment.taskStatus())) {
@@ -164,7 +165,7 @@ public class ReviewWorkflowService {
     }
 
     public java.util.List<ConflictCheckResponse> listConflictChecks(CurrentUserPrincipal principal, long roundId) {
-        requireChairOrAdmin(principal);
+        RoleGuard.requireChairOrAdmin(principal);
         reviewRoundRepository.findById(roundId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Review round not found"));
         return conflictCheckService.listByRound(roundId);
@@ -224,12 +225,6 @@ public class ReviewWorkflowService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Assignment does not belong to current reviewer");
         }
         return assignment;
-    }
-
-    private void requireChairOrAdmin(CurrentUserPrincipal principal) {
-        if (principal == null || principal.roles().stream().noneMatch(role -> "CHAIR".equals(role) || "ADMIN".equals(role))) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chair or admin role required");
-        }
     }
 
     private void requireReviewer(CurrentUserPrincipal principal) {

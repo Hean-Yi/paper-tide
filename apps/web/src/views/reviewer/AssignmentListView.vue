@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
@@ -40,6 +40,15 @@ function openDecline(row: ReviewerAssignment) {
 }
 
 async function submitDecline() {
+  try {
+    await ElMessageBox.confirm(
+      "Declining returns this assignment to the chair and cannot be undone from this screen. Continue?",
+      "Confirm decline",
+      { type: "warning", confirmButtonText: "Decline" }
+    );
+  } catch {
+    return;
+  }
   await declineAssignment(
     declineForm.value.assignmentId,
     declineForm.value.reason,

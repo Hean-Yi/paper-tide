@@ -6,7 +6,7 @@
 
 **Architecture:** Use a small monorepo with `apps/web`, `apps/api`, `services/agent`, and `database/oracle`. Build the core workflow first: authentication, manuscript/version management, review state machines, review submission, chair decisions, then add async agent integration and UI polish.
 
-**Tech Stack:** Vue 3, Element Plus, Vite, Java 21, Spring Boot, Spring Security, JWT, MyBatis or Spring Data JDBC, Oracle, Python 3.11+, FastAPI, LangGraph, pytest, Vitest, Playwright.
+**Tech Stack:** Vue 3, Element Plus, Vite, Java 21, Spring Boot, Spring Security, JWT, MyBatis or Spring Data JDBC, Oracle, Python 3.11+, FastAPI, LangGraph, pytest, Vitest. Playwright was considered for Task 12 but explicitly deferred to avoid adding browser orchestration risk late in the project.
 
 ---
 
@@ -61,6 +61,7 @@ This plan assumes the implementation will use the following file layout:
 - Task 10 completed on 2026-04-13. The Vue frontend now has login, JWT session persistence, route guards, an API helper with bearer-token injection, a role-aware app shell, and an authenticated dashboard landing page.
 - Task 11 completed on 2026-04-13. The frontend now has role-specific workflow pages for authors, reviewers, chairs, and admins; the API now exposes the minimal workflow query/action endpoints needed by those pages, including reviewer/chair PDF access and admin agent task listing.
 - Task 11 post-review fix completed on 2026-04-13. Chair workflow routes now allow both `CHAIR` and `ADMIN`, matching the backend `chair-or-admin` authorization model.
+- Task 12 design drafted on 2026-04-13 in `docs/superpowers/specs/2026-04-13-task12-e2e-demo-and-visual-hardening-design.md`. The approved direction uses Oracle-backed API e2e verification instead of Playwright, idempotent demo seed data, and scoped frontend polish using Editorial Dossier surfaces plus Agent Trace panels.
 
 ## Task 1: Scaffold the Monorepo
 
@@ -1243,11 +1244,23 @@ git commit -m "feat: add manuscript review and chair workflow screens"
 
 ## Task 12: End-to-End Verification and Demo Hardening
 
+**Status:** Design drafted on 2026-04-13; implementation awaiting approval.
+
+**Design Note:** Detailed Task 12 design is documented in `docs/superpowers/specs/2026-04-13-task12-e2e-demo-and-visual-hardening-design.md`.
+
+**Scope Decision (2026-04-13):** Use MockMvc + Oracle API e2e as the primary full-flow verification rather than introducing Playwright. Add demo seed data and integrate it with `scripts/test-all.sh`. Frontend visual polish is intentionally narrow: semantic status labels and agent trace panels are required; dossier headers, spacing harmonization, and formatting helpers are optional if verification is stable.
+
 **Files:**
-- Create: `apps/web/tests/e2e/review-flow.spec.ts`
+- Create: `apps/api/src/test/java/com/example/review/e2e/ReviewFlowE2eTest.java`
 - Create: `scripts/demo-seed.sh`
+- Modify: `apps/web/src/style.css`
+- Modify: `apps/web/src/tests/workflow.spec.ts`
+- Optional Create: `apps/web/src/lib/workflow-format.ts`
+- Optional Modify: workflow Vue pages if needed for status labels and agent trace panels
 - Modify: `scripts/test-all.sh`
 - Modify: `docs/superpowers/specs/2026-04-09-paper-review-system-design.md`
+- Create: `docs/superpowers/specs/2026-04-13-task12-e2e-demo-and-visual-hardening-design.md`
+- Modify: `docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md`
 
 - [ ] **Step 1: Create an end-to-end scenario test**
 
@@ -1257,6 +1270,7 @@ The scenario must cover:
 - chair screens manuscript
 - chair assigns reviewer
 - reviewer submits review
+- admin can read chair screening queue and decision workbench
 - chair triggers conflict analysis
 - chair makes decision
 - author sees result
@@ -1270,6 +1284,7 @@ Seed:
 - one chair
 - one admin
 - one manuscript with sample PDF
+- sample PDF must be valid and text-extractable
 
 - [ ] **Step 3: Run the full verification script**
 
@@ -1288,7 +1303,7 @@ Only record deviations if implementation differs from spec.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/web/tests/e2e scripts docs/superpowers/specs/2026-04-09-paper-review-system-design.md
+git add apps/api/src/test/java/com/example/review/e2e scripts apps/web/src docs/superpowers/specs/2026-04-09-paper-review-system-design.md docs/superpowers/specs/2026-04-13-task12-e2e-demo-and-visual-hardening-design.md docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md
 git commit -m "test: add end-to-end verification and demo seed"
 ```
 

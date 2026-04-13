@@ -5,6 +5,7 @@
 .venv/
 .m2/
 .skill-staging/
+.superpowers/
 
 __pycache__/
 *.py[cod]

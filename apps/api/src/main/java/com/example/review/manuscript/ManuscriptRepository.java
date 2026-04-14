@@ -136,6 +136,26 @@ public class ManuscriptRepository {
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
     }
 
+    public Optional<LockedManuscriptRow> findLockedById(long manuscriptId) {
+        List<LockedManuscriptRow> rows = jdbcTemplate.query(
+                """
+                SELECT MANUSCRIPT_ID, SUBMITTER_ID, CURRENT_VERSION_ID, CURRENT_STATUS, CURRENT_ROUND_NO
+                FROM MANUSCRIPT
+                WHERE MANUSCRIPT_ID = ?
+                FOR UPDATE
+                """,
+                (rs, rowNum) -> new LockedManuscriptRow(
+                        rs.getLong("MANUSCRIPT_ID"),
+                        rs.getLong("SUBMITTER_ID"),
+                        rs.getObject("CURRENT_VERSION_ID", Long.class),
+                        rs.getString("CURRENT_STATUS"),
+                        rs.getInt("CURRENT_ROUND_NO")
+                ),
+                manuscriptId
+        );
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
+    }
+
     public List<ManuscriptSummaryRow> listBySubmitter(long submitterId) {
         return jdbcTemplate.query(
                 """
@@ -183,6 +203,15 @@ public class ManuscriptRepository {
                 reviewerId
         );
         return count != null && count > 0;
+    }
+
+    public record LockedManuscriptRow(
+            long manuscriptId,
+            long submitterId,
+            Long currentVersionId,
+            String currentStatus,
+            int currentRoundNo
+    ) {
     }
 }
 

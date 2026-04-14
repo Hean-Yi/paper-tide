@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import type { FormInstance, FormItemRule, FormRules } from "element-plus";
 import { ElMessage } from "element-plus";
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import {
@@ -20,7 +21,8 @@ const assignment = ref<ReviewerAssignment | null>(null);
 const agentResults = ref<AgentResult[]>([]);
 const loading = ref(false);
 const submitting = ref(false);
-const form = ref<ReviewReportForm>({
+const reviewFormRef = ref<FormInstance>();
+const form = reactive<ReviewReportForm>({
   noveltyScore: 3,
   methodScore: 3,
   experimentScore: 3,
@@ -33,6 +35,33 @@ const form = ref<ReviewReportForm>({
   commentsToChair: "",
   recommendation: "MINOR_REVISION"
 });
+const requiredTrimmed = (message: string): FormItemRule => ({
+  trigger: "blur",
+  validator: (_rule: unknown, value: unknown, callback: (error?: Error) => void) => {
+    if (String(value ?? "").trim()) {
+      callback();
+      return;
+    }
+    callback(new Error(message));
+  }
+});
+const reviewRules: FormRules = {
+  confidenceLevel: [{ required: true, message: "Confidence is required", trigger: "change" }],
+  recommendation: [{ required: true, message: "Recommendation is required", trigger: "change" }],
+  strengths: [requiredTrimmed("Strengths are required")],
+  weaknesses: [requiredTrimmed("Weaknesses are required")],
+  commentsToAuthor: [requiredTrimmed("Comments to author are required")]
+};
+
+function hasRequiredReviewValues() {
+  return Boolean(
+    form.confidenceLevel &&
+      form.recommendation &&
+      form.strengths.trim() &&
+      form.weaknesses.trim() &&
+      form.commentsToAuthor.trim()
+  );
+}
 
 const assignmentId = computed(() => Number(route.params.assignmentId));
 
@@ -59,9 +88,13 @@ async function downloadCurrentPdf() {
 }
 
 async function submitReport() {
+  const valid = await reviewFormRef.value?.validate().catch(() => false);
+  if (!valid || !hasRequiredReviewValues()) {
+    return;
+  }
   submitting.value = true;
   try {
-    await submitReviewReport(assignmentId.value, form.value);
+    await submitReviewReport(assignmentId.value, form);
     ElMessage.success("Review submitted.");
     await router.push("/reviewer/assignments");
   } finally {
@@ -122,7 +155,14 @@ async function submitReport() {
         </article>
       </section>
 
-      <el-form class="workflow-form" label-position="top" @submit.prevent="submitReport">
+      <el-form
+        ref="reviewFormRef"
+        class="workflow-form"
+        :model="form"
+        :rules="reviewRules"
+        label-position="top"
+        @submit.prevent="submitReport"
+      >
         <div class="score-grid">
           <el-form-item label="Novelty">
             <el-input-number v-model="form.noveltyScore" :min="1" :max="5" />
@@ -141,14 +181,14 @@ async function submitReport() {
           </el-form-item>
         </div>
 
-        <el-form-item label="Confidence">
+        <el-form-item label="Confidence" prop="confidenceLevel">
           <el-select v-model="form.confidenceLevel">
             <el-option label="Low" value="LOW" />
             <el-option label="Medium" value="MEDIUM" />
             <el-option label="High" value="HIGH" />
           </el-select>
         </el-form-item>
-        <el-form-item label="Recommendation">
+        <el-form-item label="Recommendation" prop="recommendation">
           <el-select v-model="form.recommendation">
             <el-option label="Accept" value="ACCEPT" />
             <el-option label="Minor revision" value="MINOR_REVISION" />
@@ -156,13 +196,13 @@ async function submitReport() {
             <el-option label="Reject" value="REJECT" />
           </el-select>
         </el-form-item>
-        <el-form-item label="Strengths">
+        <el-form-item label="Strengths" prop="strengths">
           <el-input v-model="form.strengths" type="textarea" :rows="3" />
         </el-form-item>
-        <el-form-item label="Weaknesses">
+        <el-form-item label="Weaknesses" prop="weaknesses">
           <el-input v-model="form.weaknesses" type="textarea" :rows="3" />
         </el-form-item>
-        <el-form-item label="Comments to author">
+        <el-form-item label="Comments to author" prop="commentsToAuthor">
           <el-input v-model="form.commentsToAuthor" type="textarea" :rows="4" />
         </el-form-item>
         <el-form-item label="Confidential comments to chair">

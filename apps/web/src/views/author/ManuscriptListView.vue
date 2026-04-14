@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { UploadFile } from "element-plus";
+import type { FormInstance, FormRules, UploadFile } from "element-plus";
 import { ElMessage } from "element-plus";
-import { onMounted, ref } from "vue";
+import { onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 
 import {
@@ -20,7 +20,8 @@ const loading = ref(false);
 const manuscripts = ref<ManuscriptSummary[]>([]);
 const revisionDialogOpen = ref(false);
 const revisionManuscriptId = ref<number | null>(null);
-const revisionForm = ref({
+const revisionFormRef = ref<FormInstance>();
+const revisionForm = reactive({
   title: "",
   abstract: "",
   keywords: "",
@@ -36,6 +37,11 @@ const revisionForm = ref({
     }
   ] as AuthorInput[]
 });
+const revisionRules: FormRules = {
+  title: [{ required: true, message: "Title is required", trigger: "blur" }],
+  abstract: [{ required: true, message: "Abstract is required", trigger: "blur" }],
+  keywords: [{ required: true, message: "Keywords are required", trigger: "blur" }]
+};
 
 onMounted(loadManuscripts);
 
@@ -76,12 +82,12 @@ async function download(row: ManuscriptSummary) {
 
 function openRevision(row: ManuscriptSummary) {
   revisionManuscriptId.value = row.manuscriptId;
-  revisionForm.value = {
+  Object.assign(revisionForm, {
     title: row.currentVersionTitle,
     abstract: "",
     keywords: "",
-    authors: revisionForm.value.authors
-  };
+    authors: revisionForm.authors
+  });
   revisionDialogOpen.value = true;
 }
 
@@ -89,7 +95,11 @@ async function submitRevision() {
   if (revisionManuscriptId.value == null) {
     return;
   }
-  await createRevision(revisionManuscriptId.value, revisionForm.value);
+  const valid = await revisionFormRef.value?.validate().catch(() => false);
+  if (!valid) {
+    return;
+  }
+  await createRevision(revisionManuscriptId.value, revisionForm);
   revisionDialogOpen.value = false;
   ElMessage.success("Revision draft created.");
   await loadManuscripts();
@@ -151,14 +161,14 @@ async function submitRevision() {
     </el-table>
 
     <el-dialog v-model="revisionDialogOpen" title="Create revision" width="640px">
-      <el-form label-position="top">
-        <el-form-item label="Title">
+      <el-form ref="revisionFormRef" :model="revisionForm" :rules="revisionRules" label-position="top">
+        <el-form-item label="Title" prop="title">
           <el-input v-model="revisionForm.title" />
         </el-form-item>
-        <el-form-item label="Abstract">
+        <el-form-item label="Abstract" prop="abstract">
           <el-input v-model="revisionForm.abstract" type="textarea" :rows="4" />
         </el-form-item>
-        <el-form-item label="Keywords">
+        <el-form-item label="Keywords" prop="keywords">
           <el-input v-model="revisionForm.keywords" />
         </el-form-item>
       </el-form>

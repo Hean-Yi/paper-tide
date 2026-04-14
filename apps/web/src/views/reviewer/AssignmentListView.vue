@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import type { FormInstance, FormRules } from "element-plus";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { onMounted, ref } from "vue";
+import { onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 
 import {
@@ -15,7 +16,11 @@ const router = useRouter();
 const loading = ref(false);
 const assignments = ref<ReviewerAssignment[]>([]);
 const declineDialogOpen = ref(false);
-const declineForm = ref({ assignmentId: 0, reason: "", conflictDeclared: false });
+const declineFormRef = ref<FormInstance>();
+const declineForm = reactive({ assignmentId: 0, reason: "", conflictDeclared: false });
+const declineRules: FormRules = {
+  reason: [{ required: true, message: "Reason is required", trigger: "blur" }]
+};
 
 onMounted(loadAssignments);
 
@@ -35,11 +40,15 @@ async function accept(row: ReviewerAssignment) {
 }
 
 function openDecline(row: ReviewerAssignment) {
-  declineForm.value = { assignmentId: row.assignmentId, reason: "", conflictDeclared: false };
+  Object.assign(declineForm, { assignmentId: row.assignmentId, reason: "", conflictDeclared: false });
   declineDialogOpen.value = true;
 }
 
 async function submitDecline() {
+  const valid = await declineFormRef.value?.validate().catch(() => false);
+  if (!valid) {
+    return;
+  }
   try {
     await ElMessageBox.confirm(
       "Declining returns this assignment to the chair and cannot be undone from this screen. Continue?",
@@ -50,9 +59,9 @@ async function submitDecline() {
     return;
   }
   await declineAssignment(
-    declineForm.value.assignmentId,
-    declineForm.value.reason,
-    declineForm.value.conflictDeclared
+    declineForm.assignmentId,
+    declineForm.reason,
+    declineForm.conflictDeclared
   );
   declineDialogOpen.value = false;
   ElMessage.success("Assignment declined.");
@@ -102,8 +111,8 @@ async function submitDecline() {
     </el-table>
 
     <el-dialog v-model="declineDialogOpen" title="Decline assignment" width="520px">
-      <el-form label-position="top">
-        <el-form-item label="Reason">
+      <el-form ref="declineFormRef" :model="declineForm" :rules="declineRules" label-position="top">
+        <el-form-item label="Reason" prop="reason">
           <el-input v-model="declineForm.reason" type="textarea" :rows="4" />
         </el-form-item>
         <el-form-item>

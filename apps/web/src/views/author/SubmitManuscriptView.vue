@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { UploadFile } from "element-plus";
+import type { FormInstance, FormItemRule, FormRules, UploadFile } from "element-plus";
 import { ElMessage } from "element-plus";
-import { ref } from "vue";
+import { reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 
 import {
@@ -17,7 +17,8 @@ const router = useRouter();
 const submitting = ref(false);
 const created = ref<ManuscriptSummary | null>(null);
 const selectedPdf = ref<File | null>(null);
-const form = ref({
+const draftFormRef = ref<FormInstance>();
+const form = reactive({
   title: "",
   abstract: "",
   keywords: "",
@@ -34,13 +35,33 @@ const form = ref({
     }
   ] as AuthorInput[]
 });
+const requiredTrimmed = (message: string): FormItemRule => ({
+  trigger: "blur",
+  validator: (_rule: unknown, value: unknown, callback: (error?: Error) => void) => {
+    if (String(value ?? "").trim()) {
+      callback();
+      return;
+    }
+    callback(new Error(message));
+  }
+});
+const draftRules: FormRules = {
+  title: [requiredTrimmed("Title is required")],
+  abstract: [requiredTrimmed("Abstract is required")],
+  keywords: [requiredTrimmed("Keywords are required")],
+  blindMode: [{ required: true, message: "Blind mode is required", trigger: "change" }]
+};
+
+function hasRequiredDraftValues() {
+  return Boolean(form.title.trim() && form.abstract.trim() && form.keywords.trim() && form.blindMode);
+}
 
 function addAuthor() {
-  form.value.authors.push({
+  form.authors.push({
     authorName: "",
     email: "",
     institution: "",
-    authorOrder: form.value.authors.length + 1,
+    authorOrder: form.authors.length + 1,
     userId: null,
     isCorresponding: false,
     isExternal: true
@@ -48,8 +69,8 @@ function addAuthor() {
 }
 
 function removeAuthor(index: number) {
-  form.value.authors.splice(index, 1);
-  form.value.authors.forEach((author, authorIndex) => {
+  form.authors.splice(index, 1);
+  form.authors.forEach((author, authorIndex) => {
     author.authorOrder = authorIndex + 1;
   });
 }
@@ -59,9 +80,13 @@ function selectPdf(file: UploadFile) {
 }
 
 async function createDraft() {
+  const valid = await draftFormRef.value?.validate().catch(() => false);
+  if (!valid || !hasRequiredDraftValues()) {
+    return;
+  }
   submitting.value = true;
   try {
-    created.value = await createManuscript(form.value);
+    created.value = await createManuscript(form);
     ElMessage.success("Manuscript created.");
   } finally {
     submitting.value = false;
@@ -96,17 +121,17 @@ async function submitCurrentVersion() {
       </div>
     </div>
 
-    <el-form class="workflow-form" label-position="top" @submit.prevent="createDraft">
-      <el-form-item label="Title">
+    <el-form ref="draftFormRef" class="workflow-form" :model="form" :rules="draftRules" label-position="top" @submit.prevent="createDraft">
+      <el-form-item label="Title" prop="title">
         <el-input v-model="form.title" />
       </el-form-item>
-      <el-form-item label="Abstract">
+      <el-form-item label="Abstract" prop="abstract">
         <el-input v-model="form.abstract" type="textarea" :rows="5" />
       </el-form-item>
-      <el-form-item label="Keywords">
+      <el-form-item label="Keywords" prop="keywords">
         <el-input v-model="form.keywords" placeholder="comma,separated,keywords" />
       </el-form-item>
-      <el-form-item label="Blind mode">
+      <el-form-item label="Blind mode" prop="blindMode">
         <el-select v-model="form.blindMode">
           <el-option label="Double blind" value="DOUBLE_BLIND" />
           <el-option label="Single blind" value="SINGLE_BLIND" />

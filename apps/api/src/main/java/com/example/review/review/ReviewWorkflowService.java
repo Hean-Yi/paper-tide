@@ -2,6 +2,8 @@ package com.example.review.review;
 
 import com.example.review.auth.CurrentUserPrincipal;
 import com.example.review.auth.RoleGuard;
+import com.example.review.manuscript.ManuscriptRepository;
+import com.example.review.manuscript.ManuscriptRepository.LockedManuscriptRow;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Set;
@@ -21,17 +23,20 @@ public class ReviewWorkflowService {
     private static final Set<String> ROUND_STRATEGIES = Set.of("REUSE_REVIEWERS", "REALLOCATE_REVIEWERS");
 
     private final JdbcTemplate jdbcTemplate;
+    private final ManuscriptRepository manuscriptRepository;
     private final ReviewRoundRepository reviewRoundRepository;
     private final ReviewAssignmentRepository reviewAssignmentRepository;
     private final ConflictCheckService conflictCheckService;
 
     public ReviewWorkflowService(
             JdbcTemplate jdbcTemplate,
+            ManuscriptRepository manuscriptRepository,
             ReviewRoundRepository reviewRoundRepository,
             ReviewAssignmentRepository reviewAssignmentRepository,
             ConflictCheckService conflictCheckService
     ) {
         this.jdbcTemplate = jdbcTemplate;
+        this.manuscriptRepository = manuscriptRepository;
         this.reviewRoundRepository = reviewRoundRepository;
         this.reviewAssignmentRepository = reviewAssignmentRepository;
         this.conflictCheckService = conflictCheckService;
@@ -42,7 +47,8 @@ public class ReviewWorkflowService {
         RoleGuard.requireChairOrAdmin(principal);
         validateRoundRequest(request);
 
-        ManuscriptReviewRow manuscript = findManuscriptForUpdate(request.manuscriptId());
+        LockedManuscriptRow manuscript = manuscriptRepository.findLockedById(request.manuscriptId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
         if (!ROUND_CREATION_ALLOWED_MANUSCRIPT_STATUSES.contains(manuscript.currentStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Manuscript state does not allow round creation");
         }
@@ -199,26 +205,8 @@ public class ReviewWorkflowService {
         }
     }
 
-    private ManuscriptReviewRow findManuscriptForUpdate(long manuscriptId) {
-        return jdbcTemplate.query(
-                """
-                SELECT MANUSCRIPT_ID, CURRENT_VERSION_ID, CURRENT_STATUS, CURRENT_ROUND_NO
-                FROM MANUSCRIPT
-                WHERE MANUSCRIPT_ID = ?
-                FOR UPDATE
-                """,
-                (rs, rowNum) -> new ManuscriptReviewRow(
-                        rs.getLong("MANUSCRIPT_ID"),
-                        rs.getObject("CURRENT_VERSION_ID", Long.class),
-                        rs.getString("CURRENT_STATUS"),
-                        rs.getInt("CURRENT_ROUND_NO")
-                ),
-                manuscriptId
-        ).stream().findFirst().orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
-    }
-
     private ReviewAssignmentRow findOwnedAssignmentForReviewUser(CurrentUserPrincipal principal, long assignmentId) {
-        requireReviewer(principal);
+        RoleGuard.requireRole(principal, "REVIEWER");
         ReviewAssignmentRow assignment = reviewAssignmentRepository.findByIdForUpdate(assignmentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found"));
         if (assignment.reviewerId() != principal.userId()) {
@@ -227,17 +215,4 @@ public class ReviewWorkflowService {
         return assignment;
     }
 
-    private void requireReviewer(CurrentUserPrincipal principal) {
-        if (principal == null || principal.roles().stream().noneMatch("REVIEWER"::equals)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Reviewer role required");
-        }
-    }
-}
-
-record ManuscriptReviewRow(
-        long manuscriptId,
-        Long currentVersionId,
-        String currentStatus,
-        int currentRoundNo
-) {
 }

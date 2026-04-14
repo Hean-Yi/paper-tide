@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import type { FormInstance, FormRules } from "element-plus";
 import { ElMessage } from "element-plus";
-import { onMounted, ref } from "vue";
+import { onMounted, reactive, ref } from "vue";
 
 import {
   assignReviewer,
@@ -19,14 +20,24 @@ const rows = ref<DecisionWorkbenchItem[]>([]);
 const agentResults = ref<Record<number, AgentResult[]>>({});
 const assignDialogOpen = ref(false);
 const decisionDialogOpen = ref(false);
-const assignForm = ref({ roundId: 0, reviewerId: 1002, deadlineAt: "" });
-const decisionForm = ref({
+const assignFormRef = ref<FormInstance>();
+const assignForm = reactive({ roundId: 0, reviewerId: 1002, deadlineAt: "" });
+const decisionFormRef = ref<FormInstance>();
+const decisionForm = reactive({
   manuscriptId: 0,
   versionId: 0,
   roundId: 0,
   decisionCode: "MINOR_REVISION",
   decisionReason: ""
 });
+const assignRules: FormRules = {
+  reviewerId: [{ required: true, message: "Reviewer id is required", trigger: "blur" }],
+  deadlineAt: [{ required: true, message: "Deadline is required", trigger: "change" }]
+};
+const decisionRules: FormRules = {
+  decisionCode: [{ required: true, message: "Decision is required", trigger: "change" }],
+  decisionReason: [{ required: true, message: "Reason is required", trigger: "blur" }]
+};
 
 onMounted(loadWorkbench);
 
@@ -45,16 +56,20 @@ async function loadWorkbench() {
 }
 
 function openAssign(row: DecisionWorkbenchItem) {
-  assignForm.value = {
+  Object.assign(assignForm, {
     roundId: row.roundId,
     reviewerId: 1002,
     deadlineAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
-  };
+  });
   assignDialogOpen.value = true;
 }
 
 async function submitAssign() {
-  await assignReviewer(assignForm.value.roundId, assignForm.value.reviewerId, assignForm.value.deadlineAt);
+  const valid = await assignFormRef.value?.validate().catch(() => false);
+  if (!valid) {
+    return;
+  }
+  await assignReviewer(assignForm.roundId, assignForm.reviewerId, assignForm.deadlineAt);
   assignDialogOpen.value = false;
   ElMessage.success("Reviewer assigned.");
   await loadWorkbench();
@@ -72,18 +87,22 @@ async function conflict(row: DecisionWorkbenchItem) {
 }
 
 function openDecision(row: DecisionWorkbenchItem) {
-  decisionForm.value = {
+  Object.assign(decisionForm, {
     manuscriptId: row.manuscriptId,
     versionId: row.versionId,
     roundId: row.roundId,
     decisionCode: "MINOR_REVISION",
     decisionReason: ""
-  };
+  });
   decisionDialogOpen.value = true;
 }
 
 async function submitDecision() {
-  await decide(decisionForm.value);
+  const valid = await decisionFormRef.value?.validate().catch(() => false);
+  if (!valid) {
+    return;
+  }
+  await decide(decisionForm);
   decisionDialogOpen.value = false;
   ElMessage.success("Decision submitted.");
   await loadWorkbench();
@@ -215,11 +234,11 @@ async function submitDecision() {
     </section>
 
     <el-dialog v-model="assignDialogOpen" title="Assign reviewer" width="520px">
-      <el-form label-position="top">
-        <el-form-item label="Reviewer id">
+      <el-form ref="assignFormRef" :model="assignForm" :rules="assignRules" label-position="top">
+        <el-form-item label="Reviewer id" prop="reviewerId">
           <el-input-number v-model="assignForm.reviewerId" :min="1" />
         </el-form-item>
-        <el-form-item label="Deadline">
+        <el-form-item label="Deadline" prop="deadlineAt">
           <el-date-picker
             v-model="assignForm.deadlineAt"
             type="datetime"
@@ -235,8 +254,8 @@ async function submitDecision() {
     </el-dialog>
 
     <el-dialog v-model="decisionDialogOpen" title="Submit decision" width="560px">
-      <el-form label-position="top">
-        <el-form-item label="Decision">
+      <el-form ref="decisionFormRef" :model="decisionForm" :rules="decisionRules" label-position="top">
+        <el-form-item label="Decision" prop="decisionCode">
           <el-select v-model="decisionForm.decisionCode">
             <el-option label="Accept" value="ACCEPT" />
             <el-option label="Minor revision" value="MINOR_REVISION" />
@@ -244,7 +263,7 @@ async function submitDecision() {
             <el-option label="Reject" value="REJECT" />
           </el-select>
         </el-form-item>
-        <el-form-item label="Reason">
+        <el-form-item label="Reason" prop="decisionReason">
           <el-input v-model="decisionForm.decisionReason" type="textarea" :rows="4" />
         </el-form-item>
       </el-form>

@@ -1,6 +1,7 @@
 package com.example.review.review;
 
 import com.example.review.auth.CurrentUserPrincipal;
+import com.example.review.auth.RoleGuard;
 import com.example.review.notification.NotificationService;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -38,7 +39,7 @@ public class ReviewReportService {
 
     @Transactional
     public ReviewReportResponse submit(CurrentUserPrincipal principal, long assignmentId, SubmitReviewReportRequest request) {
-        requireReviewer(principal);
+        RoleGuard.requireRole(principal, "REVIEWER");
         validateRequest(request);
 
         ReviewAssignmentRow assignment = reviewAssignmentRepository.findByIdForUpdate(assignmentId)
@@ -97,11 +98,6 @@ public class ReviewReportService {
         }
     }
 
-    private void requireReviewer(CurrentUserPrincipal principal) {
-        if (principal == null || !principal.roles().contains("REVIEWER")) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Reviewer role is required");
-        }
-    }
 }
 
 record SubmitReviewReportRequest(

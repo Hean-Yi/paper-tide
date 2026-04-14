@@ -3,6 +3,8 @@ package com.example.review.decision;
 import com.example.review.audit.AuditLogService;
 import com.example.review.auth.CurrentUserPrincipal;
 import com.example.review.auth.RoleGuard;
+import com.example.review.manuscript.ManuscriptRepository;
+import com.example.review.manuscript.ManuscriptRepository.LockedManuscriptRow;
 import com.example.review.notification.NotificationService;
 import com.example.review.review.ReviewAssignmentRepository;
 import java.sql.Timestamp;
@@ -24,6 +26,7 @@ public class DecisionService {
     private static final Set<String> SCREENING_STATUSES = Set.of("UNDER_SCREENING");
 
     private final JdbcTemplate jdbcTemplate;
+    private final ManuscriptRepository manuscriptRepository;
     private final ReviewAssignmentRepository reviewAssignmentRepository;
     private final DecisionRepository decisionRepository;
     private final NotificationService notificationService;
@@ -31,12 +34,14 @@ public class DecisionService {
 
     public DecisionService(
             JdbcTemplate jdbcTemplate,
+            ManuscriptRepository manuscriptRepository,
             ReviewAssignmentRepository reviewAssignmentRepository,
             DecisionRepository decisionRepository,
             NotificationService notificationService,
             AuditLogService auditLogService
     ) {
         this.jdbcTemplate = jdbcTemplate;
+        this.manuscriptRepository = manuscriptRepository;
         this.reviewAssignmentRepository = reviewAssignmentRepository;
         this.decisionRepository = decisionRepository;
         this.notificationService = notificationService;
@@ -48,7 +53,8 @@ public class DecisionService {
         RoleGuard.requireChairOrAdmin(principal);
         validateRequest(request);
 
-        ManuscriptDecisionRow manuscript = findManuscriptForUpdate(request.manuscriptId());
+        LockedManuscriptRow manuscript = manuscriptRepository.findLockedById(request.manuscriptId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
         ReviewRoundDecisionRow round = findRoundForUpdate(request.roundId());
         if (round.manuscriptId() != manuscript.manuscriptId()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Round does not belong to manuscript");
@@ -118,25 +124,6 @@ public class DecisionService {
         }
     }
 
-    private ManuscriptDecisionRow findManuscriptForUpdate(long manuscriptId) {
-        return jdbcTemplate.query(
-                """
-                SELECT MANUSCRIPT_ID, SUBMITTER_ID, CURRENT_VERSION_ID, CURRENT_STATUS, CURRENT_ROUND_NO
-                FROM MANUSCRIPT
-                WHERE MANUSCRIPT_ID = ?
-                FOR UPDATE
-                """,
-                (rs, rowNum) -> new ManuscriptDecisionRow(
-                        rs.getLong("MANUSCRIPT_ID"),
-                        rs.getLong("SUBMITTER_ID"),
-                        rs.getObject("CURRENT_VERSION_ID", Long.class),
-                        rs.getString("CURRENT_STATUS"),
-                        rs.getInt("CURRENT_ROUND_NO")
-                ),
-                manuscriptId
-        ).stream().findFirst().orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
-    }
-
     private ReviewRoundDecisionRow findRoundForUpdate(long roundId) {
         return jdbcTemplate.query(
                 """
@@ -169,15 +156,6 @@ record DecisionRequest(
 }
 
 record DecisionResponse(long decisionId, String decisionCode, String currentStatus, String roundStatus) {
-}
-
-record ManuscriptDecisionRow(
-        long manuscriptId,
-        long submitterId,
-        Long currentVersionId,
-        String currentStatus,
-        int currentRoundNo
-) {
 }
 
 record ReviewRoundDecisionRow(

@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import type { FormInstance, FormRules } from "element-plus";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { onMounted, ref } from "vue";
+import { onMounted, reactive, ref } from "vue";
 
 import {
   createAgentTask,
@@ -15,10 +16,19 @@ import { formatDateTime, formatFileSize, statusTagType, workflowLabel } from "..
 
 const loading = ref(false);
 const queue = ref<ScreeningQueueItem[]>([]);
-const roundForm = ref({ manuscriptId: 0, versionId: 0, deadlineAt: "" });
+const roundFormRef = ref<FormInstance>();
+const roundForm = reactive({ manuscriptId: 0, versionId: 0, deadlineAt: "" });
 const roundDialogOpen = ref(false);
-const deskRejectForm = ref({ manuscriptId: 0, versionId: 0, roundId: 0, decisionReason: "" });
+const deskRejectFormRef = ref<FormInstance>();
+const deskRejectForm = reactive({ manuscriptId: 0, versionId: 0, roundId: 0, decisionReason: "" });
 const deskRejectDialogOpen = ref(false);
+const roundRules: FormRules = {
+  deadlineAt: [{ required: true, message: "Deadline is required", trigger: "change" }]
+};
+const deskRejectRules: FormRules = {
+  roundId: [{ required: true, message: "Round id is required", trigger: "blur" }],
+  decisionReason: [{ required: true, message: "Reason is required", trigger: "blur" }]
+};
 
 onMounted(loadQueue);
 
@@ -50,17 +60,21 @@ async function download(row: ScreeningQueueItem) {
 }
 
 function openRound(row: ScreeningQueueItem) {
-  roundForm.value = {
+  Object.assign(roundForm, {
     manuscriptId: row.manuscriptId,
     versionId: row.versionId,
     deadlineAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
-  };
+  });
   roundDialogOpen.value = true;
 }
 
 async function submitRound() {
+  const valid = await roundFormRef.value?.validate().catch(() => false);
+  if (!valid) {
+    return;
+  }
   await createReviewRound({
-    ...roundForm.value,
+    ...roundForm,
     assignmentStrategy: "REALLOCATE_REVIEWERS",
     screeningRequired: true
   });
@@ -70,16 +84,20 @@ async function submitRound() {
 }
 
 function openDeskReject(row: ScreeningQueueItem) {
-  deskRejectForm.value = {
+  Object.assign(deskRejectForm, {
     manuscriptId: row.manuscriptId,
     versionId: row.versionId,
     roundId: row.currentRoundNo,
     decisionReason: ""
-  };
+  });
   deskRejectDialogOpen.value = true;
 }
 
 async function submitDeskReject() {
+  const valid = await deskRejectFormRef.value?.validate().catch(() => false);
+  if (!valid) {
+    return;
+  }
   try {
     await ElMessageBox.confirm(
       "Desk reject will close this manuscript before external review. Continue?",
@@ -90,11 +108,11 @@ async function submitDeskReject() {
     return;
   }
   await decide({
-    manuscriptId: deskRejectForm.value.manuscriptId,
-    versionId: deskRejectForm.value.versionId,
-    roundId: deskRejectForm.value.roundId,
+    manuscriptId: deskRejectForm.manuscriptId,
+    versionId: deskRejectForm.versionId,
+    roundId: deskRejectForm.roundId,
     decisionCode: "DESK_REJECT",
-    decisionReason: deskRejectForm.value.decisionReason
+    decisionReason: deskRejectForm.decisionReason
   });
   deskRejectDialogOpen.value = false;
   ElMessage.success("Desk reject recorded.");
@@ -151,8 +169,8 @@ async function submitDeskReject() {
     </el-table>
 
     <el-dialog v-model="roundDialogOpen" title="Create review round" width="520px">
-      <el-form label-position="top">
-        <el-form-item label="Deadline">
+      <el-form ref="roundFormRef" :model="roundForm" :rules="roundRules" label-position="top">
+        <el-form-item label="Deadline" prop="deadlineAt">
           <el-date-picker
             v-model="roundForm.deadlineAt"
             type="datetime"
@@ -168,11 +186,11 @@ async function submitDeskReject() {
     </el-dialog>
 
     <el-dialog v-model="deskRejectDialogOpen" title="Desk reject" width="520px">
-      <el-form label-position="top">
-        <el-form-item label="Round id">
+      <el-form ref="deskRejectFormRef" :model="deskRejectForm" :rules="deskRejectRules" label-position="top">
+        <el-form-item label="Round id" prop="roundId">
           <el-input-number v-model="deskRejectForm.roundId" :min="0" />
         </el-form-item>
-        <el-form-item label="Reason">
+        <el-form-item label="Reason" prop="decisionReason">
           <el-input v-model="deskRejectForm.decisionReason" type="textarea" :rows="4" />
         </el-form-item>
       </el-form>

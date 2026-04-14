@@ -1,11 +1,13 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import ElementPlus, { ElMessageBox } from "element-plus";
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRouter, createWebHistory } from "vue-router";
 
 import { formatDateTime, statusTagType, workflowLabel } from "../lib/workflow-format";
 import { initializeAuth, resetAuthForTests } from "../stores/auth";
 import ManuscriptListView from "../views/author/ManuscriptListView.vue";
+import SubmitManuscriptView from "../views/author/SubmitManuscriptView.vue";
 import ScreeningQueueView from "../views/chair/ScreeningQueueView.vue";
 import DecisionWorkbenchView from "../views/chair/DecisionWorkbenchView.vue";
 import AssignmentListView from "../views/reviewer/AssignmentListView.vue";
@@ -97,6 +99,7 @@ describe("workflow screens", () => {
           versionNo: 1,
           title: "Workflow Seed",
           currentStatus: "UNDER_SCREENING",
+          currentRoundNo: 1,
           blindMode: "DOUBLE_BLIND",
           submittedAt: "2026-04-13T05:00:00Z",
           pdfFileName: "workflow.pdf",
@@ -158,6 +161,7 @@ describe("workflow screens", () => {
 
     const wrapper = await mountWithRouter(ScreeningQueueView);
     await clickButton(wrapper, "Desk reject");
+    await setBodyTextarea("Out of scope for this venue.");
     await clickBodyButton("Desk reject");
 
     expect(confirm).toHaveBeenCalled();
@@ -182,6 +186,7 @@ describe("workflow screens", () => {
 
     const wrapper = await mountWithRouter(AssignmentListView);
     await clickButton(wrapper, "Decline");
+    await setBodyTextarea("Conflict with the manuscript.");
     await clickBodyButton("Decline");
 
     expect(confirm).toHaveBeenCalled();
@@ -218,6 +223,60 @@ describe("workflow screens", () => {
     await flushPromises();
 
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:workflow-pdf");
+  });
+
+  it("validates author manuscript form before creating a draft", async () => {
+    installAuth(["AUTHOR"]);
+    const fetch = vi.fn(() => Promise.resolve(jsonResponse({})));
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(SubmitManuscriptView);
+    await clickButton(wrapper, "Create manuscript");
+
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("validates reviewer report form before submitting", async () => {
+    installAuth(["REVIEWER"]);
+    const fetch = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/review-assignments/9") {
+        return Promise.resolve(jsonResponse({
+          assignmentId: 9,
+          manuscriptId: 11,
+          versionId: 21,
+          versionNo: 1,
+          title: "Workflow Seed",
+          abstractText: "workflow abstract",
+          keywords: "workflow,pdf",
+          pdfFileName: "workflow.pdf",
+          taskStatus: "ACCEPTED"
+        }));
+      }
+      if (path === "/manuscripts/11/versions/21/agent-results") {
+        return Promise.resolve(jsonResponse([]));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(ReviewEditorView, "/reviewer/reviews/9");
+    await clickButton(wrapper, "Submit review");
+
+    expect(fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining("/review-assignments/9/review-report"),
+      expect.anything()
+    );
+  });
+
+  it("uses Element Plus validation as the single form validation surface", () => {
+    const submitView = readFileSync("src/views/author/SubmitManuscriptView.vue", "utf8");
+    const reviewView = readFileSync("src/views/reviewer/ReviewEditorView.vue", "utf8");
+
+    expect(submitView).not.toContain("validateDraftFields");
+    expect(submitView).not.toContain("draftValidation");
+    expect(reviewView).not.toContain("validateReviewFields");
+    expect(reviewView).not.toContain("reviewValidation");
   });
 
   it("formats workflow labels, dates, and status tag types", () => {
@@ -313,5 +372,13 @@ async function clickBodyButton(label: string) {
   const button = buttons.find((entry) => entry.textContent?.includes(label));
   expect(button).toBeTruthy();
   button!.click();
+  await flushPromises();
+}
+
+async function setBodyTextarea(value: string) {
+  const textarea = document.body.querySelector("textarea") as HTMLTextAreaElement | null;
+  expect(textarea).toBeTruthy();
+  textarea!.value = value;
+  textarea!.dispatchEvent(new Event("input", { bubbles: true }));
   await flushPromises();
 }

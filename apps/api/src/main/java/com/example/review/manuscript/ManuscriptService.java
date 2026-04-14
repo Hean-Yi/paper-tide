@@ -38,7 +38,7 @@ public class ManuscriptService {
 
     @Transactional
     public ManuscriptResponse createManuscript(CurrentUserPrincipal principal, CreateManuscriptRequest request) {
-        requireAuthor(principal);
+        RoleGuard.requireRole(principal, "AUTHOR");
         validateBlindMode(request.blindMode());
         validateAuthors(request.authors());
 
@@ -65,7 +65,7 @@ public class ManuscriptService {
 
     @Transactional
     public ManuscriptResponse createRevision(CurrentUserPrincipal principal, long manuscriptId, CreateVersionRequest request) {
-        requireAuthor(principal);
+        RoleGuard.requireRole(principal, "AUTHOR");
         validateAuthors(request.authors());
 
         ManuscriptRow manuscript = findOwnedManuscriptForUpdate(principal, manuscriptId);
@@ -94,7 +94,7 @@ public class ManuscriptService {
 
     @Transactional
     public void uploadPdf(CurrentUserPrincipal principal, long manuscriptId, long versionId, MultipartFile file) {
-        requireAuthor(principal);
+        RoleGuard.requireRole(principal, "AUTHOR");
         ManuscriptRow manuscript = findOwnedManuscriptForUpdate(principal, manuscriptId);
         VersionRow version = findVersion(versionId);
         ensureVersionBelongsToManuscript(version, manuscriptId);
@@ -143,7 +143,7 @@ public class ManuscriptService {
 
     @Transactional
     public ManuscriptResponse submitVersion(CurrentUserPrincipal principal, long manuscriptId, long versionId) {
-        requireAuthor(principal);
+        RoleGuard.requireRole(principal, "AUTHOR");
         ManuscriptRow manuscript = findOwnedManuscriptForUpdate(principal, manuscriptId);
         VersionRow version = findVersion(versionId);
         ensureVersionBelongsToManuscript(version, manuscriptId);
@@ -191,13 +191,13 @@ public class ManuscriptService {
     }
 
     public ManuscriptResponse getManuscript(CurrentUserPrincipal principal, long manuscriptId) {
-        requireAuthor(principal);
+        RoleGuard.requireRole(principal, "AUTHOR");
         ManuscriptRow manuscript = findOwnedManuscript(principal, manuscriptId);
         return toResponse(manuscript);
     }
 
     public List<ManuscriptSummaryResponse> listManuscripts(CurrentUserPrincipal principal) {
-        requireAuthor(principal);
+        RoleGuard.requireRole(principal, "AUTHOR");
         return manuscriptRepository.listBySubmitter(principal.userId()).stream()
                 .map(row -> new ManuscriptSummaryResponse(
                         row.manuscriptId(),
@@ -214,7 +214,7 @@ public class ManuscriptService {
     }
 
     public List<VersionSummaryResponse> listVersions(CurrentUserPrincipal principal, long manuscriptId) {
-        requireAuthor(principal);
+        RoleGuard.requireRole(principal, "AUTHOR");
         findOwnedManuscript(principal, manuscriptId);
         return versionRepository.listByManuscript(manuscriptId).stream()
                 .map(row -> new VersionSummaryResponse(
@@ -287,12 +287,6 @@ public class ManuscriptService {
         }
         return RoleGuard.hasRole(principal, "REVIEWER")
                 && manuscriptRepository.reviewerHasAssignment(manuscript.manuscriptId(), version.versionId(), principal.userId());
-    }
-
-    private void requireAuthor(CurrentUserPrincipal principal) {
-        if (principal == null || principal.roles().stream().noneMatch("AUTHOR"::equals)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Author role required");
-        }
     }
 
     private void validateBlindMode(String blindMode) {

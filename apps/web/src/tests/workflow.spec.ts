@@ -269,6 +269,154 @@ describe("workflow screens", () => {
     );
   });
 
+  it("renders reviewer paper online instead of a PDF download link", async () => {
+    installAuth(["REVIEWER"]);
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:reader-page-1"),
+      revokeObjectURL
+    });
+    mockApi({
+      "/review-assignments/9": {
+        assignmentId: 9,
+        manuscriptId: 11,
+        versionId: 21,
+        versionNo: 1,
+        title: "Workflow Seed",
+        abstractText: "workflow abstract",
+        keywords: "workflow,pdf",
+        pdfFileName: "workflow.pdf",
+        taskStatus: "ACCEPTED"
+      },
+      "/review-assignments/9/paper": {
+        assignmentId: 9,
+        manuscriptId: 11,
+        versionId: 21,
+        title: "Workflow Seed",
+        pageCount: 2,
+        pdfFileName: "workflow.pdf",
+        downloadAllowed: false
+      },
+      "/review-assignments/9/agent-assist": {
+        task: null,
+        results: []
+      }
+    }, {
+      "/review-assignments/9/paper/pages/1": new Blob(["png"], { type: "image/png" })
+    });
+
+    const wrapper = await mountWithRouter(ReviewEditorView, "/reviewer/reviews/9");
+
+    expect(wrapper.text()).toContain("Online reading only");
+    expect(wrapper.text()).toContain("Original PDF download is unavailable");
+    expect(wrapper.findAll("button").some((button) => button.text().includes("workflow.pdf"))).toBe(false);
+    expect(wrapper.find("img.secure-paper-page").attributes("src")).toBe("blob:reader-page-1");
+  });
+
+  it("revokes rendered page object URLs when reviewer changes pages", async () => {
+    installAuth(["REVIEWER"]);
+    const revokeObjectURL = vi.fn();
+    const createObjectURL = vi.fn()
+      .mockReturnValueOnce("blob:reader-page-1")
+      .mockReturnValueOnce("blob:reader-page-2");
+    vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
+    mockApi({
+      "/review-assignments/9": {
+        assignmentId: 9,
+        manuscriptId: 11,
+        versionId: 21,
+        versionNo: 1,
+        title: "Workflow Seed",
+        abstractText: "workflow abstract",
+        keywords: "workflow,pdf",
+        pdfFileName: "workflow.pdf",
+        taskStatus: "ACCEPTED"
+      },
+      "/review-assignments/9/paper": {
+        assignmentId: 9,
+        manuscriptId: 11,
+        versionId: 21,
+        title: "Workflow Seed",
+        pageCount: 2,
+        pdfFileName: "workflow.pdf",
+        downloadAllowed: false
+      },
+      "/review-assignments/9/agent-assist": {
+        task: null,
+        results: []
+      }
+    }, {
+      "/review-assignments/9/paper/pages/1": new Blob(["page1"], { type: "image/png" }),
+      "/review-assignments/9/paper/pages/2": new Blob(["page2"], { type: "image/png" })
+    });
+
+    const wrapper = await mountWithRouter(ReviewEditorView, "/reviewer/reviews/9");
+    await clickButton(wrapper, "Next");
+
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:reader-page-1");
+    expect(wrapper.find("img.secure-paper-page").attributes("src")).toBe("blob:reader-page-2");
+  });
+
+  it("runs reviewer assistant through the assignment-scoped endpoint", async () => {
+    installAuth(["REVIEWER"]);
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:reader-page-1"),
+      revokeObjectURL: vi.fn()
+    });
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/review-assignments/9") {
+        return Promise.resolve(jsonResponse({
+          assignmentId: 9,
+          manuscriptId: 11,
+          versionId: 21,
+          versionNo: 1,
+          title: "Workflow Seed",
+          abstractText: "workflow abstract",
+          keywords: "workflow,pdf",
+          pdfFileName: "workflow.pdf",
+          taskStatus: "ACCEPTED"
+        }));
+      }
+      if (path === "/review-assignments/9/paper") {
+        return Promise.resolve(jsonResponse({
+          assignmentId: 9,
+          manuscriptId: 11,
+          versionId: 21,
+          title: "Workflow Seed",
+          pageCount: 1,
+          pdfFileName: "workflow.pdf",
+          downloadAllowed: false
+        }));
+      }
+      if (path === "/review-assignments/9/paper/pages/1") {
+        return Promise.resolve(blobResponse(new Blob(["page"], { type: "image/png" })));
+      }
+      if (path === "/review-assignments/9/agent-assist" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({
+          taskId: 88,
+          externalTaskId: "external-assist",
+          taskType: "REVIEW_ASSIST_ANALYSIS",
+          taskStatus: "PENDING",
+          step: "queued"
+        }));
+      }
+      if (path === "/review-assignments/9/agent-assist") {
+        return Promise.resolve(jsonResponse({ task: null, results: [] }));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(ReviewEditorView, "/reviewer/reviews/9");
+    await clickButton(wrapper, "Run review assistant");
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/review-assignments/9/agent-assist",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
   it("uses Element Plus validation as the single form validation surface", () => {
     const submitView = readFileSync("src/views/author/SubmitManuscriptView.vue", "utf8");
     const reviewView = readFileSync("src/views/reviewer/ReviewEditorView.vue", "utf8");
@@ -302,14 +450,33 @@ describe("workflow screens", () => {
         pdfFileName: "workflow.pdf",
         taskStatus: "ACCEPTED"
       },
-      "/manuscripts/11/versions/21/agent-results": [
-        {
-          resultId: 1,
-          resultType: "REVIEW_ASSIST_ANALYSIS",
-          rawResult: null,
-          redactedResult: { summary: "Reviewer-visible signal" }
-        }
-      ]
+      "/review-assignments/9/paper": {
+        assignmentId: 9,
+        manuscriptId: 11,
+        versionId: 21,
+        title: "Workflow Seed",
+        pageCount: 1,
+        pdfFileName: "workflow.pdf",
+        downloadAllowed: false
+      },
+      "/review-assignments/9/agent-assist": {
+        task: {
+          taskId: 88,
+          externalTaskId: "external-assist",
+          taskType: "REVIEW_ASSIST_ANALYSIS",
+          taskStatus: "SUCCESS",
+          step: "completed"
+        },
+        results: [
+          {
+            resultId: 1,
+            resultType: "REVIEW_ASSIST_ANALYSIS",
+            redactedResult: { paperSummary: "Reviewer-visible signal" }
+          }
+        ]
+      }
+    }, {
+      "/review-assignments/9/paper/pages/1": new Blob(["page"], { type: "image/png" })
     });
 
     const wrapper = await mountWithRouter(ReviewEditorView, "/reviewer/reviews/9");

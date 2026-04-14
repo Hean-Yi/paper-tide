@@ -6,6 +6,7 @@ import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -26,7 +27,50 @@ import org.springframework.test.web.servlet.MvcResult;
 @SpringBootTest
 @AutoConfigureMockMvc
 class WorkflowQueryServiceTest {
-    private static final byte[] PDF_BYTES = "%PDF-1.4\n% workflow pdf\n".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] PDF_BYTES = """
+            %PDF-1.4
+            1 0 obj
+            << /Type /Catalog /Pages 2 0 R >>
+            endobj
+            2 0 obj
+            << /Type /Pages /Kids [3 0 R] /Count 1 >>
+            endobj
+            3 0 obj
+            << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+            endobj
+            4 0 obj
+            << /Length 171 >>
+            stream
+            BT
+            /F1 12 Tf
+            72 720 Td
+            (Introduction This paper studies robust review systems.) Tj
+            72 700 Td
+            (Method We use deterministic parsing.) Tj
+            72 680 Td
+            (Experiment Results show stable behavior.) Tj
+            72 660 Td
+            (Conclusion The approach is practical.) Tj
+            ET
+            endstream
+            endobj
+            5 0 obj
+            << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+            endobj
+            xref
+            0 6
+            0000000000 65535 f
+            0000000009 00000 n
+            0000000058 00000 n
+            0000000115 00000 n
+            0000000241 00000 n
+            0000000464 00000 n
+            trailer
+            << /Root 1 0 R /Size 6 >>
+            startxref
+            534
+            %%EOF
+            """.getBytes(StandardCharsets.UTF_8);
 
     @Autowired
     private MockMvc mockMvc;
@@ -56,7 +100,7 @@ class WorkflowQueryServiceTest {
     }
 
     @Test
-    void reviewerListsOwnAssignmentsAndDownloadsAssignedPdf() throws Exception {
+    void reviewerListsOwnAssignmentsAndReadsAcceptedPaperOnlineOnly() throws Exception {
         WorkflowFixture fixture = seedUnderReviewWorkflow("ACCEPTED", true, false);
         String reviewerToken = loginAndExtractToken("reviewer_demo", "demo123");
 
@@ -75,8 +119,60 @@ class WorkflowQueryServiceTest {
 
         mockMvc.perform(get("/api/manuscripts/{id}/versions/{versionId}/pdf", fixture.manuscriptId(), fixture.versionId())
                         .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/review-assignments/{assignmentId}/paper", fixture.assignmentId())
+                        .header("Authorization", "Bearer " + reviewerToken))
                 .andExpect(status().isOk())
-                .andExpect(content().bytes(PDF_BYTES));
+                .andExpect(jsonPath("$.assignmentId").value(fixture.assignmentId()))
+                .andExpect(jsonPath("$.manuscriptId").value(fixture.manuscriptId()))
+                .andExpect(jsonPath("$.versionId").value(fixture.versionId()))
+                .andExpect(jsonPath("$.title").value("Workflow Seed"))
+                .andExpect(jsonPath("$.pageCount").value(1))
+                .andExpect(jsonPath("$.downloadAllowed").value(false));
+
+        MvcResult page = mockMvc.perform(get("/api/review-assignments/{assignmentId}/paper/pages/1", fixture.assignmentId())
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("image/png"))
+                .andExpect(header().string("Cache-Control", "private, no-store"))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andReturn();
+        byte[] image = page.getResponse().getContentAsByteArray();
+        org.junit.jupiter.api.Assertions.assertEquals((byte) 0x89, image[0]);
+        org.junit.jupiter.api.Assertions.assertEquals((byte) 'P', image[1]);
+        org.junit.jupiter.api.Assertions.assertEquals((byte) 'N', image[2]);
+        org.junit.jupiter.api.Assertions.assertEquals((byte) 'G', image[3]);
+    }
+
+    @Test
+    void reviewerMustAcceptAssignmentBeforeRenderedPaperPagesAreAvailable() throws Exception {
+        WorkflowFixture fixture = seedUnderReviewWorkflow("ASSIGNED", true, false);
+        String reviewerToken = loginAndExtractToken("reviewer_demo", "demo123");
+
+        mockMvc.perform(get("/api/review-assignments/{assignmentId}/paper", fixture.assignmentId())
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pageCount").value(1));
+
+        mockMvc.perform(get("/api/review-assignments/{assignmentId}/paper/pages/1", fixture.assignmentId())
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void unassignedReviewerCannotReadPaperMetadataOrPages() throws Exception {
+        WorkflowFixture fixture = seedUnderReviewWorkflow("ACCEPTED", true, false);
+        ensureSecondReviewer();
+        String otherReviewerToken = loginAndExtractToken("second_reviewer_demo", "demo123");
+
+        mockMvc.perform(get("/api/review-assignments/{assignmentId}/paper", fixture.assignmentId())
+                        .header("Authorization", "Bearer " + otherReviewerToken))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/review-assignments/{assignmentId}/paper/pages/1", fixture.assignmentId())
+                        .header("Authorization", "Bearer " + otherReviewerToken))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -249,6 +345,31 @@ class WorkflowQueryServiceTest {
                 Timestamp.from(Instant.now())
         );
         return taskId;
+    }
+
+    private void ensureSecondReviewer() {
+        jdbcTemplate.update(
+                """
+                MERGE INTO SYS_USER U
+                USING (
+                  SELECT 1013 AS USER_ID, 'second_reviewer_demo' AS USERNAME, '$2a$10$Al2Fi5T2ZEwE2Yi2ds6gp.7qKpiXar4e9.VBDPgU.8XtAfoe7UUDq' AS PASSWORD_HASH,
+                         'Second Reviewer Demo' AS REAL_NAME, 'second_reviewer_demo@example.com' AS EMAIL, 'Reviewer University' AS INSTITUTION, 'ACTIVE' AS STATUS
+                  FROM DUAL
+                ) S
+                ON (U.USER_ID = S.USER_ID)
+                WHEN NOT MATCHED THEN
+                  INSERT (USER_ID, USERNAME, PASSWORD_HASH, REAL_NAME, EMAIL, INSTITUTION, STATUS)
+                  VALUES (S.USER_ID, S.USERNAME, S.PASSWORD_HASH, S.REAL_NAME, S.EMAIL, S.INSTITUTION, S.STATUS)
+                """);
+        jdbcTemplate.update(
+                """
+                MERGE INTO SYS_USER_ROLE UR
+                USING (SELECT 1013 AS USER_ID, 2 AS ROLE_ID FROM DUAL) S
+                ON (UR.USER_ID = S.USER_ID AND UR.ROLE_ID = S.ROLE_ID)
+                WHEN NOT MATCHED THEN
+                  INSERT (USER_ROLE_ID, USER_ID, ROLE_ID)
+                  VALUES (SEQ_SYS_USER_ROLE.NEXTVAL, S.USER_ID, S.ROLE_ID)
+                """);
     }
 
     private String loginAndExtractToken(String username, String password) throws Exception {

@@ -20,3 +20,4 @@ review:
     internal-api-key: ${AGENT_INTERNAL_API_KEY:local-dev-internal-key}
     timeout-seconds: ${AGENT_TIMEOUT_SECONDS:30}
     polling-timeout-minutes: ${AGENT_POLLING_TIMEOUT_MINUTES:10}
+    polling-delay-ms: ${AGENT_POLLING_DELAY_MS:5000}

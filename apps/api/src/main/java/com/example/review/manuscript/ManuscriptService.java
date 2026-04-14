@@ -285,8 +285,7 @@ public class ManuscriptService {
         if (RoleGuard.hasRole(principal, "AUTHOR") && principal.userId() == manuscript.submitterId()) {
             return true;
         }
-        return RoleGuard.hasRole(principal, "REVIEWER")
-                && manuscriptRepository.reviewerHasAssignment(manuscript.manuscriptId(), version.versionId(), principal.userId());
+        return false;
     }
 
     private void validateBlindMode(String blindMode) {

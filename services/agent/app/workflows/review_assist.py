@@ -14,18 +14,21 @@ def review_assist_assess(state: dict[str, Any]) -> dict[str, Any]:
         "manuscriptId": str(state["manuscript_id"]),
         "versionId": str(state["version_id"]),
         "status": "SUCCESS",
-        "summary": paper.get("abstractSummary") or "No abstract summary provided.",
-        "novelty": {"analysis": "Assess novelty from the submitted context.", "score": 3},
-        "methodology": {"analysis": "Assess methodology from the submitted context.", "score": 3},
-        "writing": {"analysis": "Assess writing clarity from the submitted context.", "score": 3},
-        "risks": paper.get("possibleBlindnessRisks", []),
-        "finalSuggestion": "Use as reviewer assistance only.",
+        "paperSummary": paper.get("abstractSummary") or "No abstract summary provided.",
+        "claimedContributions": paper.get("contributionClaims") or ["Identify and verify the claimed contribution."],
+        "methodChecklist": ["Check whether assumptions, baselines, and implementation details support the method claims."],
+        "experimentChecklist": ["Verify datasets, metrics, baselines, and ablation coverage before scoring the work."],
+        "evidenceToVerify": ["Match each major claim to a table, figure, experiment, or cited prior result."],
+        "potentialWeaknesses": ["Look for unsupported claims, missing ablations, and unclear limitations."],
+        "questionsForReviewer": ["What evidence would change your assessment of the paper?"],
+        "blindReviewRisks": paper.get("possibleBlindnessRisks", []),
         "confidence": 0.5,
     }
     raw_result = request_json_from_model(
         state,
         instruction=(
-            "Create reviewer assistance from this paper metadata using the REVIEW_ASSIST_ANALYSIS schema: "
+            "Create checklist-only reviewer assistance from this paper metadata using the REVIEW_ASSIST_ANALYSIS "
+            "schema. Do not include scores, recommendations, decisions, or complete review text: "
             f"{paper}"
         ),
         fallback=fallback,

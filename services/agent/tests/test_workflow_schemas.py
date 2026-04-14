@@ -10,7 +10,7 @@ from app.workflows.schemas import (
 )
 
 
-def test_review_assist_schema_requires_integer_scores() -> None:
+def test_review_assist_schema_rejects_score_or_recommendation_output() -> None:
     with pytest.raises(ValidationError):
         ReviewAssistResult.model_validate(
             {
@@ -18,15 +18,41 @@ def test_review_assist_schema_requires_integer_scores() -> None:
                 "manuscriptId": "101",
                 "versionId": "201",
                 "status": "SUCCESS",
-                "summary": "Concise summary",
-                "novelty": {"analysis": "Some novelty", "score": 4.5},
-                "methodology": {"analysis": "Sound method", "score": 4},
-                "writing": {"analysis": "Readable", "score": 3},
-                "risks": [],
-                "finalSuggestion": "Weak accept",
+                "paperSummary": "Concise summary",
+                "claimedContributions": ["A system"],
+                "methodChecklist": ["Verify method assumptions"],
+                "experimentChecklist": ["Check baselines"],
+                "evidenceToVerify": ["Dataset split"],
+                "potentialWeaknesses": ["Limited ablation"],
+                "questionsForReviewer": ["Is the baseline fair?"],
+                "blindReviewRisks": [],
+                "recommendation": "Weak accept",
                 "confidence": 0.7,
             }
         )
+
+
+def test_review_assist_schema_accepts_checklist_only_output() -> None:
+    result = ReviewAssistResult.model_validate(
+        {
+            "taskType": "REVIEW_ASSIST_ANALYSIS",
+            "manuscriptId": "101",
+            "versionId": "201",
+            "status": "SUCCESS",
+            "paperSummary": "Concise summary",
+            "claimedContributions": ["A system"],
+            "methodChecklist": ["Verify method assumptions"],
+            "experimentChecklist": ["Check baselines"],
+            "evidenceToVerify": ["Dataset split"],
+            "potentialWeaknesses": ["Limited ablation"],
+            "questionsForReviewer": ["Is the baseline fair?"],
+            "blindReviewRisks": [],
+            "confidence": 0.7,
+        }
+    )
+
+    assert result.paperSummary == "Concise summary"
+    assert result.methodChecklist == ["Verify method assumptions"]
 
 
 def test_screening_schema_has_scope_fit() -> None:
@@ -103,3 +129,31 @@ def test_redaction_sanitizes_identity_clues() -> None:
 
     assert redacted["screeningSummary"] == "Reviewer-safe summary unavailable due to redaction."
     assert redacted["blindnessRisks"] == ["Reviewer-safe summary unavailable due to redaction."]
+
+
+def test_review_assist_redaction_removes_forbidden_fields() -> None:
+    raw_result = {
+        "taskType": "REVIEW_ASSIST_ANALYSIS",
+        "manuscriptId": "101",
+        "versionId": "201",
+        "status": "SUCCESS",
+        "paperSummary": "Concise summary",
+        "claimedContributions": ["A system"],
+        "methodChecklist": ["Verify method assumptions"],
+        "experimentChecklist": ["Check baselines"],
+        "evidenceToVerify": ["Dataset split"],
+        "potentialWeaknesses": ["Limited ablation"],
+        "questionsForReviewer": ["Is the baseline fair?"],
+        "blindReviewRisks": ["Acknowledgements mention Example University"],
+        "recommendation": "accept",
+        "overallScore": 5,
+        "fullReviewText": "This is a complete review.",
+        "confidence": 0.7,
+    }
+
+    redacted = redact_result("REVIEW_ASSIST_ANALYSIS", raw_result)
+
+    assert "recommendation" not in redacted
+    assert "overallScore" not in redacted
+    assert "fullReviewText" not in redacted
+    assert redacted["blindReviewRisks"] == ["Reviewer-safe summary unavailable due to redaction."]

@@ -14,6 +14,12 @@ public final class AgentDtos {
         }
     }
 
+    public record CreateReviewerAssistRequest(Boolean force) {
+        boolean forceRequested() {
+            return Boolean.TRUE.equals(force);
+        }
+    }
+
     public record AgentTaskResponse(
             long taskId,
             String externalTaskId,
@@ -63,6 +69,12 @@ public final class AgentDtos {
             String resultType,
             Map<String, Object> rawResult,
             Map<String, Object> redactedResult
+    ) {
+    }
+
+    public record ReviewerAssistResponse(
+            AgentTaskResponse task,
+            List<AgentResultResponse> results
     ) {
     }
 

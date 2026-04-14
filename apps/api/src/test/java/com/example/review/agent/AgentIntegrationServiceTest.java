@@ -197,6 +197,62 @@ class AgentIntegrationServiceTest {
     }
 
     @Test
+    void reviewerCreatesOnlyAssignmentScopedReviewAssistTask() throws Exception {
+        ManuscriptFixture fixture = seedUnderReviewManuscriptWithReviewer();
+        String reviewerToken = loginAndExtractToken("reviewer_demo", "demo123");
+
+        mockMvc.perform(post("/api/review-assignments/{assignmentId}/agent-assist", fixture.assignmentId())
+                        .header("Authorization", "Bearer " + reviewerToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "force": false,
+                                  "taskType": "DECISION_CONFLICT_ANALYSIS"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.taskType").value("REVIEW_ASSIST_ANALYSIS"))
+                .andExpect(jsonPath("$.taskStatus").value("PENDING"));
+
+        Assertions.assertEquals(1, agentClient.createRequests.get());
+        Assertions.assertEquals("REVIEW_ASSIST_ANALYSIS", agentClient.lastCreateRequest.taskType());
+        Assertions.assertEquals(fixture.roundId(), agentClient.lastCreateRequest.roundId());
+        Object reviewerAssistObject = agentClient.lastCreateRequest.requestPayload().get("reviewerAssist");
+        Assertions.assertInstanceOf(Map.class, reviewerAssistObject);
+        Map<?, ?> reviewerAssist = (Map<?, ?>) reviewerAssistObject;
+        Assertions.assertEquals(fixture.assignmentId(), ((Number) reviewerAssist.get("assignmentId")).longValue());
+        Assertions.assertEquals("checklist_only", reviewerAssist.get("allowedOutput"));
+        Assertions.assertFalse(agentClient.lastCreateRequest.requestPayload().containsKey("reviewReports"));
+    }
+
+    @Test
+    void submittedAssignmentCanReadAssistButCannotForceNewTask() throws Exception {
+        ManuscriptFixture fixture = seedUnderReviewManuscriptWithReviewer("SUBMITTED");
+        long taskId = seedAgentTask(fixture, "external-submitted-assist", "REVIEW_ASSIST_ANALYSIS", "SUCCESS", Instant.now());
+        seedAgentResult(taskId, fixture, "REVIEW_ASSIST_ANALYSIS");
+        String reviewerToken = loginAndExtractToken("reviewer_demo", "demo123");
+
+        mockMvc.perform(get("/api/review-assignments/{assignmentId}/agent-assist", fixture.assignmentId())
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.task.taskType").value("REVIEW_ASSIST_ANALYSIS"))
+                .andExpect(jsonPath("$.results[0].redactedResult.summary").value("redacted summary"))
+                .andExpect(jsonPath("$.results[0].rawResult").doesNotExist());
+
+        mockMvc.perform(post("/api/review-assignments/{assignmentId}/agent-assist", fixture.assignmentId())
+                        .header("Authorization", "Bearer " + reviewerToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "force": true
+                                }
+                                """))
+                .andExpect(status().isConflict());
+
+        Assertions.assertEquals(0, agentClient.createRequests.get());
+    }
+
+    @Test
     void externalTaskIdWriteIsIdempotentForRepeatedRetry() throws Exception {
         ManuscriptFixture fixture = seedSubmittedManuscript(true);
         String chairToken = loginAndExtractToken("chair_demo", "demo123");
@@ -310,10 +366,14 @@ class AgentIntegrationServiceTest {
                 manuscriptId,
                 versionId
         );
-        return new ManuscriptFixture(manuscriptId, versionId, null);
+        return new ManuscriptFixture(manuscriptId, versionId, null, null);
     }
 
     private ManuscriptFixture seedUnderReviewManuscriptWithReviewer() {
+        return seedUnderReviewManuscriptWithReviewer("ACCEPTED");
+    }
+
+    private ManuscriptFixture seedUnderReviewManuscriptWithReviewer(String assignmentStatus) {
         ManuscriptFixture fixture = seedSubmittedManuscript(true);
         long roundId = jdbcTemplate.queryForObject("SELECT SEQ_REVIEW_ROUND.NEXTVAL FROM DUAL", Long.class);
         long assignmentId = jdbcTemplate.queryForObject("SELECT SEQ_REVIEW_ASSIGNMENT.NEXTVAL FROM DUAL", Long.class);
@@ -332,16 +392,17 @@ class AgentIntegrationServiceTest {
         jdbcTemplate.update(
                 """
                 INSERT INTO REVIEW_ASSIGNMENT (ASSIGNMENT_ID, ROUND_ID, MANUSCRIPT_ID, VERSION_ID, REVIEWER_ID, TASK_STATUS, ASSIGNED_AT, DEADLINE_AT)
-                VALUES (?, ?, ?, ?, 1002, 'ACCEPTED', ?, ?)
+                VALUES (?, ?, ?, ?, 1002, ?, ?, ?)
                 """,
                 assignmentId,
                 roundId,
                 fixture.manuscriptId(),
                 fixture.versionId(),
+                assignmentStatus,
                 Timestamp.from(Instant.now()),
                 Timestamp.from(Instant.now().plus(7, ChronoUnit.DAYS))
         );
-        return new ManuscriptFixture(fixture.manuscriptId(), fixture.versionId(), roundId);
+        return new ManuscriptFixture(fixture.manuscriptId(), fixture.versionId(), roundId, assignmentId);
     }
 
     private ManuscriptFixture seedUnderReviewManuscriptWithSubmittedReports() {
@@ -419,7 +480,7 @@ class AgentIntegrationServiceTest {
         scheduler.getClass().getMethod("pollOnce").invoke(scheduler);
     }
 
-    private record ManuscriptFixture(long manuscriptId, long versionId, Long roundId) {
+    private record ManuscriptFixture(long manuscriptId, long versionId, Long roundId, Long assignmentId) {
     }
 
     @TestConfiguration

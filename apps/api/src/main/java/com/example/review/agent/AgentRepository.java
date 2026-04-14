@@ -133,6 +133,30 @@ public class AgentRepository {
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
     }
 
+    public Optional<AgentTaskRow> findLatestTask(long manuscriptId, long versionId, Long roundId, String taskType) {
+        if (roundId == null) {
+            return findReusableTaskWithoutRound(manuscriptId, versionId, taskType);
+        }
+        List<AgentTaskRow> rows = jdbcTemplate.query(
+                """
+                SELECT TASK_ID, MANUSCRIPT_ID, VERSION_ID, ROUND_ID, TASK_TYPE, TASK_STATUS, EXTERNAL_TASK_ID, CREATED_AT
+                FROM AGENT_ANALYSIS_TASK
+                WHERE MANUSCRIPT_ID = ?
+                  AND VERSION_ID = ?
+                  AND ROUND_ID = ?
+                  AND TASK_TYPE = ?
+                ORDER BY TASK_ID DESC
+                FETCH FIRST 1 ROWS ONLY
+                """,
+                (rs, rowNum) -> mapTaskRow(rs),
+                manuscriptId,
+                versionId,
+                roundId,
+                taskType
+        );
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
+    }
+
     public AgentTaskRow attachExternalTaskId(long taskId, String externalTaskId, String status, String step) {
         Optional<AgentTaskRow> existing = findByExternalTaskId(externalTaskId);
         if (existing.isPresent()) {
@@ -174,6 +198,7 @@ public class AgentRepository {
                 WHERE TASK_STATUS IN ('PENDING', 'PROCESSING')
                   AND EXTERNAL_TASK_ID IS NOT NULL
                 ORDER BY TASK_ID
+                FETCH FIRST 25 ROWS ONLY
                 """,
                 (rs, rowNum) -> mapTaskRow(rs)
         );
@@ -232,6 +257,24 @@ public class AgentRepository {
                 ),
                 manuscriptId,
                 versionId
+        );
+    }
+
+    public List<AgentResultResponse> listResultsForTask(long taskId, boolean includeRaw) {
+        return jdbcTemplate.query(
+                """
+                SELECT RESULT_ID, RESULT_TYPE, RAW_RESULT_JSON, REDACTED_RESULT_JSON
+                FROM AGENT_ANALYSIS_RESULT
+                WHERE TASK_ID = ?
+                ORDER BY RESULT_ID
+                """,
+                (rs, rowNum) -> new AgentResultResponse(
+                        rs.getLong("RESULT_ID"),
+                        rs.getString("RESULT_TYPE"),
+                        includeRaw ? fromJson(rs.getString("RAW_RESULT_JSON")) : null,
+                        fromJson(rs.getString("REDACTED_RESULT_JSON"))
+                ),
+                taskId
         );
     }
 
@@ -294,6 +337,44 @@ public class AgentRepository {
                 versionId
         );
         return count != null && count > 0;
+    }
+
+    public Optional<ReviewerAssistAssignmentData> findReviewerAssistAssignment(long assignmentId) {
+        List<ReviewerAssistAssignmentData> rows = jdbcTemplate.query(
+                """
+                SELECT A.ASSIGNMENT_ID,
+                       A.ROUND_ID,
+                       A.MANUSCRIPT_ID,
+                       A.VERSION_ID,
+                       A.REVIEWER_ID,
+                       A.TASK_STATUS,
+                       V.TITLE,
+                       V.ABSTRACT,
+                       V.KEYWORDS,
+                       V.PDF_FILE,
+                       V.PDF_FILE_NAME,
+                       V.PDF_FILE_SIZE
+                FROM REVIEW_ASSIGNMENT A
+                JOIN MANUSCRIPT_VERSION V ON V.VERSION_ID = A.VERSION_ID
+                WHERE A.ASSIGNMENT_ID = ?
+                """,
+                (rs, rowNum) -> new ReviewerAssistAssignmentData(
+                        rs.getLong("ASSIGNMENT_ID"),
+                        rs.getLong("ROUND_ID"),
+                        rs.getLong("MANUSCRIPT_ID"),
+                        rs.getLong("VERSION_ID"),
+                        rs.getLong("REVIEWER_ID"),
+                        rs.getString("TASK_STATUS"),
+                        rs.getString("TITLE"),
+                        rs.getString("ABSTRACT"),
+                        rs.getString("KEYWORDS"),
+                        rs.getBytes("PDF_FILE"),
+                        rs.getString("PDF_FILE_NAME"),
+                        rs.getObject("PDF_FILE_SIZE", Long.class)
+                ),
+                assignmentId
+        );
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
     }
 
     public Optional<RoundData> findRound(long roundId) {
@@ -399,4 +480,32 @@ record AgentTaskRow(
 }
 
 record RoundData(long roundId, long manuscriptId, long versionId) {
+}
+
+record ReviewerAssistAssignmentData(
+        long assignmentId,
+        long roundId,
+        long manuscriptId,
+        long versionId,
+        long reviewerId,
+        String taskStatus,
+        String title,
+        String abstractText,
+        String keywords,
+        byte[] pdfFile,
+        String pdfFileName,
+        Long pdfFileSize
+) {
+    AgentDtos.AgentVersionData toVersionData() {
+        return new AgentDtos.AgentVersionData(
+                manuscriptId,
+                versionId,
+                title,
+                abstractText,
+                keywords,
+                pdfFile,
+                pdfFileName,
+                pdfFileSize
+        );
+    }
 }

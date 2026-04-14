@@ -5,6 +5,7 @@ import com.example.review.agent.AgentDtos.AgentServiceTaskStatus;
 import java.time.Duration;
 import java.time.Instant;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component("agentPollingScheduler")
@@ -21,6 +22,14 @@ public class AgentPollingScheduler {
         this.agentRepository = agentRepository;
         this.agentServiceClient = agentServiceClient;
         this.pollingTimeout = Duration.ofMinutes(pollingTimeoutMinutes);
+    }
+
+    @Scheduled(
+            fixedDelayString = "${review.agent.polling-delay-ms:5000}",
+            initialDelayString = "${review.agent.polling-delay-ms:5000}"
+    )
+    public void pollScheduled() {
+        pollOnce();
     }
 
     public void pollOnce() {

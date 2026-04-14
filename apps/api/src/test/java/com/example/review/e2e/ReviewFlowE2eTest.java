@@ -159,18 +159,31 @@ class ReviewFlowE2eTest {
 
         mockMvc.perform(get("/api/manuscripts/{id}/versions/{versionId}/pdf", manuscript.manuscriptId(), manuscript.versionId())
                         .header("Authorization", "Bearer " + reviewerToken))
-                .andExpect(status().isOk())
-                .andExpect(content().bytes(PDF_BYTES));
+                .andExpect(status().isForbidden());
 
-        String reviewAssistExternalId = createAgentTask(chairToken, manuscript, "REVIEW_ASSIST_ANALYSIS");
+        mockMvc.perform(get("/api/review-assignments/{assignmentId}/paper", assignmentId)
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.assignmentId").value(assignmentId))
+                .andExpect(jsonPath("$.manuscriptId").value(manuscript.manuscriptId()))
+                .andExpect(jsonPath("$.versionId").value(manuscript.versionId()))
+                .andExpect(jsonPath("$.downloadAllowed").value(false));
+
+        mockMvc.perform(get("/api/review-assignments/{assignmentId}/paper/pages/1", assignmentId)
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("image/png"));
+
+        String reviewAssistExternalId = createReviewerAssist(reviewerToken, assignmentId);
         agentClient.markCompleted(reviewAssistExternalId);
         pollOnce();
 
-        mockMvc.perform(get("/api/manuscripts/{id}/versions/{versionId}/agent-results", manuscript.manuscriptId(), manuscript.versionId())
+        mockMvc.perform(get("/api/review-assignments/{assignmentId}/agent-assist", assignmentId)
                         .header("Authorization", "Bearer " + reviewerToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].redactedResult.summary").value("redacted REVIEW_ASSIST_ANALYSIS summary"))
-                .andExpect(jsonPath("$[0].rawResult").doesNotExist());
+                .andExpect(jsonPath("$.task.taskType").value("REVIEW_ASSIST_ANALYSIS"))
+                .andExpect(jsonPath("$.results[0].redactedResult.summary").value("redacted REVIEW_ASSIST_ANALYSIS summary"))
+                .andExpect(jsonPath("$.results[0].rawResult").doesNotExist());
 
         submitReviewReport(reviewerToken, assignmentId);
 
@@ -296,6 +309,18 @@ class ReviewFlowE2eTest {
                                 }
                                 """.formatted(taskType)))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.externalTaskId", not(blankOrNullString())))
+                .andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString()).path("externalTaskId").asText();
+    }
+
+    private String createReviewerAssist(String reviewerToken, long assignmentId) throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/review-assignments/{assignmentId}/agent-assist", assignmentId)
+                        .header("Authorization", "Bearer " + reviewerToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.taskType").value("REVIEW_ASSIST_ANALYSIS"))
                 .andExpect(jsonPath("$.externalTaskId", not(blankOrNullString())))
                 .andReturn();
         return objectMapper.readTree(result.getResponse().getContentAsString()).path("externalTaskId").asText();

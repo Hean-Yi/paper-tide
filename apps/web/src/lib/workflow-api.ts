@@ -114,6 +114,33 @@ export interface AgentTask {
   resultSummary: string | null;
 }
 
+export interface AgentTaskSummary {
+  taskId: number;
+  externalTaskId: string | null;
+  taskType: string;
+  taskStatus: string;
+  step: string | null;
+}
+
+export interface AssignmentPaper {
+  assignmentId: number;
+  manuscriptId: number;
+  versionId: number;
+  title: string;
+  pageCount: number;
+  pdfFileName: string | null;
+  downloadAllowed: boolean;
+}
+
+export interface ReviewerAssistState {
+  task: AgentTaskSummary | null;
+  results: Array<{
+    resultId: number;
+    resultType: string;
+    redactedResult: Record<string, unknown> | null;
+  }>;
+}
+
 export interface ReviewReportForm {
   noveltyScore: number;
   methodScore: number;
@@ -180,6 +207,14 @@ export function getReviewerAssignment(assignmentId: number) {
   return apiRequest<ReviewerAssignment>(`/review-assignments/${assignmentId}`);
 }
 
+export function getAssignmentPaper(assignmentId: number) {
+  return apiRequest<AssignmentPaper>(`/review-assignments/${assignmentId}/paper`);
+}
+
+export function getAssignmentPaperPage(assignmentId: number, pageNo: number) {
+  return apiBlob(`/review-assignments/${assignmentId}/paper/pages/${pageNo}`);
+}
+
 export function acceptAssignment(assignmentId: number) {
   return apiRequest<ReviewerAssignment>(`/review-assignments/${assignmentId}/accept`, { method: "POST" });
 }
@@ -193,6 +228,17 @@ export function declineAssignment(assignmentId: number, reason: string, conflict
 
 export function submitReviewReport(assignmentId: number, payload: ReviewReportForm) {
   return apiRequest(`/review-assignments/${assignmentId}/review-report`, { method: "POST", json: payload });
+}
+
+export function runReviewerAssist(assignmentId: number, force = false) {
+  return apiRequest<AgentTaskSummary>(`/review-assignments/${assignmentId}/agent-assist`, {
+    method: "POST",
+    json: { force }
+  });
+}
+
+export function getReviewerAssist(assignmentId: number) {
+  return apiRequest<ReviewerAssistState>(`/review-assignments/${assignmentId}/agent-assist`);
 }
 
 export function listScreeningQueue() {

@@ -6,6 +6,7 @@ import com.example.review.agent.AgentDtos.AgentServiceTaskSummary;
 import com.example.review.agent.AgentDtos.AgentTaskListResponse;
 import com.example.review.agent.AgentDtos.AgentTaskResponse;
 import com.example.review.agent.AgentDtos.AgentVersionData;
+import com.example.review.agent.AgentDtos.ReviewerAssistResponse;
 import com.example.review.auth.CurrentUserPrincipal;
 import com.example.review.auth.RoleGuard;
 import java.util.HashMap;
@@ -17,6 +18,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class AgentIntegrationService {
+    private static final String REVIEW_ASSIST_ANALYSIS = "REVIEW_ASSIST_ANALYSIS";
+    private static final List<String> REVIEWER_ASSIST_CREATE_STATUSES = List.of("ACCEPTED", "IN_REVIEW", "OVERDUE");
+    private static final List<String> REVIEWER_ASSIST_QUERY_DENIED_STATUSES = List.of("DECLINED", "REASSIGNED", "CANCELLED");
+
     private final AgentRepository agentRepository;
     private final AgentServiceClient agentServiceClient;
 
@@ -56,6 +61,40 @@ public class AgentIntegrationService {
             return agentRepository.listResults(manuscriptId, versionId, false);
         }
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not allowed to view agent results");
+    }
+
+    public AgentTaskResponse createReviewerAssist(CurrentUserPrincipal principal, long assignmentId, boolean force) {
+        ReviewerAssistAssignmentData assignment = loadReviewerAssistAssignment(principal, assignmentId);
+        if (!REVIEWER_ASSIST_CREATE_STATUSES.contains(assignment.taskStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Assignment state does not allow reviewer assist creation");
+        }
+        AgentVersionData version = assignment.toVersionData();
+        if (version.pdfFile() == null || version.pdfFile().length == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A PDF is required before agent analysis");
+        }
+        Map<String, Object> payload = basePayload(version);
+        payload.put("reviewerAssist", Map.of(
+                "assignmentId", assignment.assignmentId(),
+                "roundId", assignment.roundId(),
+                "allowedOutput", "checklist_only",
+                "forbiddenOutput", List.of("recommendation", "score", "fullReviewText")
+        ));
+        return createAndSubmitTask(version, assignment.roundId(), REVIEW_ASSIST_ANALYSIS, payload, force);
+    }
+
+    public ReviewerAssistResponse getReviewerAssist(CurrentUserPrincipal principal, long assignmentId) {
+        ReviewerAssistAssignmentData assignment = loadReviewerAssistAssignment(principal, assignmentId);
+        if (REVIEWER_ASSIST_QUERY_DENIED_STATUSES.contains(assignment.taskStatus())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Assignment state does not allow reviewer assist access");
+        }
+        return agentRepository.findLatestTask(
+                        assignment.manuscriptId(),
+                        assignment.versionId(),
+                        assignment.roundId(),
+                        REVIEW_ASSIST_ANALYSIS
+                )
+                .map(task -> new ReviewerAssistResponse(task.toResponse(), agentRepository.listResultsForTask(task.taskId(), false)))
+                .orElseGet(() -> new ReviewerAssistResponse(null, List.of()));
     }
 
     public List<AgentTaskListResponse> listTasks(CurrentUserPrincipal principal, String status, String taskType) {
@@ -122,6 +161,16 @@ public class AgentIntegrationService {
         payload.put("abstract", version.abstractText());
         payload.put("keywords", version.keywordList());
         return payload;
+    }
+
+    private ReviewerAssistAssignmentData loadReviewerAssistAssignment(CurrentUserPrincipal principal, long assignmentId) {
+        RoleGuard.requireRole(principal, "REVIEWER");
+        ReviewerAssistAssignmentData assignment = agentRepository.findReviewerAssistAssignment(assignmentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Review assignment not found"));
+        if (assignment.reviewerId() != principal.userId()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not allowed to access reviewer assist");
+        }
+        return assignment;
     }
 
     private String normalizeStatus(String status) {

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, conint
+from pydantic import BaseModel, ConfigDict, Field, conint
 
 Score = conint(strict=True, ge=1, le=5)
 
@@ -26,16 +26,20 @@ class ScreeningAnalysisResult(BaseModel):
 
 
 class ReviewAssistResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     taskType: Literal["REVIEW_ASSIST_ANALYSIS"]
     manuscriptId: str
     versionId: str
     status: str
-    summary: str
-    novelty: ScoredAnalysis
-    methodology: ScoredAnalysis
-    writing: ScoredAnalysis
-    risks: list[str]
-    finalSuggestion: str
+    paperSummary: str
+    claimedContributions: list[str]
+    methodChecklist: list[str]
+    experimentChecklist: list[str]
+    evidenceToVerify: list[str]
+    potentialWeaknesses: list[str]
+    questionsForReviewer: list[str]
+    blindReviewRisks: list[str]
     confidence: float = Field(ge=0, le=1)
 
 

@@ -3,6 +3,8 @@ import type { FormInstance, FormRules } from "element-plus";
 import { ElMessage } from "element-plus";
 import { onMounted, reactive, ref } from "vue";
 
+import { useApiError } from "../../composables/useApiError";
+import { useAsyncAction } from "../../composables/useAsyncAction";
 import {
   assignReviewer,
   decide,
@@ -18,6 +20,8 @@ import { formatDateTime, printableTrace, statusTagType, workflowLabel } from "..
 const loading = ref(false);
 const rows = ref<DecisionWorkbenchItem[]>([]);
 const agentResults = ref<Record<number, AgentResult[]>>({});
+const actions = useAsyncAction();
+const { showApiError } = useApiError();
 const assignDialogOpen = ref(false);
 const decisionDialogOpen = ref(false);
 const assignFormRef = ref<FormInstance>();
@@ -50,6 +54,8 @@ async function loadWorkbench() {
       await listAgentResults(row.manuscriptId, row.versionId)
     ] as const));
     agentResults.value = Object.fromEntries(entries);
+  } catch (error) {
+    showApiError(error, "Decision workbench could not be loaded.");
   } finally {
     loading.value = false;
   }
@@ -69,16 +75,28 @@ async function submitAssign() {
   if (!valid) {
     return;
   }
-  await assignReviewer(assignForm.roundId, assignForm.reviewerId, assignForm.deadlineAt);
-  assignDialogOpen.value = false;
-  ElMessage.success("Reviewer assigned.");
-  await loadWorkbench();
+  await actions.run("assign-reviewer", async () => {
+    try {
+      await assignReviewer(assignForm.roundId, assignForm.reviewerId, assignForm.deadlineAt);
+      assignDialogOpen.value = false;
+      ElMessage.success("Reviewer assigned.");
+      await loadWorkbench();
+    } catch (error) {
+      showApiError(error, "Reviewer could not be assigned.");
+    }
+  });
 }
 
 async function overdue(assignmentId: number) {
-  await markOverdue(assignmentId);
-  ElMessage.success("Assignment marked overdue.");
-  await loadWorkbench();
+  await actions.run(`overdue:${assignmentId}`, async () => {
+    try {
+      await markOverdue(assignmentId);
+      ElMessage.success("Assignment marked overdue.");
+      await loadWorkbench();
+    } catch (error) {
+      showApiError(error, "Assignment could not be marked overdue.");
+    }
+  });
 }
 
 async function conflict(row: DecisionWorkbenchItem) {
@@ -102,10 +120,16 @@ async function submitDecision() {
   if (!valid) {
     return;
   }
-  await decide(decisionForm);
-  decisionDialogOpen.value = false;
-  ElMessage.success("Decision submitted.");
-  await loadWorkbench();
+  await actions.run("submit-decision", async () => {
+    try {
+      await decide(decisionForm);
+      decisionDialogOpen.value = false;
+      ElMessage.success("Decision submitted.");
+      await loadWorkbench();
+    } catch (error) {
+      showApiError(error, "Decision could not be submitted.");
+    }
+  });
 }
 
 </script>
@@ -118,7 +142,7 @@ async function submitDecision() {
         <h1>Decision workbench</h1>
         <p class="body">Review round status, conflict checks, and agent evidence before a decision.</p>
       </div>
-      <el-button @click="loadWorkbench">Refresh</el-button>
+      <el-button :loading="loading" @click="loadWorkbench">Refresh</el-button>
     </div>
 
     <el-table v-loading="loading" :data="rows" row-key="roundId" empty-text="No active review rounds.">
@@ -147,7 +171,13 @@ async function submitDecision() {
               </el-table-column>
               <el-table-column label="Actions" width="180">
                 <template #default="{ row: assignment }">
-                  <el-button size="small" @click="overdue(assignment.assignmentId)">Mark overdue</el-button>
+                  <el-button
+                    size="small"
+                    :loading="actions.isPending(`overdue:${assignment.assignmentId}`)"
+                    @click="overdue(assignment.assignmentId)"
+                  >
+                    Mark overdue
+                  </el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -248,8 +278,8 @@ async function submitDecision() {
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="assignDialogOpen = false">Cancel</el-button>
-        <el-button type="primary" @click="submitAssign">Assign</el-button>
+        <el-button :disabled="actions.isPending('assign-reviewer')" @click="assignDialogOpen = false">Cancel</el-button>
+        <el-button type="primary" :loading="actions.isPending('assign-reviewer')" @click="submitAssign">Assign</el-button>
       </template>
     </el-dialog>
 
@@ -268,8 +298,8 @@ async function submitDecision() {
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="decisionDialogOpen = false">Cancel</el-button>
-        <el-button type="primary" @click="submitDecision">Submit decision</el-button>
+        <el-button :disabled="actions.isPending('submit-decision')" @click="decisionDialogOpen = false">Cancel</el-button>
+        <el-button type="primary" :loading="actions.isPending('submit-decision')" @click="submitDecision">Submit decision</el-button>
       </template>
     </el-dialog>
   </section>

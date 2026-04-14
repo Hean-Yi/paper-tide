@@ -4,6 +4,8 @@ import { ElMessage } from "element-plus";
 import { reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 
+import { useApiError } from "../../composables/useApiError";
+import { useAsyncAction } from "../../composables/useAsyncAction";
 import {
   createManuscript,
   submitVersion,
@@ -15,6 +17,8 @@ import { statusTagType, workflowLabel } from "../../lib/workflow-format";
 
 const router = useRouter();
 const submitting = ref(false);
+const actions = useAsyncAction();
+const { showApiError } = useApiError();
 const created = ref<ManuscriptSummary | null>(null);
 const selectedPdf = ref<File | null>(null);
 const draftFormRef = ref<FormInstance>();
@@ -88,6 +92,8 @@ async function createDraft() {
   try {
     created.value = await createManuscript(form);
     ElMessage.success("Manuscript created.");
+  } catch (error) {
+    showApiError(error, "Manuscript could not be created.");
   } finally {
     submitting.value = false;
   }
@@ -97,17 +103,29 @@ async function uploadSelectedPdf() {
   if (!created.value || !selectedPdf.value) {
     return;
   }
-  await uploadPdf(created.value.manuscriptId, created.value.currentVersionId, selectedPdf.value);
-  ElMessage.success("PDF uploaded.");
+  await actions.run("upload-pdf", async () => {
+    try {
+      await uploadPdf(created.value!.manuscriptId, created.value!.currentVersionId, selectedPdf.value!);
+      ElMessage.success("PDF uploaded.");
+    } catch (error) {
+      showApiError(error, "PDF could not be uploaded.");
+    }
+  });
 }
 
 async function submitCurrentVersion() {
   if (!created.value) {
     return;
   }
-  await submitVersion(created.value.manuscriptId, created.value.currentVersionId);
-  ElMessage.success("Manuscript submitted.");
-  await router.push("/author/manuscripts");
+  await actions.run("submit-version", async () => {
+    try {
+      await submitVersion(created.value!.manuscriptId, created.value!.currentVersionId);
+      ElMessage.success("Manuscript submitted.");
+      await router.push("/author/manuscripts");
+    } catch (error) {
+      showApiError(error, "Manuscript could not be submitted.");
+    }
+  });
 }
 </script>
 
@@ -177,8 +195,8 @@ async function submitCurrentVersion() {
       <el-upload :auto-upload="false" :limit="1" :on-change="selectPdf">
         <el-button>Select PDF</el-button>
       </el-upload>
-      <el-button :disabled="!selectedPdf" @click="uploadSelectedPdf">Upload PDF</el-button>
-      <el-button type="primary" @click="submitCurrentVersion">Submit version</el-button>
+      <el-button :disabled="!selectedPdf" :loading="actions.isPending('upload-pdf')" @click="uploadSelectedPdf">Upload PDF</el-button>
+      <el-button type="primary" :loading="actions.isPending('submit-version')" @click="submitCurrentVersion">Submit version</el-button>
     </div>
   </section>
 </template>

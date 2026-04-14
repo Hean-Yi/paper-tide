@@ -12,10 +12,10 @@
 
 ## P1（推荐尽快修复）
 
-- [ ] 在前端 Agent 面板中区分 `401/403/409/502/503` 等错误，并展示可操作文案，例如“Agent service key 未配置”“任务状态不允许重新触发”“Agent 服务暂不可用”。
+- [ ] 在前端 Agent 面板中区分 `401/403/409/502/503` 等错误，并展示可操作文案，例如“Agent service key 未配置”“任务状态不允许重新触发”“Agent 服务暂不可用”；非 Agent 的 author/chair 操作已接入统一 API 错误提示。
 - [ ] 为 Agent task 创建链路增加结构化日志和可观测性：记录本地 taskId、externalTaskId、taskType、assignmentId、Agent HTTP 状态和失败摘要，便于排查 reviewer assist 卡住或失败。
 - [ ] 扩展 `scripts/test-all.sh` 的 Agent 验证范围，至少包含 `test_tasks_api.py`、`test_multipart_tasks_api.py` 和 `test_workflow_schemas.py`，不要只跑 health 子集。
-- [ ] 异步按钮补齐 loading 状态，尤其是 Agent 触发、筛稿、冲突分析和提交类操作。
+- [ ] Agent 触发和冲突分析类操作补齐 loading 状态；非 Agent 的筛稿、分配、逾期标记、决策、创建轮次、桌面拒稿、PDF 上传和最终提交已完成。
 - [ ] 避免 Decision Workbench 逐 round 拉取 Agent 结果导致 N+1，改为后端批量接口。
 - [ ] Repository 内重复 RowMapper 提取为常量。
 - [ ] 将运行环境变量集中成 `.env.example` 或 `docs/ENVIRONMENT.md`，覆盖 Oracle、JWT、API/Agent 内部 key、OpenRouter、端口和前端代理配置。
@@ -26,7 +26,7 @@
 - [ ] 为 Agent 任务建立更明确的数据模型：区分 version-scoped、round-scoped、assignment-scoped 任务，减少通过 payload 隐式表达作用域。
 - [ ] 增加后端统一错误处理层，输出稳定 JSON 错误结构（status、code、message、traceId），让前端不依赖 `statusText`。
 - [ ] 抽取前端通用 `useDialog<T>(submitFn)` composable。
-- [ ] 抽取前端通用 `useAsyncAction` / `useApiError` composable，统一 loading、错误展示、重试和刷新行为。
+- [ ] 继续扩展前端通用 `useAsyncAction` / `useApiError` 的使用范围到 Agent 面板、冲突分析和后续新页面；非 Agent author/chair 操作已完成基础接入。
 - [ ] Decision Workbench 拆分为列表页 + 详情页。
 - [ ] Agent 工作流增加轮次上限（Screening 2、Review Assist 4）。
 - [ ] Agent polling 增加更细的重试/退避策略和失败分类，在不引入完整队列前先避免瞬时 Agent 503 直接永久失败。

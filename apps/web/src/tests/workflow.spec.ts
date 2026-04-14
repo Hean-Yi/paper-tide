@@ -1,10 +1,12 @@
 import { flushPromises, mount } from "@vue/test-utils";
-import ElementPlus, { ElMessageBox } from "element-plus";
+import ElementPlus, { ElMessage, ElMessageBox } from "element-plus";
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRouter, createWebHistory } from "vue-router";
 
+import { ApiError } from "../lib/api";
 import { formatDateTime, statusTagType, workflowLabel } from "../lib/workflow-format";
+import { apiErrorMessage } from "../composables/useApiError";
 import { initializeAuth, resetAuthForTests } from "../stores/auth";
 import ManuscriptListView from "../views/author/ManuscriptListView.vue";
 import SubmitManuscriptView from "../views/author/SubmitManuscriptView.vue";
@@ -33,6 +35,15 @@ function jsonResponse(body: unknown) {
     ok: true,
     status: 200,
     json: () => Promise.resolve(body)
+  };
+}
+
+function errorResponse(status: number, message: string) {
+  return {
+    ok: false,
+    status,
+    statusText: message,
+    json: () => Promise.resolve({ message })
   };
 }
 
@@ -140,6 +151,81 @@ describe("workflow screens", () => {
     expect(document.body.querySelector(".el-date-editor")).not.toBeNull();
   });
 
+  it("shows scoped loading while starting screening", async () => {
+    installAuth(["CHAIR"]);
+    let resolveStart: ((value: ReturnType<typeof jsonResponse>) => void) | undefined;
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/chair/screening-queue") {
+        return Promise.resolve(jsonResponse([
+          {
+            manuscriptId: 11,
+            versionId: 21,
+            versionNo: 1,
+            title: "Workflow Seed",
+            currentStatus: "SUBMITTED",
+            currentRoundNo: 0,
+            blindMode: "DOUBLE_BLIND",
+            submittedAt: "2026-04-13T05:00:00Z",
+            pdfFileName: "workflow.pdf",
+            pdfFileSize: 23
+          }
+        ]));
+      }
+      if (path === "/manuscripts/11/versions/21/start-screening" && init?.method === "POST") {
+        return new Promise((resolve) => {
+          resolveStart = resolve;
+        });
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(ScreeningQueueView);
+    await buttonByText(wrapper, "Start screening").trigger("click");
+    await flushPromises();
+
+    expect(buttonByText(wrapper, "Start screening").classes()).toContain("is-loading");
+    expect(buttonByText(wrapper, "Run agent").classes()).not.toContain("is-loading");
+
+    resolveStart?.(jsonResponse({}));
+  });
+
+  it("shows a clear non-agent API error when starting screening fails", async () => {
+    installAuth(["CHAIR"]);
+    const message = vi.spyOn(ElMessage, "error").mockImplementation(() => undefined as never);
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/chair/screening-queue") {
+        return Promise.resolve(jsonResponse([
+          {
+            manuscriptId: 11,
+            versionId: 21,
+            versionNo: 1,
+            title: "Workflow Seed",
+            currentStatus: "SUBMITTED",
+            currentRoundNo: 0,
+            blindMode: "DOUBLE_BLIND",
+            submittedAt: "2026-04-13T05:00:00Z",
+            pdfFileName: "workflow.pdf",
+            pdfFileSize: 23
+          }
+        ]));
+      }
+      if (path === "/manuscripts/11/versions/21/start-screening" && init?.method === "POST") {
+        return Promise.resolve(errorResponse(409, "Manuscript is not ready for screening"));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(ScreeningQueueView);
+    await clickButton(wrapper, "Start screening");
+
+    expect(message).toHaveBeenCalledWith("Manuscript is not ready for screening");
+    expect(buttonByText(wrapper, "Start screening").classes()).not.toContain("is-loading");
+  });
+
   it("confirms desk reject before submitting the decision", async () => {
     installAuth(["CHAIR"]);
     const confirm = vi.spyOn(ElMessageBox, "confirm").mockResolvedValue("confirm" as never);
@@ -165,6 +251,45 @@ describe("workflow screens", () => {
     await clickBodyButton("Desk reject");
 
     expect(confirm).toHaveBeenCalled();
+  });
+
+  it("shows loading on chair dialog submit actions while requests are pending", async () => {
+    installAuth(["CHAIR"]);
+    let resolveRound: ((value: unknown) => void) | undefined;
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/chair/screening-queue") {
+        return Promise.resolve(jsonResponse([
+          {
+            manuscriptId: 11,
+            versionId: 21,
+            versionNo: 1,
+            title: "Workflow Seed",
+            currentStatus: "UNDER_SCREENING",
+            currentRoundNo: 1,
+            blindMode: "DOUBLE_BLIND",
+            submittedAt: "2026-04-13T05:00:00Z",
+            pdfFileName: "workflow.pdf",
+            pdfFileSize: 23
+          }
+        ]));
+      }
+      if (path === "/review-rounds" && init?.method === "POST") {
+        return new Promise((resolve) => {
+          resolveRound = resolve;
+        });
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(ScreeningQueueView);
+    await clickButton(wrapper, "Create round");
+    await clickBodyButton("Create round");
+
+    expect(bodyButtonByText("Create round").classList.contains("is-loading")).toBe(true);
+
+    resolveRound?.(jsonResponse({}));
   });
 
   it("confirms reviewer decline before submitting the action", async () => {
@@ -427,6 +552,26 @@ describe("workflow screens", () => {
     expect(reviewView).not.toContain("reviewValidation");
   });
 
+  it("keeps non-agent mutation submit buttons wired to loading state", () => {
+    const submitView = readFileSync("src/views/author/SubmitManuscriptView.vue", "utf8");
+    const screeningView = readFileSync("src/views/chair/ScreeningQueueView.vue", "utf8");
+    const decisionView = readFileSync("src/views/chair/DecisionWorkbenchView.vue", "utf8");
+
+    expect(submitView).toContain(":loading=\"actions.isPending('upload-pdf')\"");
+    expect(submitView).toContain(":loading=\"actions.isPending('submit-version')\"");
+    expect(screeningView).toContain(":loading=\"actions.isPending('create-round')\"");
+    expect(screeningView).toContain(":loading=\"actions.isPending('desk-reject')\"");
+    expect(decisionView).toContain(":loading=\"actions.isPending('assign-reviewer')\"");
+    expect(decisionView).toContain(":loading=\"actions.isPending('submit-decision')\"");
+  });
+
+  it("formats common API errors for user-facing messages", () => {
+    expect(apiErrorMessage(new ApiError(401, "Unauthorized"), "Fallback")).toBe("Your session has expired. Sign in again.");
+    expect(apiErrorMessage(new ApiError(403, "Forbidden"), "Fallback")).toBe("You do not have permission to perform this action.");
+    expect(apiErrorMessage(new ApiError(503, "Agent service returned HTTP 503"), "Fallback")).toBe("The service is temporarily unavailable. Try again later.");
+    expect(apiErrorMessage(new Error("Network failed"), "Fallback")).toBe("Network failed");
+  });
+
   it("formats workflow labels, dates, and status tag types", () => {
     expect(workflowLabel("UNDER_SCREENING")).toBe("Under screening");
     expect(workflowLabel("DECISION_CONFLICT_ANALYSIS")).toBe("Decision conflict analysis");
@@ -525,21 +670,79 @@ describe("workflow screens", () => {
     await flushPromises();
     expect(wrapper.text()).toContain("Chair raw signal");
   });
+
+  it("shows scoped loading while chair marks an assignment overdue", async () => {
+    installAuth(["CHAIR"]);
+    let resolveOverdue: ((value: ReturnType<typeof jsonResponse>) => void) | undefined;
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/chair/decision-workbench") {
+        return Promise.resolve(jsonResponse([
+          {
+            roundId: 7,
+            manuscriptId: 11,
+            versionId: 21,
+            versionNo: 1,
+            roundNo: 1,
+            title: "Workflow Seed",
+            currentStatus: "UNDER_REVIEW",
+            roundStatus: "IN_PROGRESS",
+            assignmentCount: 1,
+            submittedReviewCount: 0,
+            conflictCount: 0,
+            assignments: [{ assignmentId: 9, reviewerId: 1002, taskStatus: "ACCEPTED" }]
+          }
+        ]));
+      }
+      if (path === "/manuscripts/11/versions/21/agent-results") {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (path === "/review-assignments/9/mark-overdue" && init?.method === "POST") {
+        return new Promise((resolve) => {
+          resolveOverdue = resolve;
+        });
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(DecisionWorkbenchView);
+    await wrapper.get(".el-table__expand-icon").trigger("click");
+    await flushPromises();
+    await buttonByText(wrapper, "Mark overdue").trigger("click");
+    await flushPromises();
+
+    expect(buttonByText(wrapper, "Mark overdue").classes()).toContain("is-loading");
+
+    resolveOverdue?.(jsonResponse({}));
+  });
 });
 
 async function clickButton(wrapper: ReturnType<typeof mount>, label: string) {
-  const button = wrapper.findAll("button").find((entry) => entry.text().includes(label));
-  expect(button).toBeTruthy();
-  await button!.trigger("click");
+  const button = buttonByText(wrapper, label);
+  await button.trigger("click");
   await flushPromises();
 }
 
-async function clickBodyButton(label: string) {
+function buttonByText(wrapper: ReturnType<typeof mount>, label: string) {
+  const button = wrapper.findAll("button").find((entry) => entry.text().includes(label));
+  expect(button).toBeTruthy();
+  return button!;
+}
+
+function bodyButtonByText(label: string) {
   const buttons = Array.from(document.body.querySelectorAll("button")).reverse();
   const button = buttons.find((entry) => entry.textContent?.includes(label));
   expect(button).toBeTruthy();
+  return button!;
+}
+
+async function clickBodyButton(label: string, waitForFlush = true) {
+  const button = bodyButtonByText(label);
   button!.click();
-  await flushPromises();
+  if (waitForFlush) {
+    await flushPromises();
+  }
 }
 
 async function setBodyTextarea(value: string) {

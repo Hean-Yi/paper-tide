@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+
+export AGENT_INTERNAL_API_KEY="local-dev-internal-key"
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API_LOG="/tmp/review-api.log"
 AGENT_LOG="/tmp/review-agent.log"
@@ -23,7 +26,7 @@ start_api() {
   fi
   local old_pwd="$PWD"
   cd "$ROOT_DIR/apps/api"
-  mvn "${MAVEN_ARGS[@]}" spring-boot:run >"$API_LOG" 2>&1 &
+  AGENT_INTERNAL_API_KEY="$AGENT_INTERNAL_API_KEY" mvn "${MAVEN_ARGS[@]}" spring-boot:run >"$API_LOG" 2>&1 &
   PIDS+=("$!")
   cd "$old_pwd"
 }
@@ -39,7 +42,7 @@ start_agent() {
   fi
   local old_pwd="$PWD"
   cd "$ROOT_DIR/services/agent"
-  "$PYTHON_BIN" -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload >"$AGENT_LOG" 2>&1 &
+  AGENT_INTERNAL_API_KEY="$AGENT_INTERNAL_API_KEY" "$PYTHON_BIN" -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload >"$AGENT_LOG" 2>&1 &
   PIDS+=("$!")
   cd "$old_pwd"
 }

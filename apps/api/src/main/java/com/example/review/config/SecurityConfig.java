@@ -28,6 +28,7 @@ public class SecurityConfig {
                 .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/api/auth/login", "/api/health").permitAll()
+                        .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/decisions/**").hasAnyRole("CHAIR", "ADMIN")
                         .requestMatchers("/api/audit-logs/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").authenticated()

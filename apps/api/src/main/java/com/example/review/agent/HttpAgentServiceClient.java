@@ -59,9 +59,9 @@ public class HttpAgentServiceClient implements AgentServiceClient {
             );
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new AgentServiceException("Failed to create agent task", ex);
+            throw new AgentServiceException(503, "Failed to create agent task", ex);
         } catch (IOException ex) {
-            throw new AgentServiceException("Failed to create agent task", ex);
+            throw new AgentServiceException(503, "Failed to create agent task", ex);
         }
     }
 
@@ -83,9 +83,9 @@ public class HttpAgentServiceClient implements AgentServiceClient {
             );
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new AgentServiceException("Failed to fetch agent task status", ex);
+            throw new AgentServiceException(503, "Failed to fetch agent task status", ex);
         } catch (IOException ex) {
-            throw new AgentServiceException("Failed to fetch agent task status", ex);
+            throw new AgentServiceException(503, "Failed to fetch agent task status", ex);
         }
     }
 
@@ -105,16 +105,16 @@ public class HttpAgentServiceClient implements AgentServiceClient {
             );
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new AgentServiceException("Failed to fetch agent task result", ex);
+            throw new AgentServiceException(503, "Failed to fetch agent task result", ex);
         } catch (IOException ex) {
-            throw new AgentServiceException("Failed to fetch agent task result", ex);
+            throw new AgentServiceException(503, "Failed to fetch agent task result", ex);
         }
     }
 
     private Map<String, Object> sendJson(HttpRequest request) throws IOException, InterruptedException {
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new AgentServiceException("Agent service returned HTTP " + response.statusCode());
+            throw new AgentServiceException(response.statusCode(), "Agent service returned HTTP " + response.statusCode());
         }
         return objectMapper.readValue(response.body(), new TypeReference<>() {
         });
@@ -152,12 +152,3 @@ public class HttpAgentServiceClient implements AgentServiceClient {
     }
 }
 
-class AgentServiceException extends RuntimeException {
-    AgentServiceException(String message) {
-        super(message);
-    }
-
-    AgentServiceException(String message, Throwable cause) {
-        super(message, cause);
-    }
-}

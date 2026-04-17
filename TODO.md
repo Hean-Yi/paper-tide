@@ -4,8 +4,8 @@
 
 ## P0（需要优先修复）
 
-- [ ] 修复 Reviewer Agent Assist 本地运行认证配置：`scripts/dev-up.sh` 和文档应为 API 与 Agent service 设置同一个 `AGENT_INTERNAL_API_KEY`，避免 Python Agent 的 `/agent/tasks` 因缺少或不匹配内部 key 返回 `503/401`。
-- [ ] 修复 Spring Security 错误转发被误报为 `Unauthorized`：显式放行 `/error` 或增加统一异常响应，确保 Agent service 的 `503/401` 能在前端显示真实原因，而不是被 `/error` 二次拦截成 `401`。
+- [x] 修复 Reviewer Agent Assist 本地运行认证配置：`scripts/dev-up.sh` 和文档应为 API 与 Agent service 设置同一个 `AGENT_INTERNAL_API_KEY`，避免 Python Agent 的 `/agent/tasks` 因缺少或不匹配内部 key 返回 `503/401`。
+- [x] 修复 Spring Security 错误转发被误报为 `Unauthorized`：显式放行 `/error` 或增加统一异常响应，确保 Agent service 的 `503/401` 能在前端显示真实原因，而不是被 `/error` 二次拦截成 `401`。
 - [ ] 收紧 Reviewer 对旧版 Agent results 端点的访问：`GET /api/manuscripts/{manuscriptId}/versions/{versionId}/agent-results` 不应再允许 Reviewer 按版本读取全部 redacted 结果，避免看到 Chair/Admin 触发的决策冲突分析或其他上下文。
 - [ ] 让 Reviewer Assist 真正按 assignment 隔离：当前复用和查询只按 `manuscriptId + versionId + roundId + taskType`，同一轮多个 reviewer 可能串读同一个 assist task；应把 `assignmentId` 纳入任务关联、查询或 payload fingerprint，并补双 reviewer 回归测试。
 - [ ] 为 Reviewer Assist 响应使用专用 DTO：不要复用带 `rawResult` 字段的 `AgentResultResponse`，从响应契约上彻底移除 `rawResult`，并增加响应字符串级别断言。

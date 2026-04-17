@@ -7,13 +7,8 @@ import com.example.review.agent.AgentDtos.CreateAgentTaskRequest;
 import com.example.review.agent.AgentDtos.CreateReviewerAssistRequest;
 import com.example.review.agent.AgentDtos.ReviewerAssistResponse;
 import com.example.review.auth.CurrentUserPrincipal;
-import jakarta.servlet.http.HttpServletRequest;
-import java.time.Instant;
 import java.util.List;
-import java.util.Map;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -97,23 +92,5 @@ public class AgentTaskController {
             @RequestParam(required = false) String taskType
     ) {
         return agentIntegrationService.listTasks(principal, status, taskType);
-    }
-
-    /**
-     * Handle AgentServiceException to return the real HTTP status code from Agent service.
-     * This prevents the error from being forwarded to /error and being misreported as 401.
-     */
-    @ExceptionHandler(AgentServiceException.class)
-    public ResponseEntity<Map<String, Object>> handleAgentServiceException(
-            AgentServiceException ex, HttpServletRequest request) {
-        return ResponseEntity
-                .status(ex.getStatusCode())
-                .body(Map.of(
-                        "error", "Agent Service Error",
-                        "message", ex.getMessage(),
-                        "status", ex.getStatusCode(),
-                        "path", request.getRequestURI(),
-                        "timestamp", Instant.now().toString()
-                ));
     }
 }

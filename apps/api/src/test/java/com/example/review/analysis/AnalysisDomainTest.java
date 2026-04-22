@@ -2,9 +2,16 @@ package com.example.review.analysis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.example.review.analysis.domain.AnalysisAnchorType;
+import com.example.review.analysis.domain.AnalysisBusinessAnchor;
 import com.example.review.analysis.domain.AnalysisIdempotencyKeyFactory;
+import com.example.review.analysis.domain.AnalysisRequestPolicy;
+import com.example.review.analysis.domain.AnalysisStatus;
 import com.example.review.analysis.domain.AnalysisType;
 import com.example.review.analysis.domain.AnalysisVisibilityLevel;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,18 +23,47 @@ class AnalysisDomainTest {
     String key =
         AnalysisIdempotencyKeyFactory.build(
             AnalysisType.REVIEWER_ASSIST,
-            Map.of("assignmentId", 77L, "versionId", 11L),
+            AnalysisBusinessAnchor.screening(77L, 11L),
             Map.of("title", "Robust Review Systems"),
             1);
 
     assertThat(key).startsWith("REVIEWER_ASSIST:");
-    assertThat(key).contains(":assignmentId=77:");
+    assertThat(key).contains(":businessAnchorType=MANUSCRIPT_VERSION:");
   }
 
   @Test
   void reviewerCannotSeeRawProjection() {
     assertThat(AnalysisVisibilityLevel.REDACTED_ONLY.allowsRaw()).isFalse();
     assertThat(AnalysisVisibilityLevel.RAW_AND_REDACTED.allowsRaw()).isTrue();
+  }
+
+  @Test
+  void analysisStatusUsesTypedLifecycle() {
+    assertThat(AnalysisStatus.REQUESTED.isActive()).isTrue();
+    assertThat(AnalysisStatus.SUPERSEDED.isActive()).isFalse();
+  }
+
+  @Test
+  void screeningUsesVersionScopedAnchorType() {
+    assertThat(AnalysisType.SCREENING.businessAnchorType()).isEqualTo(AnalysisAnchorType.MANUSCRIPT_VERSION);
+  }
+
+  @Test
+  void screeningPolicyAcceptsVersionScopedBusinessAnchor() {
+    assertThat(AnalysisRequestPolicy.allows(AnalysisType.SCREENING, AnalysisBusinessAnchor.screening(77L, 11L)))
+        .isTrue();
+    assertThat(AnalysisRequestPolicy.allows(AnalysisType.SCREENING, AnalysisBusinessAnchor.manuscript(77L)))
+        .isFalse();
+  }
+
+  @Test
+  void schemaDeclaresCompositeAnchorLookupAndUpdateMaintenance() throws IOException {
+    String schema = Files.readString(Path.of("..", "..", "database", "oracle", "008_agent_platform_refactor.sql"));
+
+    assertThat(schema).contains("BUSINESS_ANCHOR_VERSION_ID NUMBER(19)");
+    assertThat(schema).contains("IDX_ANALYSIS_INTENT_ANCHOR_LOOKUP");
+    assertThat(schema).contains("TRG_ANALYSIS_PROJECTION_BU");
+    assertThat(schema).contains("TRG_EXECUTION_JOB_BU");
   }
 
   @Test

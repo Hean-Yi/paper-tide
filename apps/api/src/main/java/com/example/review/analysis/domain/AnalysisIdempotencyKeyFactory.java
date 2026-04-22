@@ -7,6 +7,7 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
@@ -16,6 +17,25 @@ public final class AnalysisIdempotencyKeyFactory {
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
   private AnalysisIdempotencyKeyFactory() {
+  }
+
+  public static String build(
+      AnalysisType analysisType,
+      AnalysisBusinessAnchor businessAnchor,
+      Map<String, Object> normalizedInput,
+      int requestVersion) {
+    Objects.requireNonNull(businessAnchor, "businessAnchor");
+    Map<String, Object> anchorPayload = new LinkedHashMap<>();
+    anchorPayload.put("businessAnchorType", businessAnchor.businessAnchorType().name());
+    anchorPayload.put("businessAnchorId", businessAnchor.businessAnchorId());
+    if (businessAnchor.businessAnchorVersionId() != null) {
+      anchorPayload.put("businessAnchorVersionId", businessAnchor.businessAnchorVersionId());
+    }
+    return build(
+        analysisType,
+        anchorPayload,
+        normalizedInput,
+        requestVersion);
   }
 
   public static String build(

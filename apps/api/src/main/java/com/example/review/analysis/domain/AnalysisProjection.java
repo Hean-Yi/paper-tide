@@ -8,7 +8,7 @@ public record AnalysisProjection(
     long intentId,
     AnalysisType analysisType,
     AnalysisVisibilityLevel visibilityLevel,
-    String businessStatus,
+    AnalysisStatus businessStatus,
     String summaryText,
     String redactedResult,
     String rawResultReference,

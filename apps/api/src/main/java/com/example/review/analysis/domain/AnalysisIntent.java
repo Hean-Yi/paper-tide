@@ -6,22 +6,21 @@ import java.util.Objects;
 public record AnalysisIntent(
     long intentId,
     AnalysisType analysisType,
-    String businessAnchorType,
-    long businessAnchorId,
+    AnalysisBusinessAnchor businessAnchor,
     long requestedBy,
     String idempotencyKey,
-    String businessStatus,
+    AnalysisStatus businessStatus,
     String executionJobId,
     Instant createdAt) {
   public AnalysisIntent {
     Objects.requireNonNull(analysisType, "analysisType");
-    Objects.requireNonNull(businessAnchorType, "businessAnchorType");
+    Objects.requireNonNull(businessAnchor, "businessAnchor");
     Objects.requireNonNull(idempotencyKey, "idempotencyKey");
     Objects.requireNonNull(businessStatus, "businessStatus");
     Objects.requireNonNull(createdAt, "createdAt");
   }
 
   public boolean isActive() {
-    return "REQUESTED".equals(businessStatus) || "AVAILABLE".equals(businessStatus);
+    return businessStatus.isActive();
   }
 }

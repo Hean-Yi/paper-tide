@@ -1,6 +1,11 @@
 spring:
   application:
     name: review-api
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
   datasource:
     url: jdbc:oracle:thin:@//${ORACLE_HOST:localhost}:${ORACLE_PORT:1521}/${ORACLE_SERVICE:FREEPDB1}
     username: ${ORACLE_USERNAME:review_app}
@@ -14,6 +19,9 @@ server:
     include-message: always
 
 review:
+  analysis:
+    broker-exchange: review.analysis.exchange
+    request-routing-key: analysis.requested
   jwt:
     secret: ${REVIEW_JWT_SECRET:ReviewJwtSecretKeyForLocalDevOnly12345}
     issuer: ${REVIEW_JWT_ISSUER:review-api}

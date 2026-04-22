@@ -263,11 +263,12 @@
 **Current completion state:**
 
 - Design is approved and documented.
-- Implementation planning for the refactor is the next active stream.
+- Implementation plan for the refactor was written on 2026-04-22 in this authoritative plan file.
+- Task 14 is complete on 2026-04-22; Task 15 is now the next active implementation slice.
 
 ## Active Task
 
-- Active task: convert the approved architecture refactor design into a concrete implementation plan and then execute the refactor task by task.
+- Active task: prepare Task 15, building the durable agent platform core on top of the shared identities and messaging foundation.
 
 ## Working Rules For Next Execution Cycle
 
@@ -278,3 +279,942 @@
   - what changed
   - what verification ran
   - the resulting completion state
+
+## Refactor File Structure
+
+The architecture-refactor implementation uses the existing repository as the base and introduces the following focused units.
+
+### API-side structure
+
+- Create: `apps/api/src/main/java/com/example/review/analysis/domain/AnalysisType.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/domain/AnalysisIntent.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/domain/AnalysisProjection.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/domain/AnalysisVisibilityLevel.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/domain/AnalysisIdempotencyKeyFactory.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/domain/AnalysisRequestPolicy.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/domain/AnalysisVisibilityPolicy.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/application/RequestReviewerAssistUseCase.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/application/RequestConflictAnalysisUseCase.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/application/RequestScreeningAnalysisUseCase.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/application/GetAnalysisProjectionUseCase.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/infrastructure/AnalysisIntentRepository.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/infrastructure/AnalysisProjectionRepository.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/infrastructure/AnalysisOutboxRepository.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/infrastructure/AnalysisInboxRepository.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/infrastructure/AnalysisOutboxPublisher.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/infrastructure/AnalysisEventConsumer.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/interfaces/AnalysisController.java`
+- Modify: `apps/api/src/main/java/com/example/review/agent/AgentTaskController.java`
+- Modify: `apps/api/src/main/java/com/example/review/review/AssignmentController.java`
+- Modify: `apps/api/src/main/java/com/example/review/config/SecurityConfig.java`
+- Modify: `apps/api/src/main/resources/application.yml`
+- Modify: `apps/api/pom.xml`
+
+### Agent-platform structure
+
+- Create: `services/agent/app/agent_platform/__init__.py`
+- Create: `services/agent/app/agent_platform/domain.py`
+- Create: `services/agent/app/agent_platform/state_machine.py`
+- Create: `services/agent/app/agent_platform/repositories.py`
+- Create: `services/agent/app/agent_platform/messages.py`
+- Create: `services/agent/app/agent_platform/outbox.py`
+- Create: `services/agent/app/agent_platform/consumer.py`
+- Create: `services/agent/app/agent_platform/publisher.py`
+- Create: `services/agent/app/agent_platform/handlers/base.py`
+- Create: `services/agent/app/agent_platform/handlers/reviewer_assist.py`
+- Create: `services/agent/app/agent_platform/handlers/conflict_analysis.py`
+- Create: `services/agent/app/agent_platform/handlers/screening.py`
+- Create: `services/agent/app/agent_platform/handler_registry.py`
+- Create: `services/agent/app/agent_platform/provider_executor.py`
+- Create: `services/agent/app/agent_platform/config.py`
+- Modify: `services/agent/app/main.py`
+- Modify: `services/agent/pyproject.toml`
+- Delete later in the stream: `services/agent/app/task_store.py`
+- Delete later in the stream: `services/agent/app/routes/tasks.py`
+
+### Schema and scripts
+
+- Create: `database/oracle/008_agent_platform_refactor.sql`
+- Modify: `database/oracle/verify_schema.sql`
+- Create: `scripts/rabbitmq-up.sh`
+- Modify: `scripts/dev-up.sh`
+- Modify: `scripts/test-all.sh`
+
+### Tests
+
+- Create: `apps/api/src/test/java/com/example/review/analysis/AnalysisDomainTest.java`
+- Create: `apps/api/src/test/java/com/example/review/analysis/AnalysisIntentFlowTest.java`
+- Create: `services/agent/tests/test_execution_job.py`
+- Create: `services/agent/tests/test_message_consumer.py`
+- Create: `services/agent/tests/test_reviewer_assist_flow.py`
+- Create: `services/agent/tests/test_conflict_analysis_flow.py`
+- Create: `services/agent/tests/test_screening_flow.py`
+- Modify: `apps/api/src/test/java/com/example/review/agent/AgentIntegrationServiceTest.java`
+- Modify: `apps/api/src/test/java/com/example/review/e2e/ReviewFlowE2eTest.java`
+- Modify: `apps/web/src/tests/workflow.spec.ts`
+- Create: `apps/web/src/tests/agent-projection.spec.ts`
+
+## Architecture Refactor Tasks
+
+### Task 14: Lay Down Shared Identities, Schema, And Messaging Foundation
+
+**Status:** Completed on 2026-04-22.
+
+**Files:**
+
+- Modify: `apps/api/pom.xml`
+- Modify: `apps/api/src/main/resources/application.yml`
+- Create: `apps/api/src/main/java/com/example/review/analysis/domain/AnalysisType.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/domain/AnalysisIntent.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/domain/AnalysisProjection.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/domain/AnalysisVisibilityLevel.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/domain/AnalysisIdempotencyKeyFactory.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/domain/AnalysisRequestPolicy.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/domain/AnalysisVisibilityPolicy.java`
+- Create: `apps/api/src/test/java/com/example/review/analysis/AnalysisDomainTest.java`
+- Create: `database/oracle/008_agent_platform_refactor.sql`
+- Modify: `database/oracle/verify_schema.sql`
+- Create: `scripts/rabbitmq-up.sh`
+- Modify: `scripts/dev-up.sh`
+- Modify: `scripts/test-all.sh`
+- Modify: `services/agent/pyproject.toml`
+
+- [x] **Step 1: Write the failing domain test for API-side identities and visibility**
+
+```java
+package com.example.review.analysis;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.example.review.analysis.domain.AnalysisIdempotencyKeyFactory;
+import com.example.review.analysis.domain.AnalysisType;
+import com.example.review.analysis.domain.AnalysisVisibilityLevel;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+
+class AnalysisDomainTest {
+    @Test
+    void buildsStableIdempotencyKeyFromBusinessAnchor() {
+        String key = AnalysisIdempotencyKeyFactory.build(
+                AnalysisType.REVIEWER_ASSIST,
+                Map.of("assignmentId", 77L, "versionId", 11L),
+                Map.of("title", "Robust Review Systems"),
+                1
+        );
+
+        assertThat(key).startsWith("REVIEWER_ASSIST:");
+        assertThat(key).contains(":assignmentId=77:");
+    }
+
+    @Test
+    void reviewerCannotSeeRawProjection() {
+        assertThat(AnalysisVisibilityLevel.REDACTED_ONLY.allowsRaw()).isFalse();
+        assertThat(AnalysisVisibilityLevel.RAW_AND_REDACTED.allowsRaw()).isTrue();
+    }
+}
+```
+
+- [x] **Step 2: Run the new test and verify it fails because the analysis domain package does not exist yet**
+
+Run: `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisDomainTest test`
+Expected: FAIL with missing `com.example.review.analysis.domain` classes.
+
+- [x] **Step 3: Add RabbitMQ and JSON support dependencies plus API/agent configuration**
+
+```xml
+<dependency>
+  <groupId>org.springframework.boot</groupId>
+  <artifactId>spring-boot-starter-amqp</artifactId>
+</dependency>
+```
+
+```yaml
+review:
+  analysis:
+    broker-exchange: review.analysis.exchange
+    request-routing-key: analysis.requested
+spring:
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+```
+
+```toml
+dependencies = [
+  "aio-pika>=9.4,<10.0",
+  "oracledb>=2.2,<3.0",
+]
+```
+
+- [x] **Step 4: Add the new Oracle schema objects for intent/projection/outbox/inbox and execution job/attempt/artifact/outbox/inbox**
+
+```sql
+CREATE TABLE ANALYSIS_INTENT (
+  INTENT_ID NUMBER(19) NOT NULL,
+  ANALYSIS_TYPE VARCHAR2(40) NOT NULL,
+  BUSINESS_ANCHOR_TYPE VARCHAR2(30) NOT NULL,
+  BUSINESS_ANCHOR_ID NUMBER(19) NOT NULL,
+  REQUESTED_BY NUMBER(19) NOT NULL,
+  IDEMPOTENCY_KEY VARCHAR2(200) NOT NULL,
+  BUSINESS_STATUS VARCHAR2(30) NOT NULL,
+  EXECUTION_JOB_ID VARCHAR2(100),
+  CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  CONSTRAINT PK_ANALYSIS_INTENT PRIMARY KEY (INTENT_ID),
+  CONSTRAINT UK_ANALYSIS_INTENT_IDEMPOTENCY UNIQUE (IDEMPOTENCY_KEY)
+);
+```
+
+```sql
+CREATE TABLE EXECUTION_JOB (
+  JOB_ID VARCHAR2(100) NOT NULL,
+  IDEMPOTENCY_KEY VARCHAR2(200) NOT NULL,
+  ANALYSIS_TYPE VARCHAR2(40) NOT NULL,
+  EXECUTION_STATE VARCHAR2(40) NOT NULL,
+  INPUT_SNAPSHOT CLOB NOT NULL,
+  FAILURE_REASON CLOB,
+  CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  UPDATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  CONSTRAINT PK_EXECUTION_JOB PRIMARY KEY (JOB_ID),
+  CONSTRAINT UK_EXECUTION_JOB_IDEMPOTENCY UNIQUE (IDEMPOTENCY_KEY)
+);
+```
+
+- [x] **Step 5: Add the first API-side domain classes**
+
+```java
+package com.example.review.analysis.domain;
+
+public enum AnalysisType {
+    REVIEWER_ASSIST,
+    CONFLICT_ANALYSIS,
+    SCREENING
+}
+```
+
+```java
+package com.example.review.analysis.domain;
+
+public enum AnalysisVisibilityLevel {
+    NONE,
+    REDACTED_ONLY,
+    RAW_AND_REDACTED;
+
+    public boolean allowsRaw() {
+        return this == RAW_AND_REDACTED;
+    }
+}
+```
+
+```java
+package com.example.review.analysis.domain;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Map;
+import java.util.TreeMap;
+
+public final class AnalysisIdempotencyKeyFactory {
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    private AnalysisIdempotencyKeyFactory() {
+    }
+
+    public static String build(AnalysisType type, Map<String, Object> anchor, Map<String, Object> payload, int requestVersion) {
+        try {
+            String anchorText = new TreeMap<>(anchor).toString().replace(", ", ",");
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(OBJECT_MAPPER.writeValueAsString(new TreeMap<>(payload)).getBytes(StandardCharsets.UTF_8));
+            String hash = java.util.HexFormat.of().formatHex(digest);
+            return type.name() + ":" + anchorText + ":v" + requestVersion + ":" + hash;
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to build analysis idempotency key", ex);
+        }
+    }
+}
+```
+
+- [x] **Step 6: Update local runtime scripts so RabbitMQ is part of the normal developer stack**
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONTAINER_NAME="${CONTAINER_NAME:-review-rabbitmq}"
+docker run -d --rm --name "$CONTAINER_NAME" -p 5672:5672 -p 15672:15672 rabbitmq:3-management
+```
+
+```bash
+bash "$ROOT_DIR/scripts/rabbitmq-up.sh" || true
+```
+
+- [x] **Step 7: Run the focused checks**
+
+Run: `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisDomainTest test`
+Expected: PASS
+
+Run: `./.venv/bin/python -m pytest services/agent/tests/test_health.py -q`
+Expected: PASS
+
+Run: `git diff --check`
+Expected: no output
+
+- [x] **Step 8: Commit the foundation slice**
+
+```bash
+git add apps/api/pom.xml apps/api/src/main/resources/application.yml \
+  apps/api/src/main/java/com/example/review/analysis \
+  apps/api/src/test/java/com/example/review/analysis/AnalysisDomainTest.java \
+  services/agent/pyproject.toml database/oracle/008_agent_platform_refactor.sql \
+  database/oracle/verify_schema.sql scripts/rabbitmq-up.sh scripts/dev-up.sh scripts/test-all.sh
+git commit -m "feat: add analysis identities and broker foundation"
+```
+
+**What changed:**
+
+- Added the API-side analysis identity model and stable idempotency key factory.
+- Added RabbitMQ wiring on the API side and RabbitMQ startup hooks in the local scripts.
+- Added the new Oracle schema objects for analysis intent/projection messaging and execution jobs/attempts/artifacts.
+- Added the agent dependency bumps required for RabbitMQ and Oracle access.
+
+**Verification run:**
+
+- `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisDomainTest test`
+  - First run failed as expected with missing `com.example.review.analysis.domain` classes.
+  - Second run passed after the domain types were added.
+- `./.venv/bin/python -m pytest services/agent/tests/test_health.py -q`
+- `git diff --check`
+
+### Task 15: Build The Durable Agent Platform Core
+
+**Files:**
+
+- Create: `services/agent/app/agent_platform/domain.py`
+- Create: `services/agent/app/agent_platform/state_machine.py`
+- Create: `services/agent/app/agent_platform/repositories.py`
+- Create: `services/agent/app/agent_platform/messages.py`
+- Create: `services/agent/app/agent_platform/outbox.py`
+- Create: `services/agent/app/agent_platform/consumer.py`
+- Create: `services/agent/app/agent_platform/publisher.py`
+- Create: `services/agent/app/agent_platform/config.py`
+- Create: `services/agent/tests/test_execution_job.py`
+- Create: `services/agent/tests/test_message_consumer.py`
+- Modify: `services/agent/app/main.py`
+
+- [ ] **Step 1: Write the failing pytest suite for execution state transitions and duplicate intake**
+
+```python
+from app.agent_platform.domain import ExecutionJob
+from app.agent_platform.state_machine import ExecutionStateMachine
+
+
+def test_retryable_failure_transitions_to_dead_letter_after_limit():
+    job = ExecutionJob.new("job-1", "key-1", "REVIEWER_ASSIST", {"title": "Paper"})
+
+    machine = ExecutionStateMachine(max_attempts=2)
+    machine.mark_running(job)
+    machine.mark_retryable_failure(job, "provider timeout")
+    machine.mark_running(job)
+    machine.mark_retryable_failure(job, "provider timeout")
+
+    assert job.execution_state == "DEAD_LETTERED"
+
+
+def test_duplicate_intake_reuses_existing_job_id():
+    repo = InMemoryExecutionJobRepository()
+    first = repo.create_or_reuse("key-1", "REVIEWER_ASSIST", {"title": "Paper"})
+    second = repo.create_or_reuse("key-1", "REVIEWER_ASSIST", {"title": "Paper"})
+
+    assert second.job_id == first.job_id
+```
+
+- [ ] **Step 2: Run the new pytest suite and verify it fails because the platform package is missing**
+
+Run: `cd services/agent && ./.venv/bin/python -m pytest tests/test_execution_job.py tests/test_message_consumer.py -q`
+Expected: FAIL with missing `app.agent_platform` imports.
+
+- [ ] **Step 3: Add the execution entity and state machine**
+
+```python
+from dataclasses import dataclass, field
+from datetime import datetime, UTC
+from uuid import uuid4
+
+
+@dataclass(slots=True)
+class ExecutionJob:
+    job_id: str
+    idempotency_key: str
+    analysis_type: str
+    input_snapshot: dict
+    execution_state: str
+    attempt_count: int = 0
+    failure_reason: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+    @classmethod
+    def new(cls, job_id: str | None, idempotency_key: str, analysis_type: str, input_snapshot: dict) -> "ExecutionJob":
+        return cls(
+            job_id=job_id or str(uuid4()),
+            idempotency_key=idempotency_key,
+            analysis_type=analysis_type,
+            input_snapshot=input_snapshot,
+            execution_state="QUEUED",
+        )
+```
+
+```python
+class ExecutionStateMachine:
+    def __init__(self, max_attempts: int) -> None:
+        self._max_attempts = max_attempts
+
+    def mark_running(self, job: ExecutionJob) -> None:
+        job.attempt_count += 1
+        job.execution_state = "RUNNING"
+
+    def mark_retryable_failure(self, job: ExecutionJob, reason: str) -> None:
+        job.failure_reason = reason
+        job.execution_state = "DEAD_LETTERED" if job.attempt_count >= self._max_attempts else "FAILED_RETRYABLE"
+```
+
+- [ ] **Step 4: Add repositories and message consumer skeletons**
+
+```python
+class InMemoryExecutionJobRepository:
+    def __init__(self) -> None:
+        self._jobs: dict[str, ExecutionJob] = {}
+        self._by_idempotency: dict[str, str] = {}
+
+    def create_or_reuse(self, idempotency_key: str, analysis_type: str, input_snapshot: dict) -> ExecutionJob:
+        existing_id = self._by_idempotency.get(idempotency_key)
+        if existing_id is not None:
+            return self._jobs[existing_id]
+        job = ExecutionJob.new(None, idempotency_key, analysis_type, input_snapshot)
+        self._jobs[job.job_id] = job
+        self._by_idempotency[idempotency_key] = job.job_id
+        return job
+```
+
+```python
+class AnalysisRequestedConsumer:
+    def __init__(self, repository: InMemoryExecutionJobRepository) -> None:
+        self._repository = repository
+
+    def handle(self, message: dict) -> ExecutionJob:
+        return self._repository.create_or_reuse(
+            message["idempotencyKey"],
+            message["analysisType"],
+            message["requestPayload"],
+        )
+```
+
+- [ ] **Step 5: Wire the platform into FastAPI startup without deleting the legacy route layer yet**
+
+```python
+from fastapi import FastAPI
+
+from app.agent_platform.consumer import AnalysisRequestedConsumer
+from app.agent_platform.repositories import InMemoryExecutionJobRepository
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(title="review-agent")
+    repository = InMemoryExecutionJobRepository()
+    app.state.analysis_consumer = AnalysisRequestedConsumer(repository)
+    return app
+```
+
+- [ ] **Step 6: Run the focused agent tests**
+
+Run: `cd services/agent && ./.venv/bin/python -m pytest tests/test_execution_job.py tests/test_message_consumer.py -q`
+Expected: PASS
+
+Run: `cd services/agent && ./.venv/bin/python -m pytest tests/test_health.py -q`
+Expected: PASS
+
+- [ ] **Step 7: Commit the platform-core slice**
+
+```bash
+git add services/agent/app/main.py services/agent/app/agent_platform services/agent/tests/test_execution_job.py services/agent/tests/test_message_consumer.py
+git commit -m "feat(agent): add durable execution job core"
+```
+
+### Task 16: Migrate `REVIEW_ASSIST_ANALYSIS` To The New Intent/Projection Flow
+
+**Files:**
+
+- Create: `apps/api/src/main/java/com/example/review/analysis/application/RequestReviewerAssistUseCase.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/infrastructure/AnalysisIntentRepository.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/infrastructure/AnalysisProjectionRepository.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/infrastructure/AnalysisOutboxRepository.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/infrastructure/AnalysisInboxRepository.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/infrastructure/AnalysisOutboxPublisher.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/infrastructure/AnalysisEventConsumer.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/interfaces/AnalysisController.java`
+- Create: `apps/api/src/test/java/com/example/review/analysis/AnalysisIntentFlowTest.java`
+- Create: `services/agent/app/agent_platform/handlers/base.py`
+- Create: `services/agent/app/agent_platform/handlers/reviewer_assist.py`
+- Create: `services/agent/app/agent_platform/handler_registry.py`
+- Create: `services/agent/app/agent_platform/provider_executor.py`
+- Create: `services/agent/tests/test_reviewer_assist_flow.py`
+- Modify: `apps/api/src/main/java/com/example/review/review/AssignmentController.java`
+- Modify: `apps/api/src/test/java/com/example/review/agent/AgentIntegrationServiceTest.java`
+- Modify: `apps/web/src/lib/workflow-api.ts`
+- Modify: `apps/web/src/components/reviewer/ReviewerAgentPanel.vue`
+- Create: `apps/web/src/tests/agent-projection.spec.ts`
+
+- [ ] **Step 1: Write the failing API integration test for reviewer-assist intent and projection**
+
+```java
+@SpringBootTest
+@AutoConfigureMockMvc
+class AnalysisIntentFlowTest {
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Test
+    void reviewerAssistRequestCreatesIntentInsteadOfPollingTask() throws Exception {
+        String reviewerToken = loginAndExtractToken("reviewer_demo", "demo123");
+
+        mockMvc.perform(post("/api/review-assignments/{assignmentId}/agent-assist", 7001L)
+                        .header("Authorization", "Bearer " + reviewerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"force\":false}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.businessStatus").value("REQUESTED"))
+                .andExpect(jsonPath("$.taskStatus").doesNotExist());
+    }
+}
+```
+
+- [ ] **Step 2: Run the new API test and verify it fails because the intent/projection controller path is not implemented**
+
+Run: `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisIntentFlowTest test`
+Expected: FAIL with missing controller/use case wiring or unexpected legacy payload.
+
+- [ ] **Step 3: Implement the reviewer-assist request use case and API response shape**
+
+```java
+public record AnalysisIntentResponse(long intentId, String analysisType, String businessStatus) {
+}
+```
+
+```java
+@RestController
+@RequestMapping("/api")
+public class AnalysisController {
+    private final RequestReviewerAssistUseCase requestReviewerAssistUseCase;
+
+    @PostMapping("/review-assignments/{assignmentId}/agent-assist")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    AnalysisIntentResponse requestReviewerAssist(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long assignmentId
+    ) {
+        return requestReviewerAssistUseCase.handle(principal, assignmentId);
+    }
+}
+```
+
+- [ ] **Step 4: Implement the outbox-backed API path**
+
+```java
+public AnalysisIntentResponse handle(CurrentUserPrincipal principal, long assignmentId) {
+    requestPolicy.requireReviewerAssistAllowed(principal, assignmentId);
+    Map<String, Object> payload = contextAssembler.buildReviewerAssistPayload(assignmentId);
+    String idempotencyKey = AnalysisIdempotencyKeyFactory.build(
+            AnalysisType.REVIEWER_ASSIST,
+            Map.of("assignmentId", assignmentId),
+            payload,
+            1
+    );
+    long intentId = intentRepository.createIntent(AnalysisType.REVIEWER_ASSIST, assignmentId, principal.userId(), idempotencyKey);
+    outboxRepository.enqueueRequested(intentId, idempotencyKey, payload);
+    return new AnalysisIntentResponse(intentId, "REVIEWER_ASSIST", "REQUESTED");
+}
+```
+
+- [ ] **Step 5: Implement the reviewer-assist handler inside the agent platform**
+
+```python
+class ReviewerAssistHandler(AnalysisTaskHandler):
+    analysis_type = "REVIEWER_ASSIST"
+
+    def execute(self, job: ExecutionJob, provider_executor: ProviderExecutor) -> dict:
+        paper = build_paper_understanding({"request_payload": job.input_snapshot, "manuscript_id": "0", "version_id": "0"})["paper_understanding"]
+        raw_result = provider_executor.run_reviewer_assist(paper)
+        return {
+            "raw_result": raw_result,
+            "redacted_result": redact_result("REVIEW_ASSIST_ANALYSIS", raw_result),
+            "summary_projection": {
+                "businessStatus": "AVAILABLE",
+                "summary": raw_result["paperSummary"],
+            },
+        }
+```
+
+- [ ] **Step 6: Update the reviewer UI to read projection-oriented fields**
+
+```ts
+export interface AnalysisIntentResponse {
+  intentId: number;
+  analysisType: string;
+  businessStatus: string;
+}
+```
+
+```vue
+<el-tag v-if="assist.intent" :type="statusTagType(assist.intent.businessStatus)">
+  {{ workflowLabel(assist.intent.businessStatus) }}
+</el-tag>
+```
+
+- [ ] **Step 7: Run the reviewer-assist test slice**
+
+Run: `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisIntentFlowTest test`
+Expected: PASS
+
+Run: `cd services/agent && ./.venv/bin/python -m pytest tests/test_reviewer_assist_flow.py -q`
+Expected: PASS
+
+Run: `cd apps/web && npm run test -- --run src/tests/agent-projection.spec.ts`
+Expected: PASS
+
+- [ ] **Step 8: Commit the reviewer-assist migration**
+
+```bash
+git add apps/api/src/main/java/com/example/review/analysis \
+  apps/api/src/test/java/com/example/review/analysis/AnalysisIntentFlowTest.java \
+  services/agent/app/agent_platform/handlers/base.py \
+  services/agent/app/agent_platform/handlers/reviewer_assist.py \
+  services/agent/app/agent_platform/handler_registry.py \
+  services/agent/app/agent_platform/provider_executor.py \
+  services/agent/tests/test_reviewer_assist_flow.py \
+  apps/web/src/lib/workflow-api.ts apps/web/src/components/reviewer/ReviewerAgentPanel.vue apps/web/src/tests/agent-projection.spec.ts
+git commit -m "feat: migrate reviewer assist to intent and projection flow"
+```
+
+### Task 17: Migrate `DECISION_CONFLICT_ANALYSIS` To The New Flow
+
+**Files:**
+
+- Create: `apps/api/src/main/java/com/example/review/analysis/application/RequestConflictAnalysisUseCase.java`
+- Create: `services/agent/app/agent_platform/handlers/conflict_analysis.py`
+- Create: `services/agent/tests/test_conflict_analysis_flow.py`
+- Modify: `apps/api/src/main/java/com/example/review/decision/DecisionController.java`
+- Modify: `apps/api/src/main/java/com/example/review/workflow/WorkflowQueryService.java`
+- Modify: `apps/api/src/test/java/com/example/review/e2e/ReviewFlowE2eTest.java`
+- Modify: `apps/web/src/views/chair/DecisionWorkbenchView.vue`
+- Modify: `apps/web/src/lib/workflow-api.ts`
+
+- [ ] **Step 1: Write the failing conflict-analysis e2e expectation against projections**
+
+```java
+mockMvc.perform(post("/api/review-rounds/{roundId}/conflict-analysis", roundId)
+                .header("Authorization", "Bearer " + chairToken)
+                .contentType(APPLICATION_JSON)
+                .content("{\"force\":false}"))
+        .andExpect(status().isAccepted())
+        .andExpect(jsonPath("$.businessStatus").value("REQUESTED"));
+```
+
+- [ ] **Step 2: Run the focused e2e test and verify it fails on the legacy task contract**
+
+Run: `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=ReviewFlowE2eTest test`
+Expected: FAIL in the conflict-analysis request/assertion path until the new controller and projection flow are wired.
+
+- [ ] **Step 3: Implement the chair use case and conflict-analysis handler**
+
+```java
+public AnalysisIntentResponse handle(CurrentUserPrincipal principal, long roundId) {
+    RoleGuard.requireChairOrAdmin(principal);
+    Map<String, Object> payload = contextAssembler.buildConflictPayload(roundId);
+    String key = AnalysisIdempotencyKeyFactory.build(
+            AnalysisType.CONFLICT_ANALYSIS,
+            Map.of("roundId", roundId),
+            payload,
+            1
+    );
+    long intentId = intentRepository.createIntent(AnalysisType.CONFLICT_ANALYSIS, roundId, principal.userId(), key);
+    outboxRepository.enqueueRequested(intentId, key, payload);
+    return new AnalysisIntentResponse(intentId, "CONFLICT_ANALYSIS", "REQUESTED");
+}
+```
+
+```python
+class ConflictAnalysisHandler(AnalysisTaskHandler):
+    analysis_type = "CONFLICT_ANALYSIS"
+
+    def execute(self, job: ExecutionJob, provider_executor: ProviderExecutor) -> dict:
+        raw = provider_executor.run_conflict_analysis(job.input_snapshot)
+        return {
+            "raw_result": raw,
+            "redacted_result": redact_result("DECISION_CONFLICT_ANALYSIS", raw),
+            "summary_projection": {
+                "businessStatus": "AVAILABLE",
+                "summary": raw["decisionSummary"],
+                "conflictPoints": raw["conflictPoints"],
+            },
+        }
+```
+
+- [ ] **Step 4: Update the chair workbench to read projection summaries rather than local polled task rows**
+
+```ts
+export function triggerConflictAnalysis(roundId: number, force = false) {
+  return apiRequest<AnalysisIntentResponse>(`/review-rounds/${roundId}/conflict-analysis`, {
+    method: "POST",
+    json: { force }
+  });
+}
+```
+
+- [ ] **Step 5: Run the conflict-analysis slice**
+
+Run: `cd services/agent && ./.venv/bin/python -m pytest tests/test_conflict_analysis_flow.py -q`
+Expected: PASS
+
+Run: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts`
+Expected: PASS
+
+- [ ] **Step 6: Commit the conflict-analysis migration**
+
+```bash
+git add apps/api/src/main/java/com/example/review/analysis/application/RequestConflictAnalysisUseCase.java \
+  apps/api/src/main/java/com/example/review/decision/DecisionController.java \
+  apps/api/src/main/java/com/example/review/workflow/WorkflowQueryService.java \
+  apps/api/src/test/java/com/example/review/e2e/ReviewFlowE2eTest.java \
+  services/agent/app/agent_platform/handlers/conflict_analysis.py \
+  services/agent/tests/test_conflict_analysis_flow.py \
+  apps/web/src/views/chair/DecisionWorkbenchView.vue apps/web/src/lib/workflow-api.ts
+git commit -m "feat: migrate conflict analysis to broker flow"
+```
+
+### Task 18: Migrate `SCREENING_ANALYSIS` And Delete Legacy Mirrored Task Infrastructure
+
+**Files:**
+
+- Create: `apps/api/src/main/java/com/example/review/analysis/application/RequestScreeningAnalysisUseCase.java`
+- Create: `services/agent/app/agent_platform/handlers/screening.py`
+- Create: `services/agent/tests/test_screening_flow.py`
+- Modify: `apps/api/src/main/java/com/example/review/workflow/WorkflowQueryController.java`
+- Modify: `apps/web/src/views/chair/ScreeningQueueView.vue`
+- Modify: `apps/api/src/test/java/com/example/review/agent/AgentIntegrationServiceTest.java`
+- Delete: `apps/api/src/main/java/com/example/review/agent/AgentPollingScheduler.java`
+- Delete: `apps/api/src/main/java/com/example/review/agent/HttpAgentServiceClient.java`
+- Delete: `apps/api/src/main/java/com/example/review/agent/AgentServiceClient.java`
+- Delete: `apps/api/src/main/java/com/example/review/agent/AgentServiceException.java`
+- Delete: `services/agent/app/task_store.py`
+- Delete: `services/agent/app/routes/tasks.py`
+- Delete: `services/agent/tests/test_tasks_api.py`
+- Delete: `services/agent/tests/test_multipart_tasks_api.py`
+
+- [ ] **Step 1: Write the failing screening-flow test and the failing absence test for legacy poller references**
+
+```python
+def test_screening_handler_builds_projection_summary():
+    handler = ScreeningAnalysisHandler()
+    result = handler.execute(
+        ExecutionJob.new("job-1", "screening-key", "SCREENING", {"title": "Paper", "pdfText": "Introduction ..."}),
+        FakeProviderExecutor(),
+    )
+
+    assert result["summary_projection"]["businessStatus"] == "AVAILABLE"
+```
+
+```java
+@Test
+void screeningRequestReturnsBusinessIntentResponse() throws Exception {
+    String chairToken = loginAndExtractToken("chair_demo", "demo123");
+
+    mockMvc.perform(post("/api/manuscripts/{id}/versions/{versionId}/screening-analysis", 2001L, 3001L)
+                    .header("Authorization", "Bearer " + chairToken)
+                    .contentType(APPLICATION_JSON)
+                    .content("{\"force\":false}"))
+            .andExpect(status().isAccepted())
+            .andExpect(jsonPath("$.businessStatus").value("REQUESTED"))
+            .andExpect(jsonPath("$.taskStatus").doesNotExist());
+}
+```
+
+- [ ] **Step 2: Run the new tests and verify they fail while the legacy infrastructure still exists**
+
+Run: `cd services/agent && ./.venv/bin/python -m pytest tests/test_screening_flow.py -q`
+Expected: FAIL because `ScreeningAnalysisHandler` does not exist.
+
+Run: `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AgentIntegrationServiceTest test`
+Expected: FAIL because the screening endpoint still returns the legacy task contract.
+
+- [ ] **Step 3: Implement the screening use case and handler, then delete the legacy API poller/client path**
+
+```java
+public AnalysisIntentResponse handle(CurrentUserPrincipal principal, long manuscriptId, long versionId) {
+    RoleGuard.requireChairOrAdmin(principal);
+    Map<String, Object> payload = contextAssembler.buildScreeningPayload(manuscriptId, versionId);
+    String key = AnalysisIdempotencyKeyFactory.build(
+            AnalysisType.SCREENING,
+            Map.of("manuscriptId", manuscriptId, "versionId", versionId),
+            payload,
+            1
+    );
+    long intentId = intentRepository.createIntent(AnalysisType.SCREENING, manuscriptId, principal.userId(), key);
+    outboxRepository.enqueueRequested(intentId, key, payload);
+    return new AnalysisIntentResponse(intentId, "SCREENING", "REQUESTED");
+}
+```
+
+```python
+class ScreeningAnalysisHandler(AnalysisTaskHandler):
+    analysis_type = "SCREENING"
+
+    def execute(self, job: ExecutionJob, provider_executor: ProviderExecutor) -> dict:
+        raw = provider_executor.run_screening(job.input_snapshot)
+        return {
+            "raw_result": raw,
+            "redacted_result": redact_result("SCREENING_ANALYSIS", raw),
+            "summary_projection": {
+                "businessStatus": "AVAILABLE",
+                "summary": raw["screeningSummary"],
+            },
+        }
+```
+
+- [ ] **Step 4: Delete the first-generation FastAPI task API and in-memory task truth**
+
+```python
+from fastapi import FastAPI
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(title="review-agent-platform")
+    app.include_router(build_platform_admin_router())
+    return app
+```
+
+- [ ] **Step 5: Run the legacy-removal verification slice**
+
+Run: `cd services/agent && ./.venv/bin/python -m pytest tests/test_screening_flow.py tests/test_health.py -q`
+Expected: PASS
+
+Run: `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AgentIntegrationServiceTest test`
+Expected: PASS after tests are rewritten to the intent/projection architecture.
+
+- [ ] **Step 6: Commit the screening migration and legacy deletion**
+
+```bash
+git add apps/api/src/main/java/com/example/review/analysis/application/RequestScreeningAnalysisUseCase.java \
+  apps/api/src/main/java/com/example/review/workflow/WorkflowQueryController.java \
+  apps/web/src/views/chair/ScreeningQueueView.vue \
+  services/agent/app/agent_platform/handlers/screening.py \
+  services/agent/tests/test_screening_flow.py \
+  apps/api/src/test/java/com/example/review/agent/AgentIntegrationServiceTest.java
+git rm apps/api/src/main/java/com/example/review/agent/AgentPollingScheduler.java \
+  apps/api/src/main/java/com/example/review/agent/HttpAgentServiceClient.java \
+  apps/api/src/main/java/com/example/review/agent/AgentServiceClient.java \
+  apps/api/src/main/java/com/example/review/agent/AgentServiceException.java \
+  services/agent/app/task_store.py services/agent/app/routes/tasks.py \
+  services/agent/tests/test_tasks_api.py services/agent/tests/test_multipart_tasks_api.py
+git commit -m "refactor: remove mirrored agent task infrastructure"
+```
+
+### Task 19: Add Observability, Admin Governance Views, And Full Verification
+
+**Files:**
+
+- Modify: `apps/api/src/main/java/com/example/review/analysis/infrastructure/AnalysisEventConsumer.java`
+- Modify: `services/agent/app/agent_platform/consumer.py`
+- Modify: `services/agent/app/agent_platform/publisher.py`
+- Modify: `apps/web/src/views/admin/AgentMonitorView.vue`
+- Modify: `apps/web/src/lib/workflow-format.ts`
+- Modify: `apps/api/src/test/java/com/example/review/e2e/ReviewFlowE2eTest.java`
+- Modify: `scripts/test-all.sh`
+- Modify: `README.md`
+- Modify: `docs/ARCHITECTURE.md`
+
+- [ ] **Step 1: Write the failing governance test for trace identity and DLQ-visible metadata**
+
+```python
+def test_completed_event_carries_trace_and_intent_identity():
+    event = build_completed_event(
+        trace_id="trace-1",
+        intent_id=101,
+        job_id="job-1",
+        analysis_type="REVIEWER_ASSIST",
+    )
+
+    assert event["traceId"] == "trace-1"
+    assert event["intentId"] == 101
+```
+
+- [ ] **Step 2: Run the focused governance tests and verify they fail until the metadata is added**
+
+Run: `cd services/agent && ./.venv/bin/python -m pytest tests/test_message_consumer.py tests/test_reviewer_assist_flow.py -q`
+Expected: FAIL on missing `traceId`/`intentId` propagation.
+
+- [ ] **Step 3: Add structured trace metadata to published events and API-side projection updates**
+
+```python
+return {
+    "traceId": trace_id,
+    "intentId": intent_id,
+    "jobId": job.job_id,
+    "analysisType": job.analysis_type,
+    "businessStatus": "AVAILABLE",
+    "summaryProjection": result["summary_projection"],
+}
+```
+
+```java
+log.info("analysis projection updated traceId={} intentId={} analysisType={} businessStatus={}",
+        message.traceId(), message.intentId(), message.analysisType(), message.businessStatus());
+```
+
+- [ ] **Step 4: Update the admin monitor to show projection status plus execution identifiers**
+
+```vue
+<el-table-column prop="traceId" label="Trace" min-width="180" />
+<el-table-column prop="intentId" label="Intent" width="110" />
+<el-table-column prop="jobId" label="Job" min-width="180" />
+```
+
+- [ ] **Step 5: Run the full verification commands**
+
+Run: `./.venv/bin/python -m pytest services/agent/tests -q`
+Expected: PASS
+
+Run: `cd apps/web && npm run test -- --run && npm run typecheck && npm run build`
+Expected: PASS
+
+Run: `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test`
+Expected: PASS when Oracle and RabbitMQ are available locally.
+
+Run: `git diff --check`
+Expected: no output
+
+- [ ] **Step 6: Commit the final governance and verification slice**
+
+```bash
+git add apps/api/src/main/java/com/example/review/analysis/infrastructure/AnalysisEventConsumer.java \
+  services/agent/app/agent_platform/consumer.py services/agent/app/agent_platform/publisher.py \
+  apps/web/src/views/admin/AgentMonitorView.vue apps/web/src/lib/workflow-format.ts \
+  apps/api/src/test/java/com/example/review/e2e/ReviewFlowE2eTest.java \
+  scripts/test-all.sh README.md docs/ARCHITECTURE.md
+git commit -m "feat: add agent platform observability and governance"
+```
+
+## Plan Self-Review
+
+- Spec coverage check:
+  - split sovereignty: covered by Tasks 14-18
+  - RabbitMQ command/event path: covered by Tasks 14-16
+  - outbox/inbox consistency: covered by Tasks 14 and 16
+  - durable execution job model: covered by Task 15
+  - reviewer/chair/admin projection flow: covered by Tasks 16-19
+  - legacy mirrored task deletion: covered by Task 18
+  - observability and governance: covered by Task 19
+- Placeholder scan:
+  - no `TBD`, `implement later`, or deferred code steps remain in the refactor task section
+- Type consistency:
+  - the plan uses `AnalysisIntent`, `AnalysisProjection`, `ExecutionJob`, `AnalysisType`, and projection-oriented response contracts consistently across all tasks

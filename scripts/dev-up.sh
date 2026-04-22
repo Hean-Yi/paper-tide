@@ -46,6 +46,10 @@ start_agent() {
   cd "$old_pwd"
 }
 
+start_rabbitmq() {
+  bash "$ROOT_DIR/scripts/rabbitmq-up.sh" || true
+}
+
 start_web() {
   if ! command -v npm >/dev/null 2>&1; then
     echo "Skipping web: npm is not installed." >&2
@@ -71,6 +75,7 @@ cleanup() {
 
 trap cleanup EXIT
 
+start_rabbitmq
 start_api || true
 start_agent || true
 start_web || true

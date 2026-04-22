@@ -79,6 +79,10 @@ Current lessons captured from recent review cycles:
 - When a runtime is optional in developer workflows, make the mode explicit in the bootstrap helper and have `dev-up.sh`/`test-all.sh` call the optional path so one missing local service does not abort the rest of the stack.
 - Optional bootstrap helpers should preflight the runtime engine and skip cleanly when the CLI exists but the engine is unreachable; only the required path should fail fast on that condition.
 - In Oracle verification SQL, keep `IN (...)` lists syntactically closed and avoid trailing commas in object-name audits so schema checks remain executable.
+- When business analysis identity may need more than one durable key, model the composite anchor explicitly in the domain and schema instead of collapsing it into a single overloaded anchor ID and pushing the missing semantics into payload hashing.
+- If `UPDATED_AT` participates in ordering, polling, or indexed lookup semantics, maintain it through a trigger or an equally enforced persistence contract; do not leave it as an insert-only default that later writers must remember manually.
+- Frozen dataclasses do not make durable state immutable when nested JSON-like payloads remain mutable. For job or outbox snapshots, freeze nested mappings and sequences recursively and expose mutable copies only through explicit helper methods.
+- Typed construction helpers such as idempotency-key factories must validate enum and value-object compatibility at creation time so semantically invalid combinations fail fast instead of producing durable but nonsensical identities.
 
 ## Plan File Discipline
 Execution work must stay anchored to one authoritative implementation plan file.

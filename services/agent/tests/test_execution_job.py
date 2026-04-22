@@ -67,6 +67,28 @@ def test_state_machine_returns_new_job_without_mutating_original() -> None:
     assert running.attempt_count == 1
 
 
+def test_execution_job_input_snapshot_is_recursively_immutable() -> None:
+    job = ExecutionJob.new(
+        "job-1",
+        "key-1",
+        "REVIEWER_ASSIST",
+        {"paper": {"title": "Paper"}, "sections": [{"name": "intro"}]},
+    )
+
+    with pytest.raises(TypeError):
+        job.input_snapshot["paper"]["title"] = "Changed"
+
+    with pytest.raises(TypeError):
+        job.input_snapshot["sections"][0]["name"] = "changed"
+
+    mutable_copy = job.input_snapshot_copy()
+    mutable_copy["paper"]["title"] = "Changed"
+    mutable_copy["sections"][0]["name"] = "changed"
+
+    assert job.input_snapshot["paper"]["title"] == "Paper"
+    assert job.input_snapshot["sections"][0]["name"] == "intro"
+
+
 def test_mark_published_returns_new_message_without_mutating_pending_snapshot() -> None:
     outbox = InMemoryExecutionOutbox()
     publisher = AnalysisRequestedPublisher(outbox)

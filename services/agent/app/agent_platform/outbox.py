@@ -1,18 +1,19 @@
 from __future__ import annotations
 
-from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from threading import Lock
-from typing import Any, Protocol
+from typing import Any, Mapping, Protocol
 from uuid import uuid4
+
+from app.agent_platform.snapshots import freeze_json_mapping, thaw_json_mapping
 
 
 @dataclass(frozen=True, slots=True)
 class ExecutionOutboxMessage:
     message_id: str
     topic: str
-    payload: dict[str, Any]
+    payload: Mapping[str, Any]
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     published_at: datetime | None = None
     publish_attempts: int = 0
@@ -51,7 +52,7 @@ class InMemoryExecutionOutbox:
             message = ExecutionOutboxMessage(
                 message_id=resolved_message_id,
                 topic=topic,
-                payload=deepcopy(payload),
+                payload=freeze_json_mapping(payload),
             )
             self._messages[message.message_id] = message
             return message
@@ -72,3 +73,7 @@ class InMemoryExecutionOutbox:
             )
             self._messages[message_id] = published
             return published
+
+
+def payload_copy(message: ExecutionOutboxMessage) -> dict[str, Any]:
+    return thaw_json_mapping(message.payload)

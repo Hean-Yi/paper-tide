@@ -604,6 +604,14 @@ git commit -m "feat: add analysis identities and broker foundation"
   - spec review confirmed Task 14 stayed within the approved slice
   - code quality review initially raised idempotency canonicalization, schema integrity, index coverage, RabbitMQ bootstrap, Oracle SQL syntax, and optional-runtime regressions
   - final code quality re-review approved Task 14 after commit `8bd94ff`, with only residual live-environment testing gaps noted
+- Additional hardening completed on 2026-04-22 after a fresh architecture review found that Task 14 still under-modeled composite business anchors and left timestamp-maintenance semantics implicit:
+  - commit `c35eaf4` introduced typed anchor/status vocabulary in the analysis domain and modeled screening as a composite `manuscriptId + versionId` anchor via `AnalysisBusinessAnchor`
+  - `ANALYSIS_INTENT` gained `BUSINESS_ANCHOR_VERSION_ID`, a composite-anchor check constraint, and `IDX_ANALYSIS_INTENT_ANCHOR_LOOKUP`
+  - `ANALYSIS_PROJECTION.UPDATED_AT` and `EXECUTION_JOB.UPDATED_AT` gained `BEFORE UPDATE` triggers so indexed ordering fields are maintained by schema rather than caller convention
+  - a follow-up local fix tightened `AnalysisIdempotencyKeyFactory` so typed anchor/type mismatches now fail fast instead of generating semantically invalid keys
+  - focused verification:
+    - `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisDomainTest test`
+    - `git diff --check`
 
 ### Task 15: Build The Durable Agent Platform Core
 
@@ -799,6 +807,16 @@ git commit -m "feat(agent): add durable execution job core"
   - spec review confirmed the Task 15 slice matched plan scope and kept the legacy route layer intact
   - code quality review initially raised two blocking issues: outbox-row overwrite risk and missing state-transition guards
   - follow-up commit `62747d5` fixed both issues, and final code quality re-review approved the slice
+- Additional hardening completed on 2026-04-22 after a fresh engineering review found that immutable-looking platform objects still leaked mutable nested state and that typed intake validation still allowed semantically invalid construction at the wrong boundary:
+  - commit `2047a65` made `ExecutionJob` and `ExecutionOutboxMessage` immutable snapshots, added repository `save()` semantics, introduced `AgentPlatformRuntime`, and rejected missing/null `requestPayload` at intake
+  - a follow-up local fix recursively froze nested job/outbox JSON-like payloads and added explicit mutable-copy helpers so future handlers can work from copies without mutating stored state
+  - focused verification:
+    - `cd services/agent && ../../.venv/bin/python -m pytest tests/test_execution_job.py tests/test_message_consumer.py -q`
+      - Result after local follow-up: `13 passed, 1 warning`
+    - `cd services/agent && ../../.venv/bin/python -m pytest tests/test_health.py -q`
+      - Result: `1 passed, 1 warning`
+    - `git diff --check`
+      - Result: no output
 
 ### Task 16: Migrate `REVIEW_ASSIST_ANALYSIS` To The New Intent/Projection Flow
 

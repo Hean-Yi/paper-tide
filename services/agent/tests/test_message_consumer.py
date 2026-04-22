@@ -71,3 +71,21 @@ def test_analysis_requested_publisher_creates_distinct_outbox_rows_for_same_job(
 
     assert first.message_id != second.message_id
     assert len(outbox.pending()) == 2
+
+
+def test_outbox_payload_snapshot_is_recursively_immutable() -> None:
+    outbox = InMemoryExecutionOutbox()
+    publisher = AnalysisRequestedPublisher(outbox)
+    message = AnalysisRequestedMessage(
+        idempotency_key="key-1",
+        analysis_type="REVIEWER_ASSIST",
+        request_payload={"paper": {"title": "Paper"}, "sections": [{"name": "intro"}]},
+    )
+
+    published = publisher.publish(message)
+
+    with pytest.raises(TypeError):
+        published.payload["requestPayload"]["paper"]["title"] = "Changed"
+
+    with pytest.raises(TypeError):
+        published.payload["requestPayload"]["sections"][0]["name"] = "changed"

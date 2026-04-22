@@ -24,7 +24,15 @@ public final class AnalysisIdempotencyKeyFactory {
       AnalysisBusinessAnchor businessAnchor,
       Map<String, Object> normalizedInput,
       int requestVersion) {
+    Objects.requireNonNull(analysisType, "analysisType");
     Objects.requireNonNull(businessAnchor, "businessAnchor");
+    if (!AnalysisRequestPolicy.allows(analysisType, businessAnchor)) {
+      throw new IllegalArgumentException(
+          "businessAnchor "
+              + businessAnchor.businessAnchorType()
+              + " is not allowed for analysisType "
+              + analysisType);
+    }
     Map<String, Object> anchorPayload = new LinkedHashMap<>();
     anchorPayload.put("businessAnchorType", businessAnchor.businessAnchorType().name());
     anchorPayload.put("businessAnchorId", businessAnchor.businessAnchorId());

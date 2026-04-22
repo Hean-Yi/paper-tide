@@ -17,18 +17,20 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 class AnalysisDomainTest {
   @Test
   void buildsStableIdempotencyKeyFromBusinessAnchor() {
     String key =
         AnalysisIdempotencyKeyFactory.build(
             AnalysisType.REVIEWER_ASSIST,
-            AnalysisBusinessAnchor.screening(77L, 11L),
+            AnalysisBusinessAnchor.assignment(77L),
             Map.of("title", "Robust Review Systems"),
             1);
 
     assertThat(key).startsWith("REVIEWER_ASSIST:");
-    assertThat(key).contains(":businessAnchorType=MANUSCRIPT_VERSION:");
+    assertThat(key).contains(":businessAnchorType=ASSIGNMENT:");
   }
 
   @Test
@@ -54,6 +56,18 @@ class AnalysisDomainTest {
         .isTrue();
     assertThat(AnalysisRequestPolicy.allows(AnalysisType.SCREENING, AnalysisBusinessAnchor.manuscript(77L)))
         .isFalse();
+  }
+
+  @Test
+  void idempotencyKeyFactoryRejectsMismatchedBusinessAnchor() {
+    assertThatThrownBy(() ->
+        AnalysisIdempotencyKeyFactory.build(
+            AnalysisType.REVIEWER_ASSIST,
+            AnalysisBusinessAnchor.screening(77L, 11L),
+            Map.of("title", "Robust Review Systems"),
+            1))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("is not allowed for analysisType REVIEWER_ASSIST");
   }
 
   @Test

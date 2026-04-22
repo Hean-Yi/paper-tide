@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from app.agent_platform.domain import ExecutionJob
 
 
@@ -13,26 +15,30 @@ class ExecutionStateMachine:
             raise ValueError("max_attempts must be at least 1")
         self._max_attempts = max_attempts
 
-    def mark_running(self, job: ExecutionJob) -> None:
+    def mark_running(self, job: ExecutionJob) -> ExecutionJob:
         self._require_state(job, self._RUNNABLE_STATES, "mark_running")
-        job.attempt_count += 1
-        job.execution_state = self._ACTIVE_STATE
-        job.failure_reason = None
+        return replace(
+            job,
+            attempt_count=job.attempt_count + 1,
+            execution_state=self._ACTIVE_STATE,
+            failure_reason=None,
+        )
 
-    def mark_retryable_failure(self, job: ExecutionJob, reason: str) -> None:
+    def mark_retryable_failure(self, job: ExecutionJob, reason: str) -> ExecutionJob:
         self._require_state(job, {self._ACTIVE_STATE}, "mark_retryable_failure")
-        job.failure_reason = reason
-        job.execution_state = "DEAD_LETTERED" if job.attempt_count >= self._max_attempts else "FAILED_RETRYABLE"
+        return replace(
+            job,
+            failure_reason=reason,
+            execution_state="DEAD_LETTERED" if job.attempt_count >= self._max_attempts else "FAILED_RETRYABLE",
+        )
 
-    def mark_succeeded(self, job: ExecutionJob) -> None:
+    def mark_succeeded(self, job: ExecutionJob) -> ExecutionJob:
         self._require_state(job, {self._ACTIVE_STATE}, "mark_succeeded")
-        job.execution_state = "SUCCEEDED"
-        job.failure_reason = None
+        return replace(job, execution_state="SUCCEEDED", failure_reason=None)
 
-    def mark_terminal_failure(self, job: ExecutionJob, reason: str) -> None:
+    def mark_terminal_failure(self, job: ExecutionJob, reason: str) -> ExecutionJob:
         self._require_state(job, {self._ACTIVE_STATE}, "mark_terminal_failure")
-        job.failure_reason = reason
-        job.execution_state = "FAILED_TERMINAL"
+        return replace(job, failure_reason=reason, execution_state="FAILED_TERMINAL")
 
     def _require_state(self, job: ExecutionJob, allowed_states: set[str], action: str) -> None:
         if job.execution_state in self._TERMINAL_STATES:

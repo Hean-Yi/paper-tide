@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from app.agent_platform.messages import AnalysisRequestedMessage
-from app.agent_platform.outbox import ExecutionOutboxMessage, InMemoryExecutionOutbox
+from app.agent_platform.outbox import ExecutionOutbox, ExecutionOutboxMessage
 
 
 class AnalysisRequestedPublisher:
-    def __init__(self, outbox: InMemoryExecutionOutbox, *, topic: str = "analysis.requested") -> None:
+    def __init__(self, outbox: ExecutionOutbox, *, topic: str = "analysis.requested") -> None:
         self._outbox = outbox
         self._topic = topic
 

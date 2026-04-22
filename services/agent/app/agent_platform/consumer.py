@@ -5,11 +5,11 @@ from typing import Any
 
 from app.agent_platform.domain import ExecutionJob
 from app.agent_platform.messages import AnalysisRequestedMessage
-from app.agent_platform.repositories import InMemoryExecutionJobRepository
+from app.agent_platform.repositories import ExecutionJobRepository
 
 
 class AnalysisRequestedConsumer:
-    def __init__(self, repository: InMemoryExecutionJobRepository) -> None:
+    def __init__(self, repository: ExecutionJobRepository) -> None:
         self._repository = repository
 
     def handle(self, message: Mapping[str, Any] | AnalysisRequestedMessage) -> ExecutionJob:

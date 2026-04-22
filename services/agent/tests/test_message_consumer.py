@@ -1,3 +1,5 @@
+import pytest
+
 from app.agent_platform.consumer import AnalysisRequestedConsumer
 from app.agent_platform.messages import AnalysisRequestedMessage
 from app.agent_platform.outbox import InMemoryExecutionOutbox
@@ -25,7 +27,33 @@ def test_create_app_exposes_agent_platform_components() -> None:
     app = create_app(enable_background_execution=False, require_internal_api_key=False)
 
     assert app.state.analysis_requested_consumer is not None
-    assert app.state.execution_job_repository is not None
+    assert app.state.agent_platform is not None
+    assert not hasattr(app.state, "execution_job_repository")
+    assert not hasattr(app.state, "execution_outbox")
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        {
+            "idempotencyKey": "key-1",
+            "analysisType": "REVIEWER_ASSIST",
+        },
+        {
+            "idempotencyKey": "key-1",
+            "analysisType": "REVIEWER_ASSIST",
+            "requestPayload": None,
+        },
+    ],
+)
+def test_analysis_requested_consumer_rejects_missing_request_payload(message: dict[str, object]) -> None:
+    repository = InMemoryExecutionJobRepository()
+    consumer = AnalysisRequestedConsumer(repository)
+
+    with pytest.raises(ValueError, match="requestPayload"):
+        consumer.handle(message)
+
+    assert repository.get_by_idempotency_key("key-1") is None
 
 
 def test_analysis_requested_publisher_creates_distinct_outbox_rows_for_same_job() -> None:

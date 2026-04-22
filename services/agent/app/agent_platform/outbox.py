@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from threading import Lock
-from typing import Any
+from typing import Any, Protocol
 from uuid import uuid4
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class ExecutionOutboxMessage:
     message_id: str
     topic: str
@@ -16,6 +16,20 @@ class ExecutionOutboxMessage:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     published_at: datetime | None = None
     publish_attempts: int = 0
+
+
+class ExecutionOutbox(Protocol):
+    def enqueue(
+        self,
+        topic: str,
+        payload: dict[str, Any],
+        *,
+        message_id: str | None = None,
+    ) -> ExecutionOutboxMessage: ...
+
+    def pending(self) -> list[ExecutionOutboxMessage]: ...
+
+    def mark_published(self, message_id: str) -> ExecutionOutboxMessage | None: ...
 
 
 class InMemoryExecutionOutbox:
@@ -51,6 +65,10 @@ class InMemoryExecutionOutbox:
             message = self._messages.get(message_id)
             if message is None:
                 return None
-            message.publish_attempts += 1
-            message.published_at = datetime.now(UTC)
-            return message
+            published = replace(
+                message,
+                publish_attempts=message.publish_attempts + 1,
+                published_at=datetime.now(UTC),
+            )
+            self._messages[message_id] = published
+            return published

@@ -4,6 +4,7 @@ from .domain import ExecutionJob
 from .messages import AnalysisRequestedMessage
 from .outbox import ExecutionOutboxMessage, InMemoryExecutionOutbox
 from .publisher import AnalysisRequestedPublisher
+from .runtime import AgentPlatformRuntime
 from .repositories import InMemoryExecutionJobRepository
 from .state_machine import ExecutionStateMachine
 
@@ -17,4 +18,5 @@ __all__ = [
     "ExecutionStateMachine",
     "InMemoryExecutionJobRepository",
     "InMemoryExecutionOutbox",
+    "AgentPlatformRuntime",
 ]

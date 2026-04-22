@@ -18,10 +18,18 @@ class AnalysisRequestedMessage:
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "AnalysisRequestedMessage":
+        if "requestPayload" not in value:
+            raise ValueError("requestPayload is required")
+        request_payload = value["requestPayload"]
+        if request_payload is None:
+            raise ValueError("requestPayload is required")
+        if not isinstance(request_payload, Mapping):
+            raise ValueError("requestPayload must be a mapping")
+
         return cls(
             idempotency_key=value["idempotencyKey"],
             analysis_type=value["analysisType"],
-            request_payload=deepcopy(value.get("requestPayload") or {}),
+            request_payload=deepcopy(dict(request_payload)),
             job_id=value.get("jobId"),
             intent_reference=value.get("intentReference"),
             trace_id=value.get("traceId"),

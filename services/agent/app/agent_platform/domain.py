@@ -7,7 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class ExecutionJob:
     job_id: str
     idempotency_key: str

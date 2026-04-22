@@ -268,7 +268,7 @@
 
 ## Active Task
 
-- Active task: prepare Task 15, building the durable agent platform core on top of the shared identities and messaging foundation.
+- Active task: execute Task 16, migrating `REVIEW_ASSIST_ANALYSIS` onto the new intent/projection and execution-job flow.
 
 ## Working Rules For Next Execution Cycle
 
@@ -578,6 +578,13 @@ git commit -m "feat: add analysis identities and broker foundation"
 - Added RabbitMQ wiring on the API side and RabbitMQ startup hooks in the local scripts.
 - Added the new Oracle schema objects for analysis intent/projection messaging and execution jobs/attempts/artifacts.
 - Added the agent dependency bumps required for RabbitMQ and Oracle access.
+- Follow-up review fixes completed across commits `7b6130b`, `bb2d716`, and `8bd94ff`:
+  - made nested idempotency hashing canonical for recursively nested map/list payloads
+  - added the missing schema foreign keys and queue/child-table indexes, then verified them in `verify_schema.sql`
+  - fixed the Oracle verification script syntax regression in the index audit list
+  - upgraded `scripts/rabbitmq-up.sh` to support explicit `--optional` and `--required` modes, readiness waits, and optional-mode skips when Docker is missing or the engine is unreachable
+  - wired `scripts/dev-up.sh` and `scripts/test-all.sh` to the optional RabbitMQ bootstrap path so developer flows still start whichever runtimes are available
+  - recorded the generalized review lessons in `AGENTS.md`
 
 **Verification run:**
 
@@ -586,8 +593,21 @@ git commit -m "feat: add analysis identities and broker foundation"
   - Second run passed after the domain types were added.
 - `./.venv/bin/python -m pytest services/agent/tests/test_health.py -q`
 - `git diff --check`
+- Follow-up verification after review fixes:
+  - `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisDomainTest test`
+  - `./.venv/bin/python -m pytest services/agent/tests/test_health.py -q`
+  - `bash -n scripts/rabbitmq-up.sh && bash -n scripts/dev-up.sh && bash -n scripts/test-all.sh`
+  - `PATH=/usr/bin:/bin /bin/bash scripts/rabbitmq-up.sh --optional`
+    - Result: clean skip when Docker was unavailable
+  - `git diff --check`
+- Review closure:
+  - spec review confirmed Task 14 stayed within the approved slice
+  - code quality review initially raised idempotency canonicalization, schema integrity, index coverage, RabbitMQ bootstrap, Oracle SQL syntax, and optional-runtime regressions
+  - final code quality re-review approved Task 14 after commit `8bd94ff`, with only residual live-environment testing gaps noted
 
 ### Task 15: Build The Durable Agent Platform Core
+
+**Status:** Completed on 2026-04-22.
 
 **Files:**
 
@@ -603,7 +623,7 @@ git commit -m "feat: add analysis identities and broker foundation"
 - Create: `services/agent/tests/test_message_consumer.py`
 - Modify: `services/agent/app/main.py`
 
-- [ ] **Step 1: Write the failing pytest suite for execution state transitions and duplicate intake**
+- [x] **Step 1: Write the failing pytest suite for execution state transitions and duplicate intake**
 
 ```python
 from app.agent_platform.domain import ExecutionJob
@@ -630,12 +650,12 @@ def test_duplicate_intake_reuses_existing_job_id():
     assert second.job_id == first.job_id
 ```
 
-- [ ] **Step 2: Run the new pytest suite and verify it fails because the platform package is missing**
+- [x] **Step 2: Run the new pytest suite and verify it fails because the platform package is missing**
 
 Run: `cd services/agent && ./.venv/bin/python -m pytest tests/test_execution_job.py tests/test_message_consumer.py -q`
 Expected: FAIL with missing `app.agent_platform` imports.
 
-- [ ] **Step 3: Add the execution entity and state machine**
+- [x] **Step 3: Add the execution entity and state machine**
 
 ```python
 from dataclasses import dataclass, field
@@ -679,7 +699,7 @@ class ExecutionStateMachine:
         job.execution_state = "DEAD_LETTERED" if job.attempt_count >= self._max_attempts else "FAILED_RETRYABLE"
 ```
 
-- [ ] **Step 4: Add repositories and message consumer skeletons**
+- [x] **Step 4: Add repositories and message consumer skeletons**
 
 ```python
 class InMemoryExecutionJobRepository:
@@ -710,7 +730,7 @@ class AnalysisRequestedConsumer:
         )
 ```
 
-- [ ] **Step 5: Wire the platform into FastAPI startup without deleting the legacy route layer yet**
+- [x] **Step 5: Wire the platform into FastAPI startup without deleting the legacy route layer yet**
 
 ```python
 from fastapi import FastAPI
@@ -726,7 +746,7 @@ def create_app() -> FastAPI:
     return app
 ```
 
-- [ ] **Step 6: Run the focused agent tests**
+- [x] **Step 6: Run the focused agent tests**
 
 Run: `cd services/agent && ./.venv/bin/python -m pytest tests/test_execution_job.py tests/test_message_consumer.py -q`
 Expected: PASS
@@ -734,12 +754,51 @@ Expected: PASS
 Run: `cd services/agent && ./.venv/bin/python -m pytest tests/test_health.py -q`
 Expected: PASS
 
-- [ ] **Step 7: Commit the platform-core slice**
+- [x] **Step 7: Commit the platform-core slice**
 
 ```bash
 git add services/agent/app/main.py services/agent/app/agent_platform services/agent/tests/test_execution_job.py services/agent/tests/test_message_consumer.py
 git commit -m "feat(agent): add durable execution job core"
 ```
+
+**What changed:**
+
+- Added the first `services/agent/app/agent_platform` package with focused platform-core units:
+  - `ExecutionJob` domain object
+  - `ExecutionStateMachine` with explicit runnable and terminal transition guards
+  - `InMemoryExecutionJobRepository` for idempotent intake reuse
+  - `AnalysisRequestedMessage`, `InMemoryExecutionOutbox`, and `AnalysisRequestedPublisher` as lightweight command/outbox scaffolding
+  - `AgentPlatformConfig` for platform settings
+  - `AnalysisRequestedConsumer` as the first thin intake adapter
+- Wired the new platform core into `services/agent/app/main.py` via `app.state` while preserving the legacy `TaskStore` and `/agent/tasks` route layer unchanged.
+- Added focused pytest coverage for:
+  - retryable-failure to dead-letter transition behavior
+  - duplicate idempotent intake reuse
+  - terminal-state transition protection
+  - repeated publish behavior creating distinct outbox rows
+  - FastAPI app exposure of the new platform components
+- Closed the code-review follow-up gaps by:
+  - decoupling outbox `message_id` from `job_id`
+  - rejecting duplicate explicit outbox message IDs instead of overwriting rows
+  - making illegal terminal-state rewrites fail fast in the state machine
+
+**Verification run:**
+
+- Red/green cycle executed during implementation:
+  - `cd services/agent && ../../.venv/bin/python -m pytest tests/test_execution_job.py tests/test_message_consumer.py -q`
+    - First run failed as expected before `app.agent_platform` existed.
+    - Later runs passed after the platform core was added.
+- Focused agent verification after implementation and review fixes:
+  - `cd services/agent && ../../.venv/bin/python -m pytest tests/test_execution_job.py tests/test_message_consumer.py -q`
+    - Result: `7 passed, 1 warning`
+  - `cd services/agent && ../../.venv/bin/python -m pytest tests/test_health.py -q`
+    - Result: `1 passed, 1 warning`
+  - `git diff --check`
+    - Result: no output
+- Review closure:
+  - spec review confirmed the Task 15 slice matched plan scope and kept the legacy route layer intact
+  - code quality review initially raised two blocking issues: outbox-row overwrite risk and missing state-transition guards
+  - follow-up commit `62747d5` fixed both issues, and final code quality re-review approved the slice
 
 ### Task 16: Migrate `REVIEW_ASSIST_ANALYSIS` To The New Intent/Projection Flow
 

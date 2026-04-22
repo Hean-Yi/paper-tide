@@ -14,7 +14,7 @@ if [ -x "$ROOT_DIR/.venv/bin/python" ]; then
 fi
 
 if command -v mvn >/dev/null 2>&1 && command -v java >/dev/null 2>&1; then
-  bash "$ROOT_DIR/scripts/rabbitmq-up.sh"
+  bash "$ROOT_DIR/scripts/rabbitmq-up.sh" --optional
   if [ -x "$ROOT_DIR/scripts/demo-seed.sh" ] && command -v docker >/dev/null 2>&1; then
     bash "$ROOT_DIR/scripts/demo-seed.sh"
   elif [ -x "$ROOT_DIR/scripts/oracle-demo-seed.sh" ] && command -v docker >/dev/null 2>&1; then

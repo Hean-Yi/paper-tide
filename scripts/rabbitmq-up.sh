@@ -1,9 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+MODE="${1:---optional}"
+if [ "$#" -gt 1 ]; then
+  echo "Usage: $0 [--optional|--required]" >&2
+  exit 2
+fi
+
+case "$MODE" in
+  --optional|optional)
+    REQUIRED=0
+    ;;
+  --required|required)
+    REQUIRED=1
+    ;;
+  *)
+    echo "Usage: $0 [--optional|--required]" >&2
+    exit 2
+    ;;
+esac
+
 if ! command -v docker >/dev/null 2>&1; then
-  echo "RabbitMQ bootstrap requires docker, but docker is not installed." >&2
-  exit 1
+  if [ "$REQUIRED" -eq 1 ]; then
+    echo "RabbitMQ bootstrap requires docker, but docker is not installed." >&2
+    exit 1
+  fi
+  echo "Skipping RabbitMQ bootstrap: docker is not installed." >&2
+  exit 0
 fi
 
 CONTAINER_NAME="${CONTAINER_NAME:-review-rabbitmq}"

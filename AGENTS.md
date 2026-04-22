@@ -76,6 +76,8 @@ Current lessons captured from recent review cycles:
 - When idempotency keys must cover nested request payloads, canonicalize nested maps recursively before hashing so semantically identical map/list structures produce the same key regardless of input key order.
 - For refactors that introduce queue/outbox/inbox tables, add the foreign-key indexes and the status/timestamp polling indexes in the same change, and verify them in schema checks rather than leaving them implicit.
 - RabbitMQ bootstrap scripts used by dev/test flows must wait for broker readiness and fail clearly on Docker or startup errors; do not wrap them in `|| true` once they become part of the verification path.
+- When a runtime is optional in developer workflows, make the mode explicit in the bootstrap helper and have `dev-up.sh`/`test-all.sh` call the optional path so one missing local service does not abort the rest of the stack.
+- In Oracle verification SQL, keep `IN (...)` lists syntactically closed and avoid trailing commas in object-name audits so schema checks remain executable.
 
 ## Plan File Discipline
 Execution work must stay anchored to one authoritative implementation plan file.

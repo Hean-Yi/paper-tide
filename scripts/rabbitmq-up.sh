@@ -29,6 +29,15 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 0
 fi
 
+if ! docker info >/dev/null 2>&1; then
+  if [ "$REQUIRED" -eq 1 ]; then
+    echo "RabbitMQ bootstrap requires a usable Docker engine, but docker is unavailable or the daemon is unreachable." >&2
+    exit 1
+  fi
+  echo "Skipping RabbitMQ bootstrap: Docker is installed but the engine is unavailable or unreachable." >&2
+  exit 0
+fi
+
 CONTAINER_NAME="${CONTAINER_NAME:-review-rabbitmq}"
 READY_TIMEOUT_SECONDS="${RABBITMQ_READY_TIMEOUT_SECONDS:-30}"
 

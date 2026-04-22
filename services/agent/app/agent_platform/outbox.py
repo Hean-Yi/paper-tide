@@ -30,14 +30,17 @@ class InMemoryExecutionOutbox:
         *,
         message_id: str | None = None,
     ) -> ExecutionOutboxMessage:
-        message = ExecutionOutboxMessage(
-            message_id=message_id or str(uuid4()),
-            topic=topic,
-            payload=deepcopy(payload),
-        )
+        resolved_message_id = message_id or str(uuid4())
         with self._lock:
+            if resolved_message_id in self._messages:
+                raise ValueError(f"message_id already exists: {resolved_message_id}")
+            message = ExecutionOutboxMessage(
+                message_id=resolved_message_id,
+                topic=topic,
+                payload=deepcopy(payload),
+            )
             self._messages[message.message_id] = message
-        return message
+            return message
 
     def pending(self) -> list[ExecutionOutboxMessage]:
         with self._lock:

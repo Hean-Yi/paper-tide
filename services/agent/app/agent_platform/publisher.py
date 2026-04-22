@@ -10,4 +10,4 @@ class AnalysisRequestedPublisher:
         self._topic = topic
 
     def publish(self, message: AnalysisRequestedMessage) -> ExecutionOutboxMessage:
-        return self._outbox.enqueue(self._topic, message.to_dict(), message_id=message.job_id)
+        return self._outbox.enqueue(self._topic, message.to_dict())

@@ -7,6 +7,7 @@ DECLARE
   v_sequence_count NUMBER;
   v_trigger_count NUMBER;
   v_procedure_count NUMBER;
+  v_index_count NUMBER;
   v_role_count NUMBER;
   v_invalid_count NUMBER;
   v_error_count NUMBER;
@@ -104,6 +105,25 @@ BEGIN
      'TRG_SYS_NOTIFICATION_BI',
      'TRG_AUDIT_LOG_BIU',
      'TRG_MANUSCRIPT_AUDIT_TRACE_AU'
+   );
+
+  SELECT COUNT(*)
+    INTO v_index_count
+    FROM USER_INDEXES
+   WHERE INDEX_NAME IN (
+     'IDX_ANALYSIS_INTENT_REQUESTED_BY_STATUS',
+     'IDX_ANALYSIS_PROJECTION_STATUS_UPDATED',
+     'IDX_ANALYSIS_OUTBOX_INTENT',
+     'IDX_ANALYSIS_OUTBOX_STATUS_CREATED',
+     'IDX_ANALYSIS_INBOX_INTENT',
+     'IDX_ANALYSIS_INBOX_STATUS_RECEIVED',
+     'IDX_EXECUTION_JOB_STATE_UPDATED',
+     'IDX_EXECUTION_ATTEMPT_JOB',
+     'IDX_EXECUTION_ARTIFACT_JOB',
+     'IDX_EXECUTION_OUTBOX_JOB',
+     'IDX_EXECUTION_OUTBOX_STATUS_CREATED',
+     'IDX_EXECUTION_INBOX_JOB',
+     'IDX_EXECUTION_INBOX_STATUS_RECEIVED',
    );
 
   SELECT COUNT(*)
@@ -208,16 +228,20 @@ BEGIN
     RAISE_APPLICATION_ERROR(-20004, 'Expected 3 procedures, found ' || v_procedure_count);
   END IF;
 
+  IF v_index_count <> 13 THEN
+    RAISE_APPLICATION_ERROR(-20005, 'Expected 13 indexes, found ' || v_index_count);
+  END IF;
+
   IF v_role_count <> 4 THEN
-    RAISE_APPLICATION_ERROR(-20005, 'Expected 4 role seeds, found ' || v_role_count);
+    RAISE_APPLICATION_ERROR(-20006, 'Expected 4 role seeds, found ' || v_role_count);
   END IF;
 
   IF v_invalid_count <> 0 THEN
-    RAISE_APPLICATION_ERROR(-20006, 'Expected all verified triggers/procedures to be VALID, found ' || v_invalid_count || ' invalid object(s)');
+    RAISE_APPLICATION_ERROR(-20007, 'Expected all verified triggers/procedures to be VALID, found ' || v_invalid_count || ' invalid object(s)');
   END IF;
 
   IF v_error_count <> 0 THEN
-    RAISE_APPLICATION_ERROR(-20007, 'Expected no USER_ERRORS rows for verified objects, found ' || v_error_count);
+    RAISE_APPLICATION_ERROR(-20008, 'Expected no USER_ERRORS rows for verified objects, found ' || v_error_count);
   END IF;
 
   DBMS_OUTPUT.PUT_LINE('Schema verification passed.');

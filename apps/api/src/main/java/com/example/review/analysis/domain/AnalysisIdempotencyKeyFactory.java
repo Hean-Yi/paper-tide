@@ -1,8 +1,11 @@
 package com.example.review.analysis.domain;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.lang.reflect.Array;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.Objects;
@@ -28,17 +31,64 @@ public final class AnalysisIdempotencyKeyFactory {
     }
 
     try {
-      String anchorText =
-          new TreeMap<>(businessAnchor).entrySet().stream()
-              .map(entry -> entry.getKey() + "=" + entry.getValue())
-              .collect(Collectors.joining(":"));
+      String anchorText = renderCanonicalValue(canonicalize(businessAnchor));
       byte[] digest =
           MessageDigest.getInstance("SHA-256")
-              .digest(OBJECT_MAPPER.writeValueAsString(new TreeMap<>(normalizedInput)).getBytes(StandardCharsets.UTF_8));
+              .digest(OBJECT_MAPPER.writeValueAsString(canonicalize(normalizedInput)).getBytes(StandardCharsets.UTF_8));
       String hash = HexFormat.of().formatHex(digest);
       return analysisType.name() + ":" + anchorText + ":v" + requestVersion + ":" + hash;
     } catch (Exception ex) {
       throw new IllegalStateException("Failed to build analysis idempotency key", ex);
     }
+  }
+
+  private static Object canonicalize(Object value) {
+    if (value == null
+        || value instanceof String
+        || value instanceof Number
+        || value instanceof Boolean
+        || value instanceof Character
+        || value instanceof Enum<?>) {
+      return value;
+    }
+
+    if (value instanceof Map<?, ?> map) {
+      TreeMap<String, Object> canonicalMap = new TreeMap<>();
+      for (Map.Entry<?, ?> entry : map.entrySet()) {
+        canonicalMap.put(String.valueOf(entry.getKey()), canonicalize(entry.getValue()));
+      }
+      return canonicalMap;
+    }
+
+    if (value instanceof Collection<?> collection) {
+      return collection.stream().map(AnalysisIdempotencyKeyFactory::canonicalize).toList();
+    }
+
+    if (value.getClass().isArray()) {
+      int length = Array.getLength(value);
+      ArrayList<Object> canonicalArray = new ArrayList<>(length);
+      for (int i = 0; i < length; i++) {
+        canonicalArray.add(canonicalize(Array.get(value, i)));
+      }
+      return canonicalArray;
+    }
+
+    return value;
+  }
+
+  private static String renderCanonicalValue(Object value) {
+    if (value instanceof Map<?, ?> map) {
+      return map.entrySet().stream()
+          .map(entry -> entry.getKey() + "=" + renderCanonicalValue(entry.getValue()))
+          .collect(Collectors.joining(":"));
+    }
+
+    if (value instanceof Collection<?> collection) {
+      return collection.stream()
+          .map(AnalysisIdempotencyKeyFactory::renderCanonicalValue)
+          .collect(Collectors.joining(",", "[", "]"));
+    }
+
+    return String.valueOf(value);
   }
 }

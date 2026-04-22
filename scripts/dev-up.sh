@@ -47,7 +47,7 @@ start_agent() {
 }
 
 start_rabbitmq() {
-  bash "$ROOT_DIR/scripts/rabbitmq-up.sh" || true
+  bash "$ROOT_DIR/scripts/rabbitmq-up.sh"
 }
 
 start_web() {

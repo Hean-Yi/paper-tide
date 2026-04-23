@@ -268,7 +268,7 @@
 
 ## Active Task
 
-- Active task: execute Task 16, migrating `REVIEW_ASSIST_ANALYSIS` onto the new intent/projection and execution-job flow.
+- Active task: execute Task 17, migrating `DECISION_CONFLICT_ANALYSIS` onto the new intent/projection and execution-job flow.
 
 ## Working Rules For Next Execution Cycle
 
@@ -1002,15 +1002,31 @@ git commit -m "feat: migrate reviewer assist to intent and projection flow"
 **Files:**
 
 - Create: `apps/api/src/main/java/com/example/review/analysis/application/RequestConflictAnalysisUseCase.java`
+- Create: `apps/api/src/main/java/com/example/review/analysis/infrastructure/ConflictAnalysisContextRepository.java`
+- Create: `apps/api/src/test/java/com/example/review/analysis/RequestConflictAnalysisUseCaseTest.java`
 - Create: `services/agent/app/agent_platform/handlers/conflict_analysis.py`
 - Create: `services/agent/tests/test_conflict_analysis_flow.py`
+- Modify: `apps/api/src/main/java/com/example/review/agent/AgentTaskController.java`
+- Modify: `apps/api/src/main/java/com/example/review/analysis/interfaces/AnalysisController.java`
+- Modify: `apps/api/src/main/java/com/example/review/analysis/interfaces/AnalysisDtos.java`
 - Modify: `apps/api/src/main/java/com/example/review/decision/DecisionController.java`
 - Modify: `apps/api/src/main/java/com/example/review/workflow/WorkflowQueryService.java`
 - Modify: `apps/api/src/test/java/com/example/review/e2e/ReviewFlowE2eTest.java`
 - Modify: `apps/web/src/views/chair/DecisionWorkbenchView.vue`
 - Modify: `apps/web/src/lib/workflow-api.ts`
 
-- [ ] **Step 1: Write the failing conflict-analysis e2e expectation against projections**
+**Pre-execution check, 2026-04-23:**
+
+- Confirmed Task 16 is committed as `ad3c2b4`, with follow-up plan-only commit `79aaa13`.
+- Fresh non-Oracle Task 16 verification passed:
+  - `mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisDomainTest,AnalysisOutboxPublisherTest,RequestReviewerAssistUseCaseTest test`
+  - `../../.venv/bin/python -m pytest tests/test_reviewer_assist_flow.py tests/test_message_consumer.py tests/test_execution_job.py tests/test_health.py -q`
+  - `npm run test -- --run src/tests/agent-projection.spec.ts src/tests/workflow.spec.ts`
+  - `git diff --check`
+- Found existing uncommitted Java formatting-only changes in `AgentTaskController.java` and `GlobalExceptionHandler.java`; they are not a Task 16 functional gap.
+- Task 17 plan was adjusted before execution because the legacy conflict-analysis route currently lives in `AgentTaskController`; leaving it there would conflict with the new intent/projection endpoint.
+
+- [x] **Step 1: Write the failing conflict-analysis e2e expectation against projections**
 
 ```java
 mockMvc.perform(post("/api/review-rounds/{roundId}/conflict-analysis", roundId)
@@ -1021,12 +1037,12 @@ mockMvc.perform(post("/api/review-rounds/{roundId}/conflict-analysis", roundId)
         .andExpect(jsonPath("$.businessStatus").value("REQUESTED"));
 ```
 
-- [ ] **Step 2: Run the focused e2e test and verify it fails on the legacy task contract**
+- [x] **Step 2: Run the focused e2e test and verify it fails on the legacy task contract**
 
 Run: `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=ReviewFlowE2eTest test`
 Expected: FAIL in the conflict-analysis request/assertion path until the new controller and projection flow are wired.
 
-- [ ] **Step 3: Implement the chair use case and conflict-analysis handler**
+- [x] **Step 3: Implement the chair use case and conflict-analysis handler**
 
 ```java
 public AnalysisIntentResponse handle(CurrentUserPrincipal principal, long roundId) {
@@ -1061,7 +1077,7 @@ class ConflictAnalysisHandler(AnalysisTaskHandler):
         }
 ```
 
-- [ ] **Step 4: Update the chair workbench to read projection summaries rather than local polled task rows**
+- [x] **Step 4: Update the chair workbench to read projection summaries rather than local polled task rows**
 
 ```ts
 export function triggerConflictAnalysis(roundId: number, force = false) {
@@ -1072,7 +1088,7 @@ export function triggerConflictAnalysis(roundId: number, force = false) {
 }
 ```
 
-- [ ] **Step 5: Run the conflict-analysis slice**
+- [x] **Step 5: Run the conflict-analysis slice**
 
 Run: `cd services/agent && ./.venv/bin/python -m pytest tests/test_conflict_analysis_flow.py -q`
 Expected: PASS
@@ -1080,7 +1096,7 @@ Expected: PASS
 Run: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts`
 Expected: PASS
 
-- [ ] **Step 6: Commit the conflict-analysis migration**
+- [x] **Step 6: Commit the conflict-analysis migration**
 
 ```bash
 git add apps/api/src/main/java/com/example/review/analysis/application/RequestConflictAnalysisUseCase.java \
@@ -1092,6 +1108,34 @@ git add apps/api/src/main/java/com/example/review/analysis/application/RequestCo
   apps/web/src/views/chair/DecisionWorkbenchView.vue apps/web/src/lib/workflow-api.ts
 git commit -m "feat: migrate conflict analysis to broker flow"
 ```
+
+**Task 17 execution notes, 2026-04-23:**
+
+- Implemented the conflict-analysis migration onto the intent/projection boundary:
+  - API now exposes `POST /api/review-rounds/{roundId}/conflict-analysis` from `AnalysisController`.
+  - API creates/reuses `CONFLICT_ANALYSIS` intents with round anchors and publishes command-envelope outbox messages with review-report context.
+  - Removed the legacy conflict-analysis route from `AgentTaskController` so the endpoint no longer submits mirrored local/external agent tasks.
+  - Chair decision workbench now receives `conflictIntent` and `conflictProjections` from the workflow query and renders projection summaries instead of fetching legacy raw agent results.
+  - Agent service added `ConflictAnalysisHandler` and registered it under `CONFLICT_ANALYSIS`.
+- Verification run:
+  - Red checks first failed as expected:
+    - `mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=RequestConflictAnalysisUseCaseTest test` failed because the use case/repository did not exist.
+    - `../../.venv/bin/python -m pytest tests/test_conflict_analysis_flow.py -q` failed because the conflict handler did not exist.
+    - `npm run test -- --run src/tests/workflow.spec.ts` failed because the chair workbench still rendered legacy agent results.
+  - Green verification passed:
+    - `mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test-compile` passed.
+    - `mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisDomainTest,AnalysisOutboxPublisherTest,RequestReviewerAssistUseCaseTest,RequestConflictAnalysisUseCaseTest test` passed with 11 tests.
+    - `../../.venv/bin/python -m pytest tests/test_conflict_analysis_flow.py tests/test_reviewer_assist_flow.py tests/test_message_consumer.py tests/test_execution_job.py -q` passed with 17 tests and the existing Python 3.14/Pydantic warning.
+    - `npm run test -- --run src/tests/workflow.spec.ts src/tests/agent-projection.spec.ts` passed with 24 tests.
+    - `npm run typecheck` passed.
+    - `npm run build` passed with the existing large chunk warning.
+    - `git diff --check` passed.
+  - Oracle-backed verification remains blocked by local Oracle connectivity:
+    - Sandbox run of `mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AgentIntegrationServiceTest,ReviewFlowE2eTest test` failed at JDBC connection setup with `ORA-17820` and `SocketException: Operation not permitted`.
+    - Escalated run of the same command reached the network but failed before business assertions with `ORA-17800` while obtaining Oracle connections.
+- Current completion state:
+  - Task 17 implementation and non-Oracle verification are complete.
+  - Oracle-backed integration/e2e verification is still blocked by the local Oracle connectivity failure, not by a reached Task17 assertion.
 
 ### Task 18: Migrate `SCREENING_ANALYSIS` And Delete Legacy Mirrored Task Infrastructure
 

@@ -326,12 +326,18 @@ class AgentIntegrationServiceTest {
                         .header("Authorization", "Bearer " + chairToken)
                         .contentType(APPLICATION_JSON)
                         .content("{}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.externalTaskId").value("external-task-1"));
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.analysisType").value("CONFLICT_ANALYSIS"))
+                .andExpect(jsonPath("$.businessStatus").value("REQUESTED"))
+                .andExpect(jsonPath("$.externalTaskId").doesNotExist());
 
-        Assertions.assertEquals("DECISION_CONFLICT_ANALYSIS", agentClient.lastCreateRequest.taskType());
-        Assertions.assertTrue(agentClient.lastCreateRequest.requestPayload().containsKey("reviewReports"));
-        Assertions.assertTrue(agentClient.lastCreateRequest.requestPayload().get("reviewReports").toString().contains("MINOR_REVISION"));
+        Assertions.assertEquals(0, agentClient.createRequests.get());
+        Map<String, Object> outbox = jdbcTemplate.queryForMap("SELECT MESSAGE_TYPE, MESSAGE_PAYLOAD FROM ANALYSIS_OUTBOX");
+        Assertions.assertEquals("analysis.requested", outbox.get("MESSAGE_TYPE"));
+        JsonNode message = objectMapper.readTree(outbox.get("MESSAGE_PAYLOAD").toString());
+        Assertions.assertEquals("CONFLICT_ANALYSIS", message.get("analysisType").asText());
+        Assertions.assertEquals(fixture.roundId(), message.at("/requestPayload/conflictAnalysis/roundId").asLong());
+        Assertions.assertTrue(message.at("/requestPayload/reviewReports").toString().contains("MINOR_REVISION"));
     }
 
     private ManuscriptFixture seedSubmittedManuscript(boolean withPdf) {

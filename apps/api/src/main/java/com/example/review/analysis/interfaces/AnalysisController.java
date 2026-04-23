@@ -1,7 +1,9 @@
 package com.example.review.analysis.interfaces;
 
 import com.example.review.analysis.application.RequestReviewerAssistUseCase;
+import com.example.review.analysis.application.RequestConflictAnalysisUseCase;
 import com.example.review.analysis.interfaces.AnalysisDtos.AnalysisIntentResponse;
+import com.example.review.analysis.interfaces.AnalysisDtos.ConflictAnalysisRequest;
 import com.example.review.analysis.interfaces.AnalysisDtos.ReviewerAssistRequest;
 import com.example.review.analysis.interfaces.AnalysisDtos.ReviewerAssistStateResponse;
 import com.example.review.auth.CurrentUserPrincipal;
@@ -19,9 +21,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 public class AnalysisController {
     private final RequestReviewerAssistUseCase requestReviewerAssistUseCase;
+    private final RequestConflictAnalysisUseCase requestConflictAnalysisUseCase;
 
-    public AnalysisController(RequestReviewerAssistUseCase requestReviewerAssistUseCase) {
+    public AnalysisController(
+            RequestReviewerAssistUseCase requestReviewerAssistUseCase,
+            RequestConflictAnalysisUseCase requestConflictAnalysisUseCase
+    ) {
         this.requestReviewerAssistUseCase = requestReviewerAssistUseCase;
+        this.requestConflictAnalysisUseCase = requestConflictAnalysisUseCase;
     }
 
     @PostMapping("/review-assignments/{assignmentId}/agent-assist")
@@ -44,5 +51,19 @@ public class AnalysisController {
             @PathVariable long assignmentId
     ) {
         return requestReviewerAssistUseCase.get(principal, assignmentId);
+    }
+
+    @PostMapping("/review-rounds/{roundId}/conflict-analysis")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public AnalysisIntentResponse requestConflictAnalysis(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long roundId,
+            @RequestBody(required = false) ConflictAnalysisRequest request
+    ) {
+        return requestConflictAnalysisUseCase.request(
+                principal,
+                roundId,
+                request != null && request.forceRequested()
+        );
     }
 }

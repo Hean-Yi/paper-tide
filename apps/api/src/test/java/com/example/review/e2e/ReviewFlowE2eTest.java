@@ -102,6 +102,9 @@ class ReviewFlowE2eTest {
     @BeforeEach
     void cleanWorkflowTables() {
         agentClient.reset();
+        jdbcTemplate.update("DELETE FROM ANALYSIS_OUTBOX");
+        jdbcTemplate.update("DELETE FROM ANALYSIS_PROJECTION");
+        jdbcTemplate.update("DELETE FROM ANALYSIS_INTENT");
         jdbcTemplate.update("DELETE FROM AGENT_ANALYSIS_RESULT");
         jdbcTemplate.update("DELETE FROM AGENT_ANALYSIS_TASK");
         jdbcTemplate.update("DELETE FROM CONFLICT_CHECK_RECORD");
@@ -174,27 +177,21 @@ class ReviewFlowE2eTest {
                 .andExpect(status().isOk())
                 .andExpect(content().contentType("image/png"));
 
-        String reviewAssistExternalId = createReviewerAssist(reviewerToken, assignmentId);
-        agentClient.markCompleted(reviewAssistExternalId);
-        pollOnce();
+        requestReviewerAssist(reviewerToken, assignmentId);
 
         mockMvc.perform(get("/api/review-assignments/{assignmentId}/agent-assist", assignmentId)
                         .header("Authorization", "Bearer " + reviewerToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.task.taskType").value("REVIEW_ASSIST_ANALYSIS"))
-                .andExpect(jsonPath("$.results[0].redactedResult.summary").value("redacted REVIEW_ASSIST_ANALYSIS summary"))
-                .andExpect(jsonPath("$.results[0].rawResult").doesNotExist());
+                .andExpect(jsonPath("$.intent.analysisType").value("REVIEWER_ASSIST"))
+                .andExpect(jsonPath("$.intent.businessStatus").value("REQUESTED"))
+                .andExpect(jsonPath("$.projections").isArray())
+                .andExpect(jsonPath("$.task").doesNotExist());
 
         submitReviewReport(reviewerToken, assignmentId);
 
-        String conflictExternalId = triggerConflictAnalysis(chairToken, roundId);
-        agentClient.markCompleted(conflictExternalId);
-        pollOnce();
-
-        mockMvc.perform(get("/api/manuscripts/{id}/versions/{versionId}/agent-results", manuscript.manuscriptId(), manuscript.versionId())
-                        .header("Authorization", "Bearer " + chairToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].rawResult.summary").value("raw REVIEW_ASSIST_ANALYSIS summary"));
+        triggerConflictAnalysis(chairToken, roundId);
+        Integer outboxCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ANALYSIS_OUTBOX", Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(2, outboxCount);
 
         mockMvc.perform(post("/api/decisions")
                         .header("Authorization", "Bearer " + chairToken)
@@ -314,27 +311,26 @@ class ReviewFlowE2eTest {
         return objectMapper.readTree(result.getResponse().getContentAsString()).path("externalTaskId").asText();
     }
 
-    private String createReviewerAssist(String reviewerToken, long assignmentId) throws Exception {
-        MvcResult result = mockMvc.perform(post("/api/review-assignments/{assignmentId}/agent-assist", assignmentId)
+    private void requestReviewerAssist(String reviewerToken, long assignmentId) throws Exception {
+        mockMvc.perform(post("/api/review-assignments/{assignmentId}/agent-assist", assignmentId)
                         .header("Authorization", "Bearer " + reviewerToken)
                         .contentType(APPLICATION_JSON)
                         .content("{}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.taskType").value("REVIEW_ASSIST_ANALYSIS"))
-                .andExpect(jsonPath("$.externalTaskId", not(blankOrNullString())))
-                .andReturn();
-        return objectMapper.readTree(result.getResponse().getContentAsString()).path("externalTaskId").asText();
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.analysisType").value("REVIEWER_ASSIST"))
+                .andExpect(jsonPath("$.businessStatus").value("REQUESTED"))
+                .andExpect(jsonPath("$.externalTaskId").doesNotExist());
     }
 
-    private String triggerConflictAnalysis(String chairToken, long roundId) throws Exception {
-        MvcResult result = mockMvc.perform(post("/api/review-rounds/{roundId}/conflict-analysis", roundId)
+    private void triggerConflictAnalysis(String chairToken, long roundId) throws Exception {
+        mockMvc.perform(post("/api/review-rounds/{roundId}/conflict-analysis", roundId)
                         .header("Authorization", "Bearer " + chairToken)
                         .contentType(APPLICATION_JSON)
                         .content("{}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.externalTaskId", not(blankOrNullString())))
-                .andReturn();
-        return objectMapper.readTree(result.getResponse().getContentAsString()).path("externalTaskId").asText();
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.analysisType").value("CONFLICT_ANALYSIS"))
+                .andExpect(jsonPath("$.businessStatus").value("REQUESTED"))
+                .andExpect(jsonPath("$.externalTaskId").doesNotExist());
     }
 
     private void submitReviewReport(String reviewerToken, long assignmentId) throws Exception {

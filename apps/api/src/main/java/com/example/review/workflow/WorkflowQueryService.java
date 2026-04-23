@@ -1,5 +1,11 @@
 package com.example.review.workflow;
 
+import com.example.review.analysis.domain.AnalysisBusinessAnchor;
+import com.example.review.analysis.domain.AnalysisType;
+import com.example.review.analysis.infrastructure.AnalysisIntentRepository;
+import com.example.review.analysis.infrastructure.AnalysisProjectionRepository;
+import com.example.review.analysis.interfaces.AnalysisDtos.AnalysisIntentResponse;
+import com.example.review.analysis.interfaces.AnalysisDtos.AnalysisProjectionResponse;
 import com.example.review.auth.CurrentUserPrincipal;
 import com.example.review.auth.RoleGuard;
 import java.sql.ResultSet;
@@ -14,9 +20,17 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class WorkflowQueryService {
     private final JdbcTemplate jdbcTemplate;
+    private final AnalysisIntentRepository intentRepository;
+    private final AnalysisProjectionRepository projectionRepository;
 
-    public WorkflowQueryService(JdbcTemplate jdbcTemplate) {
+    public WorkflowQueryService(
+            JdbcTemplate jdbcTemplate,
+            AnalysisIntentRepository intentRepository,
+            AnalysisProjectionRepository projectionRepository
+    ) {
         this.jdbcTemplate = jdbcTemplate;
+        this.intentRepository = intentRepository;
+        this.projectionRepository = projectionRepository;
     }
 
     public List<ReviewerAssignmentSummary> listReviewerAssignments(CurrentUserPrincipal principal) {
@@ -179,23 +193,33 @@ public class WorkflowQueryService {
                 )
         );
         return rounds.stream()
-                .map(round -> new DecisionWorkbenchItem(
-                        round.roundId(),
-                        round.manuscriptId(),
-                        round.versionId(),
-                        round.versionNo(),
-                        round.roundNo(),
-                        round.title(),
-                        round.currentStatus(),
-                        round.roundStatus(),
-                        round.deadlineAt(),
-                        round.assignmentCount(),
-                        round.submittedReviewCount(),
-                        round.conflictCount(),
-                        round.lastDecisionCode(),
-                        listAssignmentsForRound(round.roundId())
-                ))
+                .map(this::toDecisionWorkbenchItem)
                 .toList();
+    }
+
+    private DecisionWorkbenchItem toDecisionWorkbenchItem(DecisionWorkbenchBase round) {
+        AnalysisBusinessAnchor anchor = AnalysisBusinessAnchor.round(round.roundId());
+        AnalysisIntentResponse intent = intentRepository.findLatestIntent(AnalysisType.CONFLICT_ANALYSIS, anchor)
+                .map(summary -> new AnalysisIntentResponse(summary.intentId(), summary.analysisType(), summary.businessStatus()))
+                .orElse(null);
+        return new DecisionWorkbenchItem(
+                round.roundId(),
+                round.manuscriptId(),
+                round.versionId(),
+                round.versionNo(),
+                round.roundNo(),
+                round.title(),
+                round.currentStatus(),
+                round.roundStatus(),
+                round.deadlineAt(),
+                round.assignmentCount(),
+                round.submittedReviewCount(),
+                round.conflictCount(),
+                round.lastDecisionCode(),
+                listAssignmentsForRound(round.roundId()),
+                intent,
+                projectionRepository.listForAnchor(AnalysisType.CONFLICT_ANALYSIS, anchor)
+        );
     }
 
     private List<DecisionAssignmentItem> listAssignmentsForRound(long roundId) {
@@ -319,7 +343,9 @@ record DecisionWorkbenchItem(
         int submittedReviewCount,
         int conflictCount,
         String lastDecisionCode,
-        List<DecisionAssignmentItem> assignments
+        List<DecisionAssignmentItem> assignments,
+        AnalysisIntentResponse conflictIntent,
+        List<AnalysisProjectionResponse> conflictProjections
 ) {
 }
 

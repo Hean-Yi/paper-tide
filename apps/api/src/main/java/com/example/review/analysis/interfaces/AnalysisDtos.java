@@ -14,6 +14,12 @@ public final class AnalysisDtos {
         }
     }
 
+    public record ConflictAnalysisRequest(Boolean force) {
+        public boolean forceRequested() {
+            return Boolean.TRUE.equals(force);
+        }
+    }
+
     public record AnalysisIntentResponse(
             long intentId,
             String analysisType,

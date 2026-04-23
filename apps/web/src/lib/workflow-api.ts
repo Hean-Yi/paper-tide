@@ -92,6 +92,8 @@ export interface DecisionWorkbenchItem {
   conflictCount: number;
   lastDecisionCode?: string | null;
   assignments: DecisionAssignment[];
+  conflictIntent?: AnalysisIntentResponse | null;
+  conflictProjections: AnalysisProjectionResponse[];
 }
 
 export interface AgentResult {
@@ -295,7 +297,7 @@ export function markOverdue(assignmentId: number) {
 }
 
 export function triggerConflictAnalysis(roundId: number, force = false) {
-  return apiRequest(`/review-rounds/${roundId}/conflict-analysis`, { method: "POST", json: { force } });
+  return apiRequest<AnalysisIntentResponse>(`/review-rounds/${roundId}/conflict-analysis`, { method: "POST", json: { force } });
 }
 
 export function decide(payload: {

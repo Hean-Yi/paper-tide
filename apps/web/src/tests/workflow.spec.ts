@@ -632,43 +632,137 @@ describe("workflow screens", () => {
     expect(wrapper.text()).not.toContain("rawResult");
   });
 
-  it("shows raw agent results for chair decision workbench", async () => {
+  it("shows conflict projection summaries for chair decision workbench", async () => {
     installAuth(["CHAIR"]);
-    mockApi({
-      "/chair/decision-workbench": [
-        {
-          roundId: 7,
-          manuscriptId: 11,
-          versionId: 21,
-          versionNo: 1,
-          roundNo: 1,
-          title: "Workflow Seed",
-          currentStatus: "UNDER_REVIEW",
-          roundStatus: "IN_PROGRESS",
-          assignmentCount: 1,
-          submittedReviewCount: 1,
-          conflictCount: 1,
-          assignments: [{ assignmentId: 9, reviewerId: 1002, taskStatus: "SUBMITTED" }]
-        }
-      ],
-      "/manuscripts/11/versions/21/agent-results": [
-        {
-          resultId: 1,
-          resultType: "DECISION_CONFLICT_ANALYSIS",
-          rawResult: { summary: "Chair raw signal" },
-          redactedResult: { summary: "Reviewer signal" }
-        }
-      ]
+    const fetch = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/chair/decision-workbench") {
+        return Promise.resolve(jsonResponse([
+          {
+            roundId: 7,
+            manuscriptId: 11,
+            versionId: 21,
+            versionNo: 1,
+            roundNo: 1,
+            title: "Workflow Seed",
+            currentStatus: "UNDER_REVIEW",
+            roundStatus: "IN_PROGRESS",
+            assignmentCount: 1,
+            submittedReviewCount: 1,
+            conflictCount: 1,
+            assignments: [{ assignmentId: 9, reviewerId: 1002, taskStatus: "SUBMITTED" }],
+            conflictProjections: [
+              {
+                projectionId: 3,
+                analysisType: "CONFLICT_ANALYSIS",
+                businessStatus: "AVAILABLE",
+                summaryText: "Projection conflict signal",
+                redactedResult: { decisionSummary: "Projection conflict signal" },
+                superseded: false,
+                updatedAt: "2026-04-23T02:00:00Z"
+              }
+            ]
+          }
+        ]));
+      }
+      return Promise.resolve(jsonResponse([]));
     });
+    vi.stubGlobal("fetch", fetch);
 
     const wrapper = await mountWithRouter(DecisionWorkbenchView);
 
     expect(wrapper.find(".agent-trace-panel").exists()).toBe(true);
-    expect(wrapper.text()).toContain("Decision conflict analysis");
+    expect(wrapper.text()).toContain("Conflict analysis");
     expect(wrapper.text()).toContain("Workflow Seed");
     await wrapper.get(".el-table__expand-icon").trigger("click");
     await flushPromises();
-    expect(wrapper.text()).toContain("Chair raw signal");
+    expect(wrapper.text()).toContain("Projection conflict signal");
+    expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining("/agent-results"), expect.anything());
+  });
+
+  it("posts conflict analysis requests as analysis intents", async () => {
+    installAuth(["CHAIR"]);
+    const success = vi.spyOn(ElMessage, "success").mockImplementation(() => undefined as never);
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/chair/decision-workbench") {
+        return Promise.resolve(jsonResponse([
+          {
+            roundId: 7,
+            manuscriptId: 11,
+            versionId: 21,
+            versionNo: 1,
+            roundNo: 1,
+            title: "Workflow Seed",
+            currentStatus: "UNDER_REVIEW",
+            roundStatus: "IN_PROGRESS",
+            assignmentCount: 1,
+            submittedReviewCount: 1,
+            conflictCount: 1,
+            assignments: [{ assignmentId: 9, reviewerId: 1002, taskStatus: "SUBMITTED" }],
+            conflictProjections: []
+          }
+        ]));
+      }
+      if (path === "/review-rounds/7/conflict-analysis" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({
+          intentId: 91,
+          analysisType: "CONFLICT_ANALYSIS",
+          businessStatus: "REQUESTED"
+        }));
+      }
+      return Promise.resolve(jsonResponse([]));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(DecisionWorkbenchView);
+    await buttonByText(wrapper, "Conflict analysis").trigger("click");
+    await flushPromises();
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/review-rounds/7/conflict-analysis",
+      expect.objectContaining({
+        method: "POST"
+      })
+    );
+    expect(success).toHaveBeenCalledWith("Conflict analysis requested.");
+  });
+
+  it("does not load legacy raw agent results for conflict analysis on the decision workbench", async () => {
+    installAuth(["CHAIR"]);
+    const fetch = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/chair/decision-workbench") {
+        return Promise.resolve(jsonResponse([
+          {
+            roundId: 7,
+            manuscriptId: 11,
+            versionId: 21,
+            versionNo: 1,
+            roundNo: 1,
+            title: "Workflow Seed",
+            currentStatus: "UNDER_REVIEW",
+            roundStatus: "IN_PROGRESS",
+            assignmentCount: 1,
+            submittedReviewCount: 1,
+            conflictCount: 1,
+            assignments: [{ assignmentId: 9, reviewerId: 1002, taskStatus: "SUBMITTED" }],
+            conflictProjections: []
+          }
+        ]));
+      }
+      return Promise.resolve(jsonResponse([]));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(DecisionWorkbenchView);
+
+    expect(wrapper.find(".agent-trace-panel").exists()).toBe(true);
+    expect(wrapper.text()).toContain("Workflow Seed");
+    await wrapper.get(".el-table__expand-icon").trigger("click");
+    await flushPromises();
+    expect(wrapper.text()).toContain("No conflict analysis projections yet.");
+    expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining("/agent-results"), expect.anything());
   });
 
   it("shows scoped loading while chair marks an assignment overdue", async () => {

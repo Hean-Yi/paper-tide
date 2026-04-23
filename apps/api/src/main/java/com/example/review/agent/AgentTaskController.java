@@ -40,19 +40,6 @@ public class AgentTaskController {
         );
     }
 
-    @PostMapping("/review-rounds/{roundId}/conflict-analysis")
-    public AgentTaskResponse createConflictAnalysis(
-            @AuthenticationPrincipal CurrentUserPrincipal principal,
-            @PathVariable long roundId,
-            @RequestBody(required = false) CreateAgentTaskRequest request
-    ) {
-        return agentIntegrationService.createConflictAnalysis(
-                principal,
-                roundId,
-                request != null && request.forceRequested()
-        );
-    }
-
     @GetMapping("/manuscripts/{manuscriptId}/versions/{versionId}/agent-results")
     public List<AgentResultResponse> listResults(
             @AuthenticationPrincipal CurrentUserPrincipal principal,

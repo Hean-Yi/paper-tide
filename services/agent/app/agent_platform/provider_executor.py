@@ -20,3 +20,36 @@ class ProviderExecutor:
             "blindReviewRisks": paper.get("possibleBlindnessRisks", []),
             "confidence": 0.5,
         }
+
+    def run_conflict_analysis(self, payload: dict[str, Any]) -> dict[str, Any]:
+        context = payload.get("conflictAnalysis") or {}
+        reports = list(payload.get("reviewReports") or [])
+        recommendations = [str(report.get("recommendation")) for report in reports if report.get("recommendation")]
+        unique_recommendations = sorted(set(recommendations))
+        conflict_points = []
+        if len(unique_recommendations) > 1:
+            conflict_points.append("Reviewer recommendations differ: " + ", ".join(unique_recommendations))
+        for report in reports:
+            weakness = report.get("weaknesses") or report.get("commentsToChair")
+            if weakness:
+                conflict_points.append(str(weakness))
+        if not conflict_points:
+            conflict_points.append("No explicit conflict points were supplied; verify reviewer rationale manually.")
+        consensus = [
+            "Submitted reviews available for synthesis."
+            if reports
+            else "No submitted review reports were supplied."
+        ]
+        return {
+            "taskType": "DECISION_CONFLICT_ANALYSIS",
+            "manuscriptId": str(context.get("manuscriptId", "")),
+            "versionId": str(context.get("versionId", "")),
+            "status": "SUCCESS",
+            "consensusPoints": consensus,
+            "conflictPoints": conflict_points,
+            "highRiskIssues": [],
+            "decisionSummary": (
+                f"{len(reports)} review report(s) analyzed for round {context.get('roundId', 'unknown')}."
+            ),
+            "confidence": 0.5,
+        }

@@ -8,18 +8,16 @@ import { useAsyncAction } from "../../composables/useAsyncAction";
 import {
   assignReviewer,
   decide,
-  listAgentResults,
   listDecisionWorkbench,
   markOverdue,
   triggerConflictAnalysis,
-  type AgentResult,
+  type AnalysisProjectionResponse,
   type DecisionWorkbenchItem
 } from "../../lib/workflow-api";
 import { formatDateTime, printableTrace, statusTagType, workflowLabel } from "../../lib/workflow-format";
 
 const loading = ref(false);
 const rows = ref<DecisionWorkbenchItem[]>([]);
-const agentResults = ref<Record<number, AgentResult[]>>({});
 const actions = useAsyncAction();
 const { showApiError } = useApiError();
 const assignDialogOpen = ref(false);
@@ -49,11 +47,6 @@ async function loadWorkbench() {
   loading.value = true;
   try {
     rows.value = await listDecisionWorkbench();
-    const entries = await Promise.all(rows.value.map(async (row) => [
-      row.roundId,
-      await listAgentResults(row.manuscriptId, row.versionId)
-    ] as const));
-    agentResults.value = Object.fromEntries(entries);
   } catch (error) {
     showApiError(error, "Decision workbench could not be loaded.");
   } finally {
@@ -102,6 +95,11 @@ async function overdue(assignmentId: number) {
 async function conflict(row: DecisionWorkbenchItem) {
   await triggerConflictAnalysis(row.roundId);
   ElMessage.success("Conflict analysis requested.");
+  await loadWorkbench();
+}
+
+function conflictProjections(row: DecisionWorkbenchItem): AnalysisProjectionResponse[] {
+  return row.conflictProjections ?? [];
 }
 
 function openDecision(row: DecisionWorkbenchItem) {
@@ -182,19 +180,22 @@ async function submitDecision() {
               </el-table-column>
             </el-table>
 
-            <h2>Agent results</h2>
+            <h2>Conflict analysis projections</h2>
             <el-alert
-              v-if="!agentResults[row.roundId]?.length"
-              title="No agent results yet."
+              v-if="!conflictProjections(row).length"
+              title="No conflict analysis projections yet."
               type="info"
               :closable="false"
             />
-            <article v-for="result in agentResults[row.roundId]" :key="result.resultId" class="trace-entry">
+            <article v-for="projection in conflictProjections(row)" :key="projection.projectionId" class="trace-entry">
               <div class="trace-entry-heading">
-                <strong>{{ workflowLabel(result.resultType) }}</strong>
-                <el-tag :type="statusTagType(result.resultType)">Raw</el-tag>
+                <strong>{{ workflowLabel(projection.analysisType) }}</strong>
+                <el-tag :type="statusTagType(projection.businessStatus)">
+                  {{ workflowLabel(projection.businessStatus) }}
+                </el-tag>
               </div>
-              <pre class="json-block">{{ printableTrace(result.rawResult || result.redactedResult) }}</pre>
+              <p v-if="projection.summaryText" class="body">{{ projection.summaryText }}</p>
+              <pre class="json-block">{{ printableTrace(projection.redactedResult) }}</pre>
             </article>
           </div>
         </template>
@@ -239,24 +240,24 @@ async function submitDecision() {
         <el-tag type="warning">Chair only</el-tag>
       </div>
       <el-alert
-        v-if="!Object.values(agentResults).some((results) => results.length)"
-        title="No raw agent results are available for active rounds."
+        v-if="!rows.some((row) => conflictProjections(row).length)"
+        title="No conflict analysis projections are available for active rounds."
         type="info"
         :closable="false"
       />
       <template v-for="row in rows" :key="row.roundId">
-        <article v-if="agentResults[row.roundId]?.length" class="trace-entry">
+        <article v-if="conflictProjections(row).length" class="trace-entry">
           <div class="trace-entry-heading">
             <strong>Round {{ row.roundNo }} · Manuscript {{ row.manuscriptId }}</strong>
-            <span>{{ agentResults[row.roundId].length }} agent result{{ agentResults[row.roundId].length === 1 ? "" : "s" }}</span>
+            <span>{{ conflictProjections(row).length }} projection{{ conflictProjections(row).length === 1 ? "" : "s" }}</span>
           </div>
           <div class="action-row">
             <el-tag
-              v-for="result in agentResults[row.roundId]"
-              :key="result.resultId"
-              :type="statusTagType(result.resultType)"
+              v-for="projection in conflictProjections(row)"
+              :key="projection.projectionId"
+              :type="statusTagType(projection.businessStatus)"
             >
-              {{ workflowLabel(result.resultType) }}
+              {{ workflowLabel(projection.analysisType) }}
             </el-tag>
           </div>
         </article>

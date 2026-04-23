@@ -45,6 +45,26 @@ class CodeQualityTest {
         assertFalse(Files.exists(Path.of("src/main/java/com/example/review/agent/AgentServiceException.java")));
     }
 
+    @Test
+    void migratedAnalysisTestsDoNotDependOnLegacyMirroredTaskArtifacts() throws IOException {
+        assertSourceDoesNotContain(
+                "src/test/java/com/example/review/analysis/AnalysisIntentFlowTest.java",
+                "AGENT_ANALYSIS_TASK"
+        );
+        assertSourceDoesNotContain(
+                "src/test/java/com/example/review/agent/AgentIntegrationServiceTest.java",
+                "AGENT_ANALYSIS_TASK"
+        );
+        assertSourceDoesNotContain(
+                "src/test/java/com/example/review/e2e/ReviewFlowE2eTest.java",
+                "AGENT_ANALYSIS_TASK"
+        );
+        assertSourceDoesNotContain(
+                "../web/src/tests/workflow.spec.ts",
+                "/agent-results"
+        );
+    }
+
     private void assertSourceDoesNotContain(String path, String forbiddenText) throws IOException {
         String source = Files.readString(Path.of(path));
         assertFalse(source.contains(forbiddenText), path + " should not contain " + forbiddenText);

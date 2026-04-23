@@ -19,6 +19,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import com.example.review.support.LegacyAgentArtifactsCleanup;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -36,11 +37,10 @@ class AgentIntegrationServiceTest {
 
     @BeforeEach
     void cleanAgentTables() {
+        LegacyAgentArtifactsCleanup.deleteLegacyAgentArtifacts(jdbcTemplate);
         jdbcTemplate.update("DELETE FROM ANALYSIS_OUTBOX");
         jdbcTemplate.update("DELETE FROM ANALYSIS_PROJECTION");
         jdbcTemplate.update("DELETE FROM ANALYSIS_INTENT");
-        jdbcTemplate.update("DELETE FROM AGENT_ANALYSIS_RESULT");
-        jdbcTemplate.update("DELETE FROM AGENT_ANALYSIS_TASK");
         jdbcTemplate.update("DELETE FROM REVIEW_REPORT");
         jdbcTemplate.update("DELETE FROM CONFLICT_CHECK_RECORD");
         jdbcTemplate.update("DELETE FROM REVIEW_ASSIGNMENT");
@@ -76,9 +76,6 @@ class AgentIntegrationServiceTest {
                 .andExpect(jsonPath("$.analysisType").value("SCREENING"))
                 .andExpect(jsonPath("$.businessStatus").value("REQUESTED"))
                 .andExpect(jsonPath("$.externalTaskId").doesNotExist());
-
-        Integer legacyTaskCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM AGENT_ANALYSIS_TASK", Integer.class);
-        Assertions.assertEquals(0, legacyTaskCount);
 
         JsonNode message = objectMapper.readTree(
                 jdbcTemplate.queryForObject("SELECT MESSAGE_PAYLOAD FROM ANALYSIS_OUTBOX", String.class)

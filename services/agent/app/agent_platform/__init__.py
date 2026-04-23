@@ -3,10 +3,10 @@ from .consumer import AnalysisRequestedConsumer
 from .domain import ExecutionJob
 from .handler_registry import AnalysisHandlerRegistry
 from .messages import AnalysisRequestedMessage
-from .outbox import ExecutionOutboxMessage, InMemoryExecutionOutbox
+from .outbox import ExecutionOutboxMessage, InMemoryExecutionOutbox, OracleExecutionOutbox
 from .publisher import AnalysisRequestedPublisher
 from .runtime import AgentPlatformRuntime
-from .repositories import InMemoryExecutionJobRepository
+from .repositories import InMemoryExecutionJobRepository, OracleExecutionJobRepository
 from .state_machine import ExecutionStateMachine
 
 __all__ = [
@@ -20,5 +20,7 @@ __all__ = [
     "ExecutionStateMachine",
     "InMemoryExecutionJobRepository",
     "InMemoryExecutionOutbox",
+    "OracleExecutionJobRepository",
+    "OracleExecutionOutbox",
     "AgentPlatformRuntime",
 ]

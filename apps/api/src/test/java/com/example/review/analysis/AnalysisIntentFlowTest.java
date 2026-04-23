@@ -20,6 +20,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import com.example.review.support.LegacyAgentArtifactsCleanup;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -37,11 +38,10 @@ class AnalysisIntentFlowTest {
 
     @BeforeEach
     void cleanWorkflowTables() {
+        LegacyAgentArtifactsCleanup.deleteLegacyAgentArtifacts(jdbcTemplate);
         jdbcTemplate.update("DELETE FROM ANALYSIS_OUTBOX");
         jdbcTemplate.update("DELETE FROM ANALYSIS_PROJECTION");
         jdbcTemplate.update("DELETE FROM ANALYSIS_INTENT");
-        jdbcTemplate.update("DELETE FROM AGENT_ANALYSIS_RESULT");
-        jdbcTemplate.update("DELETE FROM AGENT_ANALYSIS_TASK");
         jdbcTemplate.update("DELETE FROM REVIEW_REPORT");
         jdbcTemplate.update("DELETE FROM CONFLICT_CHECK_RECORD");
         jdbcTemplate.update("DELETE FROM REVIEW_ASSIGNMENT");
@@ -73,13 +73,11 @@ class AnalysisIntentFlowTest {
 
         Integer intentCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ANALYSIS_INTENT", Integer.class);
         Integer outboxCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ANALYSIS_OUTBOX", Integer.class);
-        Integer legacyTaskCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM AGENT_ANALYSIS_TASK", Integer.class);
         String messagePayload = jdbcTemplate.queryForObject("SELECT MESSAGE_PAYLOAD FROM ANALYSIS_OUTBOX", String.class);
         JsonNode message = objectMapper.readTree(messagePayload);
 
         Assertions.assertEquals(1, intentCount);
         Assertions.assertEquals(1, outboxCount);
-        Assertions.assertEquals(0, legacyTaskCount);
         Assertions.assertEquals("REVIEWER_ASSIST", message.get("analysisType").asText());
         Assertions.assertTrue(message.hasNonNull("idempotencyKey"));
         Assertions.assertEquals(fixture.assignmentId(), message.at("/requestPayload/reviewerAssist/assignmentId").asLong());
@@ -94,18 +92,17 @@ class AnalysisIntentFlowTest {
 
         jdbcTemplate.update(
                 """
-                INSERT INTO MANUSCRIPT (MANUSCRIPT_ID, CURRENT_VERSION_ID, CURRENT_STATUS, CURRENT_ROUND_NO, BLIND_MODE, SUBMITTED_AT, CREATED_BY)
-                VALUES (?, ?, 'UNDER_REVIEW', 1, 'DOUBLE_BLIND', ?, 1001)
+                INSERT INTO MANUSCRIPT (MANUSCRIPT_ID, SUBMITTER_ID, CURRENT_VERSION_ID, CURRENT_STATUS, CURRENT_ROUND_NO, BLIND_MODE, SUBMITTED_AT, LAST_DECISION_CODE)
+                VALUES (?, 1001, NULL, 'UNDER_REVIEW', 1, 'DOUBLE_BLIND', ?, NULL)
                 """,
                 manuscriptId,
-                versionId,
                 Timestamp.from(Instant.now())
         );
         jdbcTemplate.update(
                 """
                 INSERT INTO MANUSCRIPT_VERSION (
-                  VERSION_ID, MANUSCRIPT_ID, VERSION_NO, VERSION_TYPE, TITLE, ABSTRACT, KEYWORDS, PDF_FILE, PDF_FILE_NAME, PDF_FILE_SIZE, SUBMITTED_AT
-                ) VALUES (?, ?, 1, 'INITIAL', 'Workflow Seed', 'workflow abstract', 'workflow,pdf', ?, 'workflow.pdf', ?, ?)
+                  VERSION_ID, MANUSCRIPT_ID, VERSION_NO, VERSION_TYPE, TITLE, ABSTRACT, KEYWORDS, PDF_FILE, PDF_FILE_NAME, PDF_FILE_SIZE, SUBMITTED_BY, SUBMITTED_AT
+                ) VALUES (?, ?, 1, 'INITIAL', 'Workflow Seed', 'workflow abstract', 'workflow,pdf', ?, 'workflow.pdf', ?, 1001, ?)
                 """,
                 versionId,
                 manuscriptId,
@@ -113,6 +110,7 @@ class AnalysisIntentFlowTest {
                 PDF_BYTES.length,
                 Timestamp.from(Instant.now())
         );
+        jdbcTemplate.update("UPDATE MANUSCRIPT SET CURRENT_VERSION_ID = ? WHERE MANUSCRIPT_ID = ?", versionId, manuscriptId);
         jdbcTemplate.update(
                 """
                 INSERT INTO REVIEW_ROUND (ROUND_ID, MANUSCRIPT_ID, ROUND_NO, VERSION_ID, ROUND_STATUS, ASSIGNMENT_STRATEGY, SCREENING_REQUIRED, DEADLINE_AT, CREATED_BY, CREATED_AT)

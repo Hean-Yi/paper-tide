@@ -11,6 +11,7 @@ DECLARE
   v_role_count NUMBER;
   v_invalid_count NUMBER;
   v_error_count NUMBER;
+  v_execution_job_attempt_count_column NUMBER;
 BEGIN
   SELECT COUNT(*)
     INTO v_table_count
@@ -219,6 +220,12 @@ BEGIN
     INTO v_role_count
     FROM SYS_ROLE;
 
+  SELECT COUNT(*)
+    INTO v_execution_job_attempt_count_column
+    FROM USER_TAB_COLUMNS
+   WHERE TABLE_NAME = 'EXECUTION_JOB'
+     AND COLUMN_NAME = 'ATTEMPT_COUNT';
+
   IF v_table_count <> 26 THEN
     RAISE_APPLICATION_ERROR(-20001, 'Expected 26 tables, found ' || v_table_count);
   END IF;
@@ -241,6 +248,10 @@ BEGIN
 
   IF v_role_count <> 4 THEN
     RAISE_APPLICATION_ERROR(-20006, 'Expected 4 role seeds, found ' || v_role_count);
+  END IF;
+
+  IF v_execution_job_attempt_count_column <> 1 THEN
+    RAISE_APPLICATION_ERROR(-20009, 'Expected EXECUTION_JOB.ATTEMPT_COUNT column to exist');
   END IF;
 
   IF v_invalid_count <> 0 THEN

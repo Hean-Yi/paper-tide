@@ -45,3 +45,26 @@ class AnalysisRequestedMessage:
             "traceId": self.trace_id,
             "createdAt": self.created_at.isoformat(),
         }
+
+
+@dataclass(slots=True)
+class AnalysisCompletedMessage:
+    message_key: str
+    intent_id: int
+    job_id: str
+    analysis_type: str
+    business_status: str
+    summary_projection: dict[str, Any]
+    redacted_result: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "messageKey": self.message_key,
+            "eventType": "analysis.completed",
+            "intentId": self.intent_id,
+            "jobId": self.job_id,
+            "analysisType": self.analysis_type,
+            "businessStatus": self.business_status,
+            "summaryProjection": deepcopy(self.summary_projection),
+            "redactedResult": deepcopy(self.redacted_result),
+        }

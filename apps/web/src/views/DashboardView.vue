@@ -18,7 +18,7 @@ const entries = computed(() => {
     items.push({ label: "Decisions", detail: "Round decisions and conflict analysis.", target: "/chair/decisions" });
   }
   if (roles.has("ADMIN")) {
-    items.push({ label: "Agent monitor", detail: "Agent task status and result checks.", target: "/admin/agents" });
+    items.push({ label: "Agent monitor", detail: "Analysis intent, projection, and execution checks.", target: "/admin/agents" });
   }
   return items;
 });

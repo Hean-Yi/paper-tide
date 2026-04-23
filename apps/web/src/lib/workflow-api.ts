@@ -127,6 +127,17 @@ export interface AnalysisProjectionResponse {
   updatedAt: string | null;
 }
 
+export interface AdminAnalysisMonitorItem {
+  intentId: number;
+  analysisType: string;
+  businessStatus: string;
+  jobId: string | null;
+  anchorType: string;
+  anchorLabel: string;
+  summaryText: string | null;
+  projectionUpdatedAt: string | null;
+}
+
 export interface ReviewReportForm {
   noveltyScore: number;
   methodScore: number;
@@ -244,6 +255,10 @@ export function requestScreeningAnalysis(manuscriptId: number, versionId: number
 
 export function listDecisionWorkbench() {
   return apiRequest<DecisionWorkbenchItem[]>("/chair/decision-workbench");
+}
+
+export function listAdminAnalysisMonitor() {
+  return apiRequest<AdminAnalysisMonitorItem[]>("/admin/analysis-monitor");
 }
 
 export function createReviewRound(payload: {

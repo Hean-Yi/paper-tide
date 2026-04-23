@@ -23,4 +23,5 @@ class AnalysisRequestedConsumer:
             requested.analysis_type,
             requested.request_payload,
             job_id=requested.job_id,
+            intent_reference=requested.intent_reference,
         )

@@ -41,4 +41,11 @@ public class WorkflowQueryController {
     public List<DecisionWorkbenchItem> listDecisionWorkbench(@AuthenticationPrincipal CurrentUserPrincipal principal) {
         return workflowQueryService.listDecisionWorkbench(principal);
     }
+
+    @GetMapping("/admin/analysis-monitor")
+    public List<AdminAnalysisMonitorItem> listAdminAnalysisMonitor(
+            @AuthenticationPrincipal CurrentUserPrincipal principal
+    ) {
+        return workflowQueryService.listAdminAnalysisMonitor(principal);
+    }
 }

@@ -3,6 +3,7 @@ export type WorkflowTagType = "primary" | "success" | "warning" | "info" | "dang
 const LABELS: Record<string, string> = {
   ACCEPT: "Accept",
   ACCEPTED: "Accepted",
+  AVAILABLE: "Available",
   ASSIGNED: "Assigned",
   DECISION_CONFLICT_ANALYSIS: "Decision conflict analysis",
   DESK_REJECT: "Desk reject",
@@ -10,6 +11,7 @@ const LABELS: Record<string, string> = {
   DOUBLE_BLIND: "Double blind",
   DRAFT: "Draft",
   FAILED: "Failed",
+  FAILED_VISIBLE: "Failed",
   IN_PROGRESS: "In progress",
   MAJOR_REVISION: "Major revision",
   MINOR_REVISION: "Minor revision",
@@ -17,6 +19,7 @@ const LABELS: Record<string, string> = {
   OVERDUE: "Overdue",
   PENDING: "Pending",
   PROCESSING: "Processing",
+  REQUESTED: "Requested",
   REALLOCATE_REVIEWERS: "Reallocate reviewers",
   REJECT: "Reject",
   REJECTED: "Rejected",
@@ -31,13 +34,14 @@ const LABELS: Record<string, string> = {
   UNDER_SCREENING: "Under screening"
 };
 
-const SUCCESS_STATUSES = new Set(["ACCEPT", "ACCEPTED", "SUCCESS", "COMPLETED"]);
+const SUCCESS_STATUSES = new Set(["ACCEPT", "ACCEPTED", "AVAILABLE", "SUCCESS", "COMPLETED"]);
 const WARNING_STATUSES = new Set([
   "IN_PROGRESS",
   "MAJOR_REVISION",
   "MINOR_REVISION",
   "PENDING",
   "PROCESSING",
+  "REQUESTED",
   "REVISED_SUBMITTED",
   "REVISION_REQUIRED",
   "SUBMITTED",

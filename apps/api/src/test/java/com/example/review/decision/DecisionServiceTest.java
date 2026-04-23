@@ -21,6 +21,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import com.example.review.support.LegacyAgentArtifactsCleanup;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -36,8 +37,7 @@ class DecisionServiceTest {
 
     @BeforeEach
     void cleanDecisionTables() {
-        jdbcTemplate.update("DELETE FROM AGENT_ANALYSIS_RESULT");
-        jdbcTemplate.update("DELETE FROM AGENT_ANALYSIS_TASK");
+        LegacyAgentArtifactsCleanup.deleteLegacyAgentArtifacts(jdbcTemplate);
         jdbcTemplate.update("DELETE FROM SYS_NOTIFICATION");
         jdbcTemplate.update("UPDATE MANUSCRIPT_VERSION SET SOURCE_DECISION_ID = NULL");
         jdbcTemplate.update("DELETE FROM DECISION_RECORD");

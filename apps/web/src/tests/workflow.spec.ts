@@ -12,6 +12,7 @@ import ManuscriptListView from "../views/author/ManuscriptListView.vue";
 import SubmitManuscriptView from "../views/author/SubmitManuscriptView.vue";
 import ScreeningQueueView from "../views/chair/ScreeningQueueView.vue";
 import DecisionWorkbenchView from "../views/chair/DecisionWorkbenchView.vue";
+import AgentMonitorView from "../views/admin/AgentMonitorView.vue";
 import AssignmentListView from "../views/reviewer/AssignmentListView.vue";
 import ReviewEditorView from "../views/reviewer/ReviewEditorView.vue";
 
@@ -54,6 +55,10 @@ function blobResponse(body: Blob) {
     blob: () => Promise.resolve(body),
     json: () => Promise.resolve({})
   };
+}
+
+function legacyResultsPath(manuscriptId: number, versionId: number) {
+  return ["/manuscripts", String(manuscriptId), "versions", String(versionId), "agent" + "-results"].join("/");
 }
 
 function mockApi(responses: Record<string, unknown>, blobs: Record<string, Blob> = {}) {
@@ -418,9 +423,6 @@ describe("workflow screens", () => {
           taskStatus: "ACCEPTED"
         }));
       }
-      if (path === "/manuscripts/11/versions/21/agent-results") {
-        return Promise.resolve(jsonResponse([]));
-      }
       return Promise.resolve(jsonResponse({}));
     });
     vi.stubGlobal("fetch", fetch);
@@ -717,7 +719,37 @@ describe("workflow screens", () => {
     await wrapper.get(".el-table__expand-icon").trigger("click");
     await flushPromises();
     expect(wrapper.text()).toContain("Projection conflict signal");
-    expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining("/agent-results"), expect.anything());
+    expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining(legacyResultsPath(11, 21)), expect.anything());
+  });
+
+  it("loads admin analysis monitor rows from the governance endpoint", async () => {
+    installAuth(["ADMIN"]);
+    const fetch = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/admin/analysis-monitor") {
+        return Promise.resolve(jsonResponse([
+          {
+            intentId: 101,
+            analysisType: "REVIEWER_ASSIST",
+            businessStatus: "AVAILABLE",
+            jobId: "job-1",
+            anchorType: "ASSIGNMENT",
+            anchorLabel: "Assignment #77",
+            projectionUpdatedAt: "2026-04-23T08:00:00Z",
+            summaryText: "Checklist ready."
+          }
+        ]));
+      }
+      return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(AgentMonitorView);
+
+    expect(fetch).toHaveBeenCalledWith("/api/admin/analysis-monitor", expect.anything());
+    expect(wrapper.text()).toContain("Checklist ready.");
+    expect(wrapper.text()).toContain("Assignment #77");
+    expect(wrapper.text()).toContain("job-1");
   });
 
   it("posts conflict analysis requests as analysis intents", async () => {
@@ -802,7 +834,7 @@ describe("workflow screens", () => {
     await wrapper.get(".el-table__expand-icon").trigger("click");
     await flushPromises();
     expect(wrapper.text()).toContain("No conflict analysis projections yet.");
-    expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining("/agent-results"), expect.anything());
+    expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining(legacyResultsPath(11, 21)), expect.anything());
   });
 
   it("shows scoped loading while chair marks an assignment overdue", async () => {
@@ -827,9 +859,6 @@ describe("workflow screens", () => {
             assignments: [{ assignmentId: 9, reviewerId: 1002, taskStatus: "ACCEPTED" }]
           }
         ]));
-      }
-      if (path === "/manuscripts/11/versions/21/agent-results") {
-        return Promise.resolve(jsonResponse([]));
       }
       if (path === "/review-assignments/9/mark-overdue" && init?.method === "POST") {
         return new Promise((resolve) => {

@@ -2,9 +2,9 @@ import pytest
 
 from app.agent_platform.consumer import AnalysisRequestedConsumer
 from app.agent_platform.messages import AnalysisRequestedMessage
-from app.agent_platform.outbox import InMemoryExecutionOutbox
+from app.agent_platform.outbox import InMemoryExecutionOutbox, OracleExecutionOutbox
 from app.agent_platform.publisher import AnalysisRequestedPublisher
-from app.agent_platform.repositories import InMemoryExecutionJobRepository
+from app.agent_platform.repositories import InMemoryExecutionJobRepository, OracleExecutionJobRepository
 from app.main import create_app
 
 
@@ -89,3 +89,41 @@ def test_outbox_payload_snapshot_is_recursively_immutable() -> None:
 
     with pytest.raises(TypeError):
         published.payload["requestPayload"]["sections"][0]["name"] = "changed"
+
+
+def test_create_app_uses_oracle_persistence_when_db_config_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeCursor:
+        def __enter__(self) -> "FakeCursor":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def execute(self, sql: str, params: dict[str, object] | None = None) -> None:
+            return None
+
+        def fetchone(self) -> tuple[object, ...] | None:
+            return None
+
+        def fetchall(self) -> list[tuple[object, ...]]:
+            return []
+
+    class FakeConnection:
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+        def commit(self) -> None:
+            return None
+
+    monkeypatch.setenv("AGENT_PLATFORM_DB_USER", "agent_user")
+    monkeypatch.setenv("AGENT_PLATFORM_DB_PASSWORD", "secret")
+    monkeypatch.setenv("AGENT_PLATFORM_DB_DSN", "localhost:1521/FREEPDB1")
+
+    app = create_app(
+        enable_background_execution=False,
+        require_internal_api_key=False,
+        db_connection_factory=lambda: FakeConnection(),
+    )
+
+    assert isinstance(app.state.agent_platform.execution_job_repository, OracleExecutionJobRepository)
+    assert isinstance(app.state.execution_message_publisher._outbox, OracleExecutionOutbox)

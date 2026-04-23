@@ -197,6 +197,41 @@ public class WorkflowQueryService {
                 .toList();
     }
 
+    public List<AdminAnalysisMonitorItem> listAdminAnalysisMonitor(CurrentUserPrincipal principal) {
+        RoleGuard.requireRole(principal, "ADMIN");
+        return jdbcTemplate.query(
+                """
+                SELECT I.INTENT_ID,
+                       I.ANALYSIS_TYPE,
+                       I.BUSINESS_STATUS,
+                       I.EXECUTION_JOB_ID,
+                       I.BUSINESS_ANCHOR_TYPE,
+                       CASE
+                         WHEN I.BUSINESS_ANCHOR_TYPE = 'ASSIGNMENT' THEN 'Assignment #' || I.BUSINESS_ANCHOR_ID
+                         WHEN I.BUSINESS_ANCHOR_TYPE = 'ROUND' THEN 'Round #' || I.BUSINESS_ANCHOR_ID
+                         WHEN I.BUSINESS_ANCHOR_TYPE = 'MANUSCRIPT_VERSION' THEN 'Manuscript #' || I.BUSINESS_ANCHOR_ID || ' / Version #' || I.BUSINESS_ANCHOR_VERSION_ID
+                         ELSE 'Anchor #' || I.BUSINESS_ANCHOR_ID
+                       END AS ANCHOR_LABEL,
+                       P.SUMMARY_TEXT,
+                       P.UPDATED_AT AS PROJECTION_UPDATED_AT
+                FROM ANALYSIS_INTENT I
+                LEFT JOIN ANALYSIS_PROJECTION P ON P.INTENT_ID = I.INTENT_ID
+                ORDER BY I.INTENT_ID DESC
+                FETCH FIRST 50 ROWS ONLY
+                """,
+                (rs, rowNum) -> new AdminAnalysisMonitorItem(
+                        rs.getLong("INTENT_ID"),
+                        rs.getString("ANALYSIS_TYPE"),
+                        rs.getString("BUSINESS_STATUS"),
+                        rs.getString("EXECUTION_JOB_ID"),
+                        rs.getString("BUSINESS_ANCHOR_TYPE"),
+                        rs.getString("ANCHOR_LABEL"),
+                        rs.getString("SUMMARY_TEXT"),
+                        rs.getTimestamp("PROJECTION_UPDATED_AT")
+                )
+        );
+    }
+
     private DecisionWorkbenchItem toDecisionWorkbenchItem(DecisionWorkbenchBase round) {
         AnalysisBusinessAnchor anchor = AnalysisBusinessAnchor.round(round.roundId());
         AnalysisIntentResponse intent = intentRepository.findLatestIntent(AnalysisType.CONFLICT_ANALYSIS, anchor)
@@ -375,5 +410,17 @@ record DecisionWorkbenchBase(
         int assignmentCount,
         int submittedReviewCount,
         int conflictCount
+) {
+}
+
+record AdminAnalysisMonitorItem(
+        long intentId,
+        String analysisType,
+        String businessStatus,
+        String jobId,
+        String anchorType,
+        String anchorLabel,
+        String summaryText,
+        Timestamp projectionUpdatedAt
 ) {
 }

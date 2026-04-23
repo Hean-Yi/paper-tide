@@ -21,6 +21,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import com.example.review.support.LegacyAgentArtifactsCleanup;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -36,8 +37,7 @@ class ReviewWorkflowServiceTest {
 
     @BeforeEach
     void cleanReviewTables() {
-        jdbcTemplate.update("DELETE FROM AGENT_ANALYSIS_RESULT");
-        jdbcTemplate.update("DELETE FROM AGENT_ANALYSIS_TASK");
+        LegacyAgentArtifactsCleanup.deleteLegacyAgentArtifacts(jdbcTemplate);
         jdbcTemplate.update("DELETE FROM CONFLICT_CHECK_RECORD");
         jdbcTemplate.update("DELETE FROM REVIEW_REPORT");
         jdbcTemplate.update("DELETE FROM REVIEW_ASSIGNMENT");

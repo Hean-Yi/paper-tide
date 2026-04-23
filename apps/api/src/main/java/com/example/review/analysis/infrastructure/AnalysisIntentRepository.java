@@ -3,6 +3,7 @@ package com.example.review.analysis.infrastructure;
 import com.example.review.analysis.domain.AnalysisBusinessAnchor;
 import com.example.review.analysis.domain.AnalysisStatus;
 import com.example.review.analysis.domain.AnalysisType;
+import java.sql.Types;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.dao.DuplicateKeyException;
@@ -63,22 +64,24 @@ public class AnalysisIntentRepository {
                 ORDER BY INTENT_ID DESC
                 FETCH FIRST 1 ROWS ONLY
                 """,
+                ps -> {
+                    ps.setString(1, analysisType.name());
+                    ps.setString(2, businessAnchor.businessAnchorType().name());
+                    ps.setLong(3, businessAnchor.businessAnchorId());
+                    setNullableVersionId(ps, 4, businessAnchor.businessAnchorVersionId());
+                    setNullableVersionId(ps, 5, businessAnchor.businessAnchorVersionId());
+                },
                 (rs, rowNum) -> new IntentSummary(
                         rs.getLong("INTENT_ID"),
                         rs.getString("ANALYSIS_TYPE"),
                         rs.getString("BUSINESS_STATUS")
-                ),
-                analysisType.name(),
-                businessAnchor.businessAnchorType().name(),
-                businessAnchor.businessAnchorId(),
-                businessAnchor.businessAnchorVersionId(),
-                businessAnchor.businessAnchorVersionId()
+                )
         );
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
     }
 
     public int nextRequestVersion(AnalysisType analysisType, AnalysisBusinessAnchor businessAnchor) {
-        Integer count = jdbcTemplate.queryForObject(
+        Integer count = jdbcTemplate.query(
                 """
                 SELECT COUNT(*)
                 FROM ANALYSIS_INTENT
@@ -90,12 +93,14 @@ public class AnalysisIntentRepository {
                     OR BUSINESS_ANCHOR_VERSION_ID = ?
                   )
                 """,
-                Integer.class,
-                analysisType.name(),
-                businessAnchor.businessAnchorType().name(),
-                businessAnchor.businessAnchorId(),
-                businessAnchor.businessAnchorVersionId(),
-                businessAnchor.businessAnchorVersionId()
+                ps -> {
+                    ps.setString(1, analysisType.name());
+                    ps.setString(2, businessAnchor.businessAnchorType().name());
+                    ps.setLong(3, businessAnchor.businessAnchorId());
+                    setNullableVersionId(ps, 4, businessAnchor.businessAnchorVersionId());
+                    setNullableVersionId(ps, 5, businessAnchor.businessAnchorVersionId());
+                },
+                rs -> rs.next() ? rs.getInt(1) : 0
         );
         return (count == null ? 0 : count) + 1;
     }
@@ -107,6 +112,22 @@ public class AnalysisIntentRepository {
                 idempotencyKey
         );
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
+    }
+
+    public void updateBusinessStatus(long intentId, String businessStatus) {
+        jdbcTemplate.update(
+                "UPDATE ANALYSIS_INTENT SET BUSINESS_STATUS = ? WHERE INTENT_ID = ?",
+                businessStatus,
+                intentId
+        );
+    }
+
+    private void setNullableVersionId(java.sql.PreparedStatement ps, int index, Long versionId) throws java.sql.SQLException {
+        if (versionId == null) {
+            ps.setNull(index, Types.NUMERIC);
+            return;
+        }
+        ps.setLong(index, versionId);
     }
 
     public record IntentSummary(long intentId, String analysisType, String businessStatus) {

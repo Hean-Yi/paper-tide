@@ -3,11 +3,14 @@ package com.example.review.analysis.infrastructure;
 import com.example.review.analysis.domain.AnalysisBusinessAnchor;
 import com.example.review.analysis.domain.AnalysisType;
 import com.example.review.analysis.interfaces.AnalysisDtos.AnalysisProjectionResponse;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.sql.Types;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -42,6 +45,13 @@ public class AnalysisProjectionRepository {
                   )
                 ORDER BY P.UPDATED_AT DESC, P.PROJECTION_ID DESC
                 """,
+                ps -> {
+                    ps.setString(1, analysisType.name());
+                    ps.setString(2, businessAnchor.businessAnchorType().name());
+                    ps.setLong(3, businessAnchor.businessAnchorId());
+                    setNullableVersionId(ps, 4, businessAnchor.businessAnchorVersionId());
+                    setNullableVersionId(ps, 5, businessAnchor.businessAnchorVersionId());
+                },
                 (rs, rowNum) -> new AnalysisProjectionResponse(
                         rs.getLong("PROJECTION_ID"),
                         rs.getString("ANALYSIS_TYPE"),
@@ -50,12 +60,7 @@ public class AnalysisProjectionRepository {
                         parseJson(rs.getString("REDACTED_RESULT")),
                         rs.getInt("IS_SUPERSEDED") == 1,
                         toInstant(rs.getTimestamp("UPDATED_AT"))
-                ),
-                analysisType.name(),
-                businessAnchor.businessAnchorType().name(),
-                businessAnchor.businessAnchorId(),
-                businessAnchor.businessAnchorVersionId(),
-                businessAnchor.businessAnchorVersionId()
+                )
         );
     }
 
@@ -72,5 +77,67 @@ public class AnalysisProjectionRepository {
 
     private Instant toInstant(Timestamp timestamp) {
         return timestamp == null ? null : timestamp.toInstant();
+    }
+
+    private void setNullableVersionId(java.sql.PreparedStatement ps, int index, Long versionId) throws java.sql.SQLException {
+        if (versionId == null) {
+            ps.setNull(index, Types.NUMERIC);
+            return;
+        }
+        ps.setLong(index, versionId);
+    }
+
+    public void saveProjection(
+            long intentId,
+            String analysisType,
+            String businessStatus,
+            Map<String, Object> summaryProjection,
+            Map<String, Object> redactedResult
+    ) {
+        jdbcTemplate.update(
+                """
+                MERGE INTO ANALYSIS_PROJECTION p
+                USING (SELECT ? AS INTENT_ID FROM DUAL) incoming
+                ON (p.INTENT_ID = incoming.INTENT_ID)
+                WHEN MATCHED THEN UPDATE SET
+                  ANALYSIS_TYPE = ?,
+                  VISIBILITY_LEVEL = 'REDACTED_ONLY',
+                  BUSINESS_STATUS = ?,
+                  SUMMARY_TEXT = ?,
+                  REDACTED_RESULT = ?,
+                  RAW_RESULT_REFERENCE = NULL,
+                  IS_SUPERSEDED = 0,
+                  UPDATED_AT = CURRENT_TIMESTAMP
+                WHEN NOT MATCHED THEN INSERT (
+                  PROJECTION_ID, INTENT_ID, ANALYSIS_TYPE, VISIBILITY_LEVEL, BUSINESS_STATUS, SUMMARY_TEXT,
+                  REDACTED_RESULT, RAW_RESULT_REFERENCE, IS_SUPERSEDED, UPDATED_AT
+                ) VALUES (
+                  SEQ_ANALYSIS_PROJECTION.NEXTVAL, ?, ?, 'REDACTED_ONLY', ?, ?, ?, NULL, 0, CURRENT_TIMESTAMP
+                )
+                """,
+                intentId,
+                analysisType,
+                businessStatus,
+                summaryText(summaryProjection),
+                toJson(redactedResult),
+                intentId,
+                analysisType,
+                businessStatus,
+                summaryText(summaryProjection),
+                toJson(redactedResult)
+        );
+    }
+
+    private String summaryText(Map<String, Object> summaryProjection) {
+        Object summary = summaryProjection.get("summary");
+        return summary == null ? null : String.valueOf(summary);
+    }
+
+    private String toJson(Map<String, Object> payload) {
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalArgumentException("Failed to serialize analysis projection JSON", ex);
+        }
     }
 }

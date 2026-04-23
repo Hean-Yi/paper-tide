@@ -1246,7 +1246,7 @@ Expected: PASS
 Run: `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AgentIntegrationServiceTest test`
 Expected: PASS after tests are rewritten to the intent/projection architecture.
 
-- [ ] **Step 6: Commit the screening migration and legacy deletion**
+- [x] **Step 6: Commit the screening migration and legacy deletion**
 
 ```bash
 git add apps/api/src/main/java/com/example/review/analysis/application/RequestScreeningAnalysisUseCase.java \
@@ -1295,9 +1295,9 @@ git commit -m "refactor: remove mirrored agent task infrastructure"
   - `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisDomainTest,AnalysisOutboxPublisherTest,RequestReviewerAssistUseCaseTest,RequestConflictAnalysisUseCaseTest,RequestScreeningAnalysisUseCaseTest,CodeQualityTest test` passed: 15 tests.
   - `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository clean -Dtest=com.example.review.agent.AgentIntegrationServiceTest test` was rerun with network permission to download the missing Maven clean plugin, then failed on Oracle connectivity (`ORA-17800`) while obtaining a JDBC connection. The earlier stale deleted-class failure was cleared by `clean`.
 - Completion state:
-  - Task 18 implementation and non-Oracle verification are complete.
+  - Task 18 implementation and non-Oracle verification are complete and committed as `820232f`.
   - The Oracle-backed `AgentIntegrationServiceTest` remains blocked by local Oracle connectivity, consistent with the previous Task 16/17 verification limitation.
-  - Step 6 remains open until the Task 18 commit is created.
+  - Task 19 is now the next active implementation slice.
 
 ### Task 19: Add Observability, Admin Governance Views, And Full Verification
 

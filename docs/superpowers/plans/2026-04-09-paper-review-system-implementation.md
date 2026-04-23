@@ -994,8 +994,7 @@ git commit -m "feat: migrate reviewer assist to intent and projection flow"
   - `cd apps/web && npm run build` passed with the existing large chunk warning.
   - `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisIntentFlowTest,AgentIntegrationServiceTest test` was attempted both inside the sandbox and with escalation; both attempts failed before product assertions while obtaining Oracle connections (`ORA-17820`/`SocketException: Operation not permitted` in sandbox, then `ORA-17800` outside sandbox). Java compile and test compilation completed before the Oracle connection failures.
 - Current completion state:
-  - Task 16 implementation and non-Oracle verification are complete.
-  - Task 16 remains uncommitted until the final diff is staged without unrelated local changes.
+  - Task 16 implementation and non-Oracle verification are complete and committed as `ad3c2b4`.
   - Oracle-backed API integration verification remains blocked by the local Oracle connectivity failure, not by a reached business assertion.
 
 ### Task 17: Migrate `DECISION_CONFLICT_ANALYSIS` To The New Flow

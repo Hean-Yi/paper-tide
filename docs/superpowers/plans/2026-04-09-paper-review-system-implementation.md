@@ -268,7 +268,7 @@
 
 ## Active Task
 
-- Active task: execute Task 17, migrating `DECISION_CONFLICT_ANALYSIS` onto the new intent/projection and execution-job flow.
+- Active task: execute Task 18, migrating `SCREENING_ANALYSIS` onto the new flow and deleting legacy mirrored task infrastructure.
 
 ## Working Rules For Next Execution Cycle
 
@@ -1134,7 +1134,7 @@ git commit -m "feat: migrate conflict analysis to broker flow"
     - Sandbox run of `mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AgentIntegrationServiceTest,ReviewFlowE2eTest test` failed at JDBC connection setup with `ORA-17820` and `SocketException: Operation not permitted`.
     - Escalated run of the same command reached the network but failed before business assertions with `ORA-17800` while obtaining Oracle connections.
 - Current completion state:
-  - Task 17 implementation and non-Oracle verification are complete.
+  - Task 17 implementation and non-Oracle verification are complete and committed as `e9db243`.
   - Oracle-backed integration/e2e verification is still blocked by the local Oracle connectivity failure, not by a reached Task17 assertion.
 
 ### Task 18: Migrate `SCREENING_ANALYSIS` And Delete Legacy Mirrored Task Infrastructure

@@ -6,11 +6,11 @@ import { onMounted, reactive, ref } from "vue";
 import { useApiError } from "../../composables/useApiError";
 import { useAsyncAction } from "../../composables/useAsyncAction";
 import {
-  createAgentTask,
   createReviewRound,
   decide,
   downloadPdf,
   listScreeningQueue,
+  requestScreeningAnalysis,
   startScreening,
   type ScreeningQueueItem
 } from "../../lib/workflow-api";
@@ -60,8 +60,14 @@ async function start(row: ScreeningQueueItem) {
 }
 
 async function triggerAgent(row: ScreeningQueueItem) {
-  await createAgentTask(row.manuscriptId, row.versionId, "SCREENING_ANALYSIS");
-  ElMessage.success("Screening analysis requested.");
+  await actions.run(`agent:${row.manuscriptId}:${row.versionId}`, async () => {
+    try {
+      await requestScreeningAnalysis(row.manuscriptId, row.versionId);
+      ElMessage.success("Screening analysis requested.");
+    } catch (error) {
+      showApiError(error, "Screening analysis could not be requested.");
+    }
+  });
 }
 
 async function download(row: ScreeningQueueItem) {
@@ -198,7 +204,13 @@ async function submitDeskReject() {
             >
               Start screening
             </el-button>
-            <el-button size="small" @click="triggerAgent(row)">Run agent</el-button>
+            <el-button
+              size="small"
+              :loading="actions.isPending(`agent:${row.manuscriptId}:${row.versionId}`)"
+              @click="triggerAgent(row)"
+            >
+              Run agent
+            </el-button>
             <el-button size="small" @click="openRound(row)">Create round</el-button>
             <el-button size="small" type="danger" @click="openDeskReject(row)">Desk reject</el-button>
           </div>

@@ -7,20 +7,14 @@ from app.agent_platform.publisher import AnalysisRequestedPublisher
 from app.agent_platform.repositories import InMemoryExecutionJobRepository
 from app.agent_platform.runtime import AgentPlatformRuntime
 from app.agent_platform.state_machine import ExecutionStateMachine
-from app.routes.tasks import build_tasks_router
-from app.task_store import TaskStore
-from app.workflows.coordinator import WorkflowCoordinator
 
 
 def create_app(
     *,
     enable_background_execution: bool = True,
     require_internal_api_key: bool = True,
-    task_store: TaskStore | None = None,
 ) -> FastAPI:
     app = FastAPI(title="review-agent")
-    task_store = task_store or TaskStore()
-    coordinator = WorkflowCoordinator(task_store, enable_background_execution=enable_background_execution)
     agent_platform_config = AgentPlatformConfig.from_env()
     execution_job_repository = InMemoryExecutionJobRepository()
     execution_outbox = InMemoryExecutionOutbox()
@@ -46,14 +40,6 @@ def create_app(
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
-
-    app.include_router(
-        build_tasks_router(
-            task_store,
-            start_task=coordinator.start_task,
-            require_internal_api_key=require_internal_api_key,
-        )
-    )
 
     return app
 

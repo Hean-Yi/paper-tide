@@ -38,14 +38,11 @@ class CodeQualityTest {
     }
 
     @Test
-    void agentPollingHasRuntimeSchedule() throws IOException {
-        String applicationSource = Files.readString(Path.of("src/main/java/com/example/review/ReviewApplication.java"));
-        String schedulerSource = Files.readString(Path.of("src/main/java/com/example/review/agent/AgentPollingScheduler.java"));
-        String config = Files.readString(Path.of("src/main/resources/application.yml"));
-
-        assertTrue(applicationSource.contains("@EnableScheduling"), "ReviewApplication should enable Spring scheduling");
-        assertTrue(schedulerSource.contains("@Scheduled"), "AgentPollingScheduler should have a runtime schedule");
-        assertTrue(config.contains("polling-delay-ms"), "application.yml should expose review.agent.polling-delay-ms");
+    void legacyMirroredAgentTaskInfrastructureIsRemoved() {
+        assertFalse(Files.exists(Path.of("src/main/java/com/example/review/agent/AgentPollingScheduler.java")));
+        assertFalse(Files.exists(Path.of("src/main/java/com/example/review/agent/HttpAgentServiceClient.java")));
+        assertFalse(Files.exists(Path.of("src/main/java/com/example/review/agent/AgentServiceClient.java")));
+        assertFalse(Files.exists(Path.of("src/main/java/com/example/review/agent/AgentServiceException.java")));
     }
 
     private void assertSourceDoesNotContain(String path, String forbiddenText) throws IOException {

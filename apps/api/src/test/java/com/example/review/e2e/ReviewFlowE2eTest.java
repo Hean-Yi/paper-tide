@@ -1,7 +1,5 @@
 package com.example.review.e2e;
 
-import static org.hamcrest.Matchers.blankOrNullString;
-import static org.hamcrest.Matchers.not;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -10,27 +8,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.example.review.agent.AgentDtos.AgentServiceCreateRequest;
-import com.example.review.agent.AgentDtos.AgentServiceResult;
-import com.example.review.agent.AgentDtos.AgentServiceTaskStatus;
-import com.example.review.agent.AgentDtos.AgentServiceTaskSummary;
-import com.example.review.agent.AgentServiceClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.ApplicationContext;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
@@ -93,15 +80,8 @@ class ReviewFlowE2eTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Autowired
-    private ApplicationContext applicationContext;
-
-    @Autowired
-    private RecordingE2eAgentServiceClient agentClient;
-
     @BeforeEach
     void cleanWorkflowTables() {
-        agentClient.reset();
         jdbcTemplate.update("DELETE FROM ANALYSIS_OUTBOX");
         jdbcTemplate.update("DELETE FROM ANALYSIS_PROJECTION");
         jdbcTemplate.update("DELETE FROM ANALYSIS_INTENT");
@@ -296,21 +276,6 @@ class ReviewFlowE2eTest {
         return objectMapper.readTree(result.getResponse().getContentAsString()).path("assignmentId").asLong();
     }
 
-    private String createAgentTask(String chairToken, ManuscriptIds manuscript, String taskType) throws Exception {
-        MvcResult result = mockMvc.perform(post("/api/manuscripts/{id}/versions/{versionId}/agent-tasks", manuscript.manuscriptId(), manuscript.versionId())
-                        .header("Authorization", "Bearer " + chairToken)
-                        .contentType(APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "taskType": "%s"
-                                }
-                                """.formatted(taskType)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.externalTaskId", not(blankOrNullString())))
-                .andReturn();
-        return objectMapper.readTree(result.getResponse().getContentAsString()).path("externalTaskId").asText();
-    }
-
     private void requestReviewerAssist(String reviewerToken, long assignmentId) throws Exception {
         mockMvc.perform(post("/api/review-assignments/{assignmentId}/agent-assist", assignmentId)
                         .header("Authorization", "Bearer " + reviewerToken)
@@ -370,63 +335,6 @@ class ReviewFlowE2eTest {
         return objectMapper.readTree(result.getResponse().getContentAsString()).path("token").asText();
     }
 
-    private void pollOnce() throws Exception {
-        Object scheduler = applicationContext.getBean("agentPollingScheduler");
-        scheduler.getClass().getMethod("pollOnce").invoke(scheduler);
-    }
-
     private record ManuscriptIds(long manuscriptId, long versionId) {
-    }
-
-    @TestConfiguration
-    static class E2eAgentClientConfiguration {
-        @Bean
-        @Primary
-        RecordingE2eAgentServiceClient recordingE2eAgentServiceClient() {
-            return new RecordingE2eAgentServiceClient();
-        }
-    }
-
-    static final class RecordingE2eAgentServiceClient implements AgentServiceClient {
-        private final AtomicInteger taskCounter = new AtomicInteger(0);
-        private final Map<String, String> taskTypesByExternalId = new ConcurrentHashMap<>();
-        private final Map<String, Boolean> completedByExternalId = new ConcurrentHashMap<>();
-
-        void reset() {
-            taskCounter.set(0);
-            taskTypesByExternalId.clear();
-            completedByExternalId.clear();
-        }
-
-        void markCompleted(String externalTaskId) {
-            completedByExternalId.put(externalTaskId, true);
-        }
-
-        @Override
-        public AgentServiceTaskSummary createTask(AgentServiceCreateRequest request) {
-            String externalTaskId = "e2e-agent-task-" + taskCounter.incrementAndGet();
-            taskTypesByExternalId.put(externalTaskId, request.taskType());
-            completedByExternalId.put(externalTaskId, false);
-            return new AgentServiceTaskSummary(externalTaskId, "PENDING", "queued");
-        }
-
-        @Override
-        public AgentServiceTaskStatus getTaskStatus(String externalTaskId) {
-            String taskType = taskTypesByExternalId.getOrDefault(externalTaskId, "REVIEW_ASSIST_ANALYSIS");
-            if (Boolean.TRUE.equals(completedByExternalId.get(externalTaskId))) {
-                return new AgentServiceTaskStatus(externalTaskId, taskType, "SUCCESS", "completed", null);
-            }
-            return new AgentServiceTaskStatus(externalTaskId, taskType, "PROCESSING", "analyzing", null);
-        }
-
-        @Override
-        public AgentServiceResult getTaskResult(String externalTaskId) {
-            String taskType = taskTypesByExternalId.getOrDefault(externalTaskId, "REVIEW_ASSIST_ANALYSIS");
-            return new AgentServiceResult(
-                    taskType,
-                    Map.of("summary", "raw " + taskType + " summary", "risk", "low"),
-                    Map.of("summary", "redacted " + taskType + " summary", "risk", "low")
-            );
-        }
     }
 }

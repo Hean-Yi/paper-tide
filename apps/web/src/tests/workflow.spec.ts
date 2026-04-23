@@ -191,6 +191,46 @@ describe("workflow screens", () => {
     resolveStart?.(jsonResponse({}));
   });
 
+  it("requests screening analysis through the intent outbox endpoint", async () => {
+    installAuth(["CHAIR"]);
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/chair/screening-queue") {
+        return Promise.resolve(jsonResponse([
+          {
+            manuscriptId: 11,
+            versionId: 21,
+            versionNo: 1,
+            title: "Workflow Seed",
+            currentStatus: "UNDER_SCREENING",
+            currentRoundNo: 1,
+            blindMode: "DOUBLE_BLIND",
+            submittedAt: "2026-04-13T05:00:00Z",
+            pdfFileName: "workflow.pdf",
+            pdfFileSize: 23
+          }
+        ]));
+      }
+      if (path === "/manuscripts/11/versions/21/screening-analysis" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({
+          intentId: 89,
+          analysisType: "SCREENING",
+          businessStatus: "REQUESTED"
+        }));
+      }
+      return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(ScreeningQueueView);
+    await clickButton(wrapper, "Run agent");
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/manuscripts/11/versions/21/screening-analysis",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
   it("shows a clear non-agent API error when starting screening fails", async () => {
     installAuth(["CHAIR"]);
     const message = vi.spyOn(ElMessage, "error").mockImplementation(() => undefined as never);

@@ -1,11 +1,13 @@
 package com.example.review.analysis.interfaces;
 
-import com.example.review.analysis.application.RequestReviewerAssistUseCase;
 import com.example.review.analysis.application.RequestConflictAnalysisUseCase;
+import com.example.review.analysis.application.RequestReviewerAssistUseCase;
+import com.example.review.analysis.application.RequestScreeningAnalysisUseCase;
 import com.example.review.analysis.interfaces.AnalysisDtos.AnalysisIntentResponse;
 import com.example.review.analysis.interfaces.AnalysisDtos.ConflictAnalysisRequest;
 import com.example.review.analysis.interfaces.AnalysisDtos.ReviewerAssistRequest;
 import com.example.review.analysis.interfaces.AnalysisDtos.ReviewerAssistStateResponse;
+import com.example.review.analysis.interfaces.AnalysisDtos.ScreeningAnalysisRequest;
 import com.example.review.auth.CurrentUserPrincipal;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -22,13 +24,32 @@ import org.springframework.web.bind.annotation.RestController;
 public class AnalysisController {
     private final RequestReviewerAssistUseCase requestReviewerAssistUseCase;
     private final RequestConflictAnalysisUseCase requestConflictAnalysisUseCase;
+    private final RequestScreeningAnalysisUseCase requestScreeningAnalysisUseCase;
 
     public AnalysisController(
             RequestReviewerAssistUseCase requestReviewerAssistUseCase,
-            RequestConflictAnalysisUseCase requestConflictAnalysisUseCase
+            RequestConflictAnalysisUseCase requestConflictAnalysisUseCase,
+            RequestScreeningAnalysisUseCase requestScreeningAnalysisUseCase
     ) {
         this.requestReviewerAssistUseCase = requestReviewerAssistUseCase;
         this.requestConflictAnalysisUseCase = requestConflictAnalysisUseCase;
+        this.requestScreeningAnalysisUseCase = requestScreeningAnalysisUseCase;
+    }
+
+    @PostMapping("/manuscripts/{manuscriptId}/versions/{versionId}/screening-analysis")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public AnalysisIntentResponse requestScreeningAnalysis(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long manuscriptId,
+            @PathVariable long versionId,
+            @RequestBody(required = false) ScreeningAnalysisRequest request
+    ) {
+        return requestScreeningAnalysisUseCase.request(
+                principal,
+                manuscriptId,
+                versionId,
+                request != null && request.forceRequested()
+        );
     }
 
     @PostMapping("/review-assignments/{assignmentId}/agent-assist")

@@ -268,7 +268,7 @@
 
 ## Active Task
 
-- Active task: execute Task 18, migrating `SCREENING_ANALYSIS` onto the new flow and deleting legacy mirrored task infrastructure.
+- Active task: execute Task 19 after Task 18 commit lands.
 
 ## Working Rules For Next Execution Cycle
 
@@ -1156,7 +1156,7 @@ git commit -m "feat: migrate conflict analysis to broker flow"
 - Delete: `services/agent/tests/test_tasks_api.py`
 - Delete: `services/agent/tests/test_multipart_tasks_api.py`
 
-- [ ] **Step 1: Write the failing screening-flow test and the failing absence test for legacy poller references**
+- [x] **Step 1: Write the failing screening-flow test and the failing absence test for legacy poller references**
 
 ```python
 def test_screening_handler_builds_projection_summary():
@@ -1184,7 +1184,7 @@ void screeningRequestReturnsBusinessIntentResponse() throws Exception {
 }
 ```
 
-- [ ] **Step 2: Run the new tests and verify they fail while the legacy infrastructure still exists**
+- [x] **Step 2: Run the new tests and verify they fail while the legacy infrastructure still exists**
 
 Run: `cd services/agent && ./.venv/bin/python -m pytest tests/test_screening_flow.py -q`
 Expected: FAIL because `ScreeningAnalysisHandler` does not exist.
@@ -1192,7 +1192,7 @@ Expected: FAIL because `ScreeningAnalysisHandler` does not exist.
 Run: `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AgentIntegrationServiceTest test`
 Expected: FAIL because the screening endpoint still returns the legacy task contract.
 
-- [ ] **Step 3: Implement the screening use case and handler, then delete the legacy API poller/client path**
+- [x] **Step 3: Implement the screening use case and handler, then delete the legacy API poller/client path**
 
 ```java
 public AnalysisIntentResponse handle(CurrentUserPrincipal principal, long manuscriptId, long versionId) {
@@ -1226,7 +1226,7 @@ class ScreeningAnalysisHandler(AnalysisTaskHandler):
         }
 ```
 
-- [ ] **Step 4: Delete the first-generation FastAPI task API and in-memory task truth**
+- [x] **Step 4: Delete the first-generation FastAPI task API and in-memory task truth**
 
 ```python
 from fastapi import FastAPI
@@ -1238,7 +1238,7 @@ def create_app() -> FastAPI:
     return app
 ```
 
-- [ ] **Step 5: Run the legacy-removal verification slice**
+- [x] **Step 5: Run the legacy-removal verification slice**
 
 Run: `cd services/agent && ./.venv/bin/python -m pytest tests/test_screening_flow.py tests/test_health.py -q`
 Expected: PASS
@@ -1263,6 +1263,41 @@ git rm apps/api/src/main/java/com/example/review/agent/AgentPollingScheduler.jav
   services/agent/tests/test_tasks_api.py services/agent/tests/test_multipart_tasks_api.py
 git commit -m "refactor: remove mirrored agent task infrastructure"
 ```
+
+**Task 18 execution notes, 2026-04-23:**
+
+- Executed the TDD red step for screening migration:
+  - Added `RequestScreeningAnalysisUseCaseTest`.
+  - Added `services/agent/tests/test_screening_flow.py`.
+  - Added a frontend workflow test proving `ScreeningQueueView` posts to `/screening-analysis` instead of `/agent-tasks`.
+  - Replaced the old scheduling code-quality expectation with legacy file absence checks.
+- Verified the red failures before implementation:
+  - `/Users/hean/Agent_proj/.venv/bin/python -m pytest tests/test_screening_flow.py -q` failed because `app.agent_platform.handlers.screening` did not exist.
+  - `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=RequestScreeningAnalysisUseCaseTest,CodeQualityTest test` failed because `RequestScreeningAnalysisUseCase` and `ScreeningAnalysisContextRepository` did not exist.
+  - `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts -t "requests screening analysis"` failed because the UI still posted to `/agent-tasks`.
+- Implemented the new screening intent flow:
+  - Added `RequestScreeningAnalysisUseCase` and `ScreeningAnalysisContextRepository`.
+  - Added `POST /api/manuscripts/{manuscriptId}/versions/{versionId}/screening-analysis` on `AnalysisController`.
+  - Added the agent-platform `ScreeningAnalysisHandler` and `ProviderExecutor.run_screening`.
+  - Updated the chair screening queue to call the new intent endpoint and show scoped loading/error handling.
+- Deleted the legacy mirrored task infrastructure:
+  - Removed the Java poller, HTTP client, client interface, exception, task controller, integration service, repository, DTOs, and obsolete exception advice.
+  - Removed `review.agent.*` client/poller configuration and `@EnableScheduling`.
+  - Removed the FastAPI task router, in-memory task store, legacy coordinator, and first-generation task API tests.
+  - Rewrote the old `AgentIntegrationServiceTest` around the new screening intent/outbox behavior.
+  - Retired the frontend admin mirrored-task monitor placeholder until Task 19 adds the new governance view.
+- Verification run:
+  - `cd services/agent && /Users/hean/Agent_proj/.venv/bin/python -m pytest tests/test_screening_flow.py tests/test_conflict_analysis_flow.py tests/test_reviewer_assist_flow.py tests/test_message_consumer.py tests/test_execution_job.py tests/test_health.py -q` passed: 20 tests.
+  - `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts src/tests/agent-projection.spec.ts` passed: 25 tests.
+  - `cd apps/web && npm run typecheck` passed.
+  - `cd apps/web && npm run build` passed, with the existing Vite chunk-size warning.
+  - `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test-compile` passed.
+  - `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisDomainTest,AnalysisOutboxPublisherTest,RequestReviewerAssistUseCaseTest,RequestConflictAnalysisUseCaseTest,RequestScreeningAnalysisUseCaseTest,CodeQualityTest test` passed: 15 tests.
+  - `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository clean -Dtest=com.example.review.agent.AgentIntegrationServiceTest test` was rerun with network permission to download the missing Maven clean plugin, then failed on Oracle connectivity (`ORA-17800`) while obtaining a JDBC connection. The earlier stale deleted-class failure was cleared by `clean`.
+- Completion state:
+  - Task 18 implementation and non-Oracle verification are complete.
+  - The Oracle-backed `AgentIntegrationServiceTest` remains blocked by local Oracle connectivity, consistent with the previous Task 16/17 verification limitation.
+  - Step 6 remains open until the Task 18 commit is created.
 
 ### Task 19: Add Observability, Admin Governance Views, And Full Verification
 

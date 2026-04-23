@@ -214,23 +214,6 @@ class WorkflowQueryServiceTest {
                 .andExpect(jsonPath("$[0].assignments[0].taskStatus").value("SUBMITTED"));
     }
 
-    @Test
-    void adminListsAgentTasksWithFilters() throws Exception {
-        WorkflowFixture fixture = seedUnderReviewWorkflow("ACCEPTED", true, false);
-        long taskId = seedAgentTask(fixture);
-        String adminToken = loginAndExtractToken("admin_demo", "demo123");
-
-        mockMvc.perform(get("/api/agent-tasks")
-                        .param("status", "SUCCESS")
-                        .param("taskType", "REVIEW_ASSIST_ANALYSIS")
-                        .header("Authorization", "Bearer " + adminToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].taskId").value(taskId))
-                .andExpect(jsonPath("$[0].externalTaskId").value("workflow-agent-task"))
-                .andExpect(jsonPath("$[0].taskStatus").value("SUCCESS"))
-                .andExpect(jsonPath("$[0].resultSummary").value("finished"));
-    }
-
     private WorkflowFixture seedSubmittedManuscript(String status, boolean withPdf) {
         long manuscriptId = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT.NEXTVAL FROM DUAL", Long.class);
         long versionId = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT_VERSION.NEXTVAL FROM DUAL", Long.class);
@@ -328,23 +311,6 @@ class WorkflowQueryServiceTest {
             );
         }
         return new WorkflowFixture(manuscript.manuscriptId(), manuscript.versionId(), roundId, assignmentId);
-    }
-
-    private long seedAgentTask(WorkflowFixture fixture) {
-        long taskId = jdbcTemplate.queryForObject("SELECT SEQ_AGENT_ANALYSIS_TASK.NEXTVAL FROM DUAL", Long.class);
-        jdbcTemplate.update(
-                """
-                INSERT INTO AGENT_ANALYSIS_TASK (TASK_ID, MANUSCRIPT_ID, VERSION_ID, ROUND_ID, TASK_TYPE, TASK_STATUS, REQUEST_PAYLOAD, RESULT_SUMMARY, EXTERNAL_TASK_ID, RETRY_COUNT, CREATED_AT, FINISHED_AT)
-                VALUES (?, ?, ?, ?, 'REVIEW_ASSIST_ANALYSIS', 'SUCCESS', '{}', 'finished', 'workflow-agent-task', 0, ?, ?)
-                """,
-                taskId,
-                fixture.manuscriptId(),
-                fixture.versionId(),
-                fixture.roundId(),
-                Timestamp.from(Instant.now()),
-                Timestamp.from(Instant.now())
-        );
-        return taskId;
     }
 
     private void ensureSecondReviewer() {

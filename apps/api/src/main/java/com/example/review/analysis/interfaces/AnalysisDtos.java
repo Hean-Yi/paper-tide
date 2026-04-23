@@ -20,6 +20,12 @@ public final class AnalysisDtos {
         }
     }
 
+    public record ScreeningAnalysisRequest(Boolean force) {
+        public boolean forceRequested() {
+            return Boolean.TRUE.equals(force);
+        }
+    }
+
     public record AnalysisIntentResponse(
             long intentId,
             String analysisType,

@@ -10,6 +10,8 @@ class ProviderExecutor(Protocol):
 
     def run_conflict_analysis(self, payload: dict[str, Any]) -> dict[str, Any]: ...
 
+    def run_screening(self, payload: dict[str, Any]) -> dict[str, Any]: ...
+
 
 class AnalysisTaskHandler(Protocol):
     analysis_type: str

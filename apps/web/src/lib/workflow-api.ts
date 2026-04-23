@@ -96,34 +96,6 @@ export interface DecisionWorkbenchItem {
   conflictProjections: AnalysisProjectionResponse[];
 }
 
-export interface AgentResult {
-  resultId: number;
-  resultType: string;
-  rawResult: Record<string, unknown> | null;
-  redactedResult: Record<string, unknown> | null;
-}
-
-export interface AgentTask {
-  taskId: number;
-  externalTaskId: string | null;
-  taskType: string;
-  taskStatus: string;
-  manuscriptId: number;
-  versionId: number;
-  roundId: number | null;
-  createdAt: string;
-  finishedAt: string | null;
-  resultSummary: string | null;
-}
-
-export interface AgentTaskSummary {
-  taskId: number;
-  externalTaskId: string | null;
-  taskType: string;
-  taskStatus: string;
-  step: string | null;
-}
-
 export interface AssignmentPaper {
   assignmentId: number;
   manuscriptId: number;
@@ -263,19 +235,15 @@ export function startScreening(manuscriptId: number, versionId: number) {
   return apiRequest<ManuscriptSummary>(`/manuscripts/${manuscriptId}/versions/${versionId}/start-screening`, { method: "POST" });
 }
 
-export function createAgentTask(manuscriptId: number, versionId: number, taskType: string, force = false) {
-  return apiRequest(`/manuscripts/${manuscriptId}/versions/${versionId}/agent-tasks`, {
+export function requestScreeningAnalysis(manuscriptId: number, versionId: number, force = false) {
+  return apiRequest<AnalysisIntentResponse>(`/manuscripts/${manuscriptId}/versions/${versionId}/screening-analysis`, {
     method: "POST",
-    json: { taskType, force }
+    json: { force }
   });
 }
 
 export function listDecisionWorkbench() {
   return apiRequest<DecisionWorkbenchItem[]>("/chair/decision-workbench");
-}
-
-export function listAgentResults(manuscriptId: number, versionId: number) {
-  return apiRequest<AgentResult[]>(`/manuscripts/${manuscriptId}/versions/${versionId}/agent-results`);
 }
 
 export function createReviewRound(payload: {
@@ -308,16 +276,4 @@ export function decide(payload: {
   decisionReason: string;
 }) {
   return apiRequest("/decisions", { method: "POST", json: payload });
-}
-
-export function listAgentTasks(filters: { status?: string; taskType?: string }) {
-  const params = new URLSearchParams();
-  if (filters.status) {
-    params.set("status", filters.status);
-  }
-  if (filters.taskType) {
-    params.set("taskType", filters.taskType);
-  }
-  const suffix = params.toString() ? `?${params.toString()}` : "";
-  return apiRequest<AgentTask[]>(`/agent-tasks${suffix}`);
 }

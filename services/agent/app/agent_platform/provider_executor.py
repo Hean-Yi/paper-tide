@@ -53,3 +53,31 @@ class ProviderExecutor:
             ),
             "confidence": 0.5,
         }
+
+    def run_screening(self, payload: dict[str, Any]) -> dict[str, Any]:
+        context = payload.get("screening") or {}
+        keywords = list(payload.get("keywords") or [])
+        format_risks = []
+        if not payload.get("abstract"):
+            format_risks.append("Missing abstract text in screening payload.")
+        if not keywords:
+            format_risks.append("Missing keyword metadata for scope screening.")
+        if not format_risks:
+            format_risks.append("No obvious format risks detected from metadata.")
+        blindness_risks = []
+        combined_text = f"{payload.get('title', '')} {payload.get('abstract', '')}".lower()
+        for marker in ("author", "institution", "university", "grant"):
+            if marker in combined_text:
+                blindness_risks.append(f"Potential blind-review marker: {marker}.")
+        return {
+            "taskType": "SCREENING_ANALYSIS",
+            "manuscriptId": str(context.get("manuscriptId", "")),
+            "versionId": str(context.get("versionId", "")),
+            "status": "SUCCESS",
+            "topicCategory": ", ".join(str(keyword) for keyword in keywords[:3]) or "Unclassified",
+            "scopeFit": "FIT",
+            "formatRisks": format_risks,
+            "blindnessRisks": blindness_risks,
+            "screeningSummary": "Metadata and abstract are ready for chair screening.",
+            "confidence": 0.5,
+        }

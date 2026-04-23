@@ -1,6 +1,7 @@
 from .config import AgentPlatformConfig
 from .consumer import AnalysisRequestedConsumer
 from .domain import ExecutionJob
+from .handler_registry import AnalysisHandlerRegistry
 from .messages import AnalysisRequestedMessage
 from .outbox import ExecutionOutboxMessage, InMemoryExecutionOutbox
 from .publisher import AnalysisRequestedPublisher
@@ -10,6 +11,7 @@ from .state_machine import ExecutionStateMachine
 
 __all__ = [
     "AgentPlatformConfig",
+    "AnalysisHandlerRegistry",
     "AnalysisRequestedConsumer",
     "AnalysisRequestedMessage",
     "AnalysisRequestedPublisher",

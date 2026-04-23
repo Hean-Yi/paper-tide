@@ -842,7 +842,7 @@ git commit -m "feat(agent): add durable execution job core"
 - Modify: `apps/web/src/components/reviewer/ReviewerAgentPanel.vue`
 - Create: `apps/web/src/tests/agent-projection.spec.ts`
 
-- [ ] **Step 1: Write the failing API integration test for reviewer-assist intent and projection**
+- [x] **Step 1: Write the failing API integration test for reviewer-assist intent and projection**
 
 ```java
 @SpringBootTest
@@ -866,12 +866,12 @@ class AnalysisIntentFlowTest {
 }
 ```
 
-- [ ] **Step 2: Run the new API test and verify it fails because the intent/projection controller path is not implemented**
+- [x] **Step 2: Run the new API test and verify it fails because the intent/projection controller path is not implemented**
 
 Run: `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisIntentFlowTest test`
 Expected: FAIL with missing controller/use case wiring or unexpected legacy payload.
 
-- [ ] **Step 3: Implement the reviewer-assist request use case and API response shape**
+- [x] **Step 3: Implement the reviewer-assist request use case and API response shape**
 
 ```java
 public record AnalysisIntentResponse(long intentId, String analysisType, String businessStatus) {
@@ -895,7 +895,7 @@ public class AnalysisController {
 }
 ```
 
-- [ ] **Step 4: Implement the outbox-backed API path**
+- [x] **Step 4: Implement the outbox-backed API path**
 
 ```java
 public AnalysisIntentResponse handle(CurrentUserPrincipal principal, long assignmentId) {
@@ -913,7 +913,7 @@ public AnalysisIntentResponse handle(CurrentUserPrincipal principal, long assign
 }
 ```
 
-- [ ] **Step 5: Implement the reviewer-assist handler inside the agent platform**
+- [x] **Step 5: Implement the reviewer-assist handler inside the agent platform**
 
 ```python
 class ReviewerAssistHandler(AnalysisTaskHandler):
@@ -932,7 +932,7 @@ class ReviewerAssistHandler(AnalysisTaskHandler):
         }
 ```
 
-- [ ] **Step 6: Update the reviewer UI to read projection-oriented fields**
+- [x] **Step 6: Update the reviewer UI to read projection-oriented fields**
 
 ```ts
 export interface AnalysisIntentResponse {
@@ -948,7 +948,7 @@ export interface AnalysisIntentResponse {
 </el-tag>
 ```
 
-- [ ] **Step 7: Run the reviewer-assist test slice**
+- [x] **Step 7: Run the reviewer-assist test slice**
 
 Run: `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisIntentFlowTest test`
 Expected: PASS
@@ -972,6 +972,31 @@ git add apps/api/src/main/java/com/example/review/analysis \
   apps/web/src/lib/workflow-api.ts apps/web/src/components/reviewer/ReviewerAgentPanel.vue apps/web/src/tests/agent-projection.spec.ts
 git commit -m "feat: migrate reviewer assist to intent and projection flow"
 ```
+
+**Task 16 execution notes, 2026-04-23:**
+
+- Implemented the reviewer-assist migration onto the intent/projection boundary:
+  - API now exposes `POST/GET /api/review-assignments/{assignmentId}/agent-assist` from `AnalysisController`.
+  - API creates `ANALYSIS_INTENT` rows and `ANALYSIS_OUTBOX` messages instead of local `AGENT_ANALYSIS_TASK` rows for reviewer assist.
+  - Reviewer assist remains assignment-scoped, reviewer-owned, and checklist-only.
+  - Agent service added `ReviewerAssistHandler`, `ProviderExecutor`, and `AnalysisHandlerRegistry`.
+  - Reviewer UI now renders `intent` and `projections` rather than legacy `task` and `results`.
+- Additional design hardening was required during implementation:
+  - Outbox messages are now wrapped in the cross-service command envelope expected by the agent consumer: `idempotencyKey`, `analysisType`, `intentReference`, and nested `requestPayload`.
+  - Forced reviewer-assist reruns now compute the next request version from existing intents instead of reusing a fixed `REQUEST_VERSION + 1` key.
+  - Stable lessons were recorded in `AGENTS.md` for command-envelope outbox contracts and repeated `force` request identity.
+- Verification run:
+  - `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisOutboxPublisherTest,RequestReviewerAssistUseCaseTest test` passed.
+  - `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisDomainTest,AnalysisOutboxPublisherTest,RequestReviewerAssistUseCaseTest test` passed.
+  - `cd services/agent && ../../.venv/bin/python -m pytest tests/test_reviewer_assist_flow.py tests/test_message_consumer.py tests/test_execution_job.py tests/test_health.py -q` passed with the existing Python 3.14/Pydantic warning.
+  - `cd apps/web && npm run test -- --run src/tests/agent-projection.spec.ts src/tests/workflow.spec.ts` passed.
+  - `cd apps/web && npm run typecheck` passed.
+  - `cd apps/web && npm run build` passed with the existing large chunk warning.
+  - `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisIntentFlowTest,AgentIntegrationServiceTest test` was attempted both inside the sandbox and with escalation; both attempts failed before product assertions while obtaining Oracle connections (`ORA-17820`/`SocketException: Operation not permitted` in sandbox, then `ORA-17800` outside sandbox). Java compile and test compilation completed before the Oracle connection failures.
+- Current completion state:
+  - Task 16 implementation and non-Oracle verification are complete.
+  - Task 16 remains uncommitted until the final diff is staged without unrelated local changes.
+  - Oracle-backed API integration verification remains blocked by the local Oracle connectivity failure, not by a reached business assertion.
 
 ### Task 17: Migrate `DECISION_CONFLICT_ANALYSIS` To The New Flow
 

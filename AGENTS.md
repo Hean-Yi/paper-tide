@@ -83,6 +83,8 @@ Current lessons captured from recent review cycles:
 - If `UPDATED_AT` participates in ordering, polling, or indexed lookup semantics, maintain it through a trigger or an equally enforced persistence contract; do not leave it as an insert-only default that later writers must remember manually.
 - Frozen dataclasses do not make durable state immutable when nested JSON-like payloads remain mutable. For job or outbox snapshots, freeze nested mappings and sequences recursively and expose mutable copies only through explicit helper methods.
 - Typed construction helpers such as idempotency-key factories must validate enum and value-object compatibility at creation time so semantically invalid combinations fail fast instead of producing durable but nonsensical identities.
+- Cross-service outbox messages must publish a stable command envelope, not a naked business payload. Include routing/identity fields such as `idempotencyKey`, `analysisType`, `intentReference`, and nested `requestPayload` so consumers do not infer transport metadata from business data.
+- `force` semantics in intent-based agent flows must allocate a new durable request identity instead of toggling a fixed alternate key. Compute the next request version from existing intents so repeated forced reruns do not collapse onto the same cached work.
 
 ## Plan File Discipline
 Execution work must stay anchored to one authoritative implementation plan file.

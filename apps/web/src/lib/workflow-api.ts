@@ -133,12 +133,24 @@ export interface AssignmentPaper {
 }
 
 export interface ReviewerAssistState {
-  task: AgentTaskSummary | null;
-  results: Array<{
-    resultId: number;
-    resultType: string;
-    redactedResult: Record<string, unknown> | null;
-  }>;
+  intent: AnalysisIntentResponse | null;
+  projections: AnalysisProjectionResponse[];
+}
+
+export interface AnalysisIntentResponse {
+  intentId: number;
+  analysisType: string;
+  businessStatus: string;
+}
+
+export interface AnalysisProjectionResponse {
+  projectionId: number;
+  analysisType: string;
+  businessStatus: string;
+  summaryText: string | null;
+  redactedResult: Record<string, unknown> | null;
+  superseded: boolean;
+  updatedAt: string | null;
 }
 
 export interface ReviewReportForm {
@@ -231,7 +243,7 @@ export function submitReviewReport(assignmentId: number, payload: ReviewReportFo
 }
 
 export function runReviewerAssist(assignmentId: number, force = false) {
-  return apiRequest<AgentTaskSummary>(`/review-assignments/${assignmentId}/agent-assist`, {
+  return apiRequest<AnalysisIntentResponse>(`/review-assignments/${assignmentId}/agent-assist`, {
     method: "POST",
     json: { force }
   });

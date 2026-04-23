@@ -12,7 +12,7 @@ const props = defineProps<{
   assignmentId: number;
 }>();
 
-const assist = ref<ReviewerAssistState>({ task: null, results: [] });
+const assist = ref<ReviewerAssistState>({ intent: null, projections: [] });
 const loading = ref(false);
 const running = ref(false);
 const error = ref("");
@@ -29,12 +29,12 @@ async function loadAssist() {
   try {
     const state = await getReviewerAssist(props.assignmentId);
     assist.value = {
-      task: state.task ?? null,
-      results: state.results ?? []
+      intent: state.intent ?? null,
+      projections: state.projections ?? []
     };
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Reviewer assistance is unavailable.";
-    assist.value = { task: null, results: [] };
+    assist.value = { intent: null, projections: [] };
   } finally {
     loading.value = false;
   }
@@ -44,8 +44,8 @@ async function runAssist(force = false) {
   running.value = true;
   error.value = "";
   try {
-    const task = await runReviewerAssist(props.assignmentId, force);
-    assist.value = { ...assist.value, task };
+    const intent = await runReviewerAssist(props.assignmentId, force);
+    assist.value = { ...assist.value, intent };
     await loadAssist();
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Reviewer assistance could not be started.";
@@ -69,25 +69,25 @@ async function runAssist(force = false) {
 
     <div class="action-row">
       <el-button type="primary" :loading="running" @click="runAssist(false)">Run review assistant</el-button>
-      <el-button v-if="assist.task?.taskStatus === 'FAILED'" :loading="running" @click="runAssist(true)">Retry</el-button>
+      <el-button v-if="assist.intent?.businessStatus === 'FAILED_VISIBLE'" :loading="running" @click="runAssist(true)">Retry</el-button>
       <el-button :loading="loading" @click="loadAssist">Refresh</el-button>
-      <el-tag v-if="assist.task" :type="statusTagType(assist.task.taskStatus)">
-        {{ workflowLabel(assist.task.taskStatus) }}
+      <el-tag v-if="assist.intent" :type="statusTagType(assist.intent.businessStatus)">
+        {{ workflowLabel(assist.intent.businessStatus) }}
       </el-tag>
     </div>
 
     <el-alert
-      v-if="!assist.results.length"
+      v-if="!assist.projections.length"
       title="No reviewer assistance is available for this assignment."
       type="info"
       :closable="false"
     />
-    <article v-for="result in assist.results" :key="result.resultId" class="trace-entry">
+    <article v-for="projection in assist.projections" :key="projection.projectionId" class="trace-entry">
       <div class="trace-entry-heading">
-        <strong>{{ workflowLabel(result.resultType) }}</strong>
-        <el-tag :type="statusTagType(result.resultType)">Reviewer safe</el-tag>
+        <strong>{{ workflowLabel(projection.analysisType) }}</strong>
+        <el-tag :type="statusTagType(projection.businessStatus)">Reviewer safe</el-tag>
       </div>
-      <pre class="json-block">{{ printableTrace(result.redactedResult) }}</pre>
+      <pre class="json-block">{{ printableTrace(projection.redactedResult) }}</pre>
     </article>
   </section>
 </template>

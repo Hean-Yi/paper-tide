@@ -423,8 +423,8 @@ describe("workflow screens", () => {
         downloadAllowed: false
       },
       "/review-assignments/9/agent-assist": {
-        task: null,
-        results: []
+        intent: null,
+        projections: []
       }
     }, {
       "/review-assignments/9/paper/pages/1": new Blob(["png"], { type: "image/png" })
@@ -467,8 +467,8 @@ describe("workflow screens", () => {
         downloadAllowed: false
       },
       "/review-assignments/9/agent-assist": {
-        task: null,
-        results: []
+        intent: null,
+        projections: []
       }
     }, {
       "/review-assignments/9/paper/pages/1": new Blob(["page1"], { type: "image/png" }),
@@ -519,15 +519,13 @@ describe("workflow screens", () => {
       }
       if (path === "/review-assignments/9/agent-assist" && init?.method === "POST") {
         return Promise.resolve(jsonResponse({
-          taskId: 88,
-          externalTaskId: "external-assist",
-          taskType: "REVIEW_ASSIST_ANALYSIS",
-          taskStatus: "PENDING",
-          step: "queued"
+          intentId: 88,
+          analysisType: "REVIEWER_ASSIST",
+          businessStatus: "REQUESTED"
         }));
       }
       if (path === "/review-assignments/9/agent-assist") {
-        return Promise.resolve(jsonResponse({ task: null, results: [] }));
+        return Promise.resolve(jsonResponse({ intent: null, projections: [] }));
       }
       return Promise.resolve(jsonResponse({}));
     });
@@ -605,17 +603,19 @@ describe("workflow screens", () => {
         downloadAllowed: false
       },
       "/review-assignments/9/agent-assist": {
-        task: {
-          taskId: 88,
-          externalTaskId: "external-assist",
-          taskType: "REVIEW_ASSIST_ANALYSIS",
-          taskStatus: "SUCCESS",
-          step: "completed"
+        intent: {
+          intentId: 88,
+          analysisType: "REVIEWER_ASSIST",
+          businessStatus: "AVAILABLE"
         },
-        results: [
+        projections: [
           {
-            resultId: 1,
-            resultType: "REVIEW_ASSIST_ANALYSIS",
+            projectionId: 1,
+            analysisType: "REVIEWER_ASSIST",
+            businessStatus: "AVAILABLE",
+            summaryText: "Reviewer-visible signal",
+            superseded: false,
+            updatedAt: "2026-04-22T12:00:00Z",
             redactedResult: { paperSummary: "Reviewer-visible signal" }
           }
         ]

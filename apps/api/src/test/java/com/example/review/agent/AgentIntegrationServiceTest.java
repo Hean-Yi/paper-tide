@@ -12,6 +12,7 @@ import com.example.review.agent.AgentDtos.AgentServiceCreateRequest;
 import com.example.review.agent.AgentDtos.AgentServiceResult;
 import com.example.review.agent.AgentDtos.AgentServiceTaskStatus;
 import com.example.review.agent.AgentDtos.AgentServiceTaskSummary;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
@@ -57,6 +58,9 @@ class AgentIntegrationServiceTest {
     @BeforeEach
     void cleanAgentTables() {
         agentClient.reset();
+        jdbcTemplate.update("DELETE FROM ANALYSIS_OUTBOX");
+        jdbcTemplate.update("DELETE FROM ANALYSIS_PROJECTION");
+        jdbcTemplate.update("DELETE FROM ANALYSIS_INTENT");
         jdbcTemplate.update("DELETE FROM AGENT_ANALYSIS_RESULT");
         jdbcTemplate.update("DELETE FROM AGENT_ANALYSIS_TASK");
         jdbcTemplate.update("DELETE FROM REVIEW_REPORT");
@@ -210,19 +214,19 @@ class AgentIntegrationServiceTest {
                                   "taskType": "DECISION_CONFLICT_ANALYSIS"
                                 }
                                 """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.taskType").value("REVIEW_ASSIST_ANALYSIS"))
-                .andExpect(jsonPath("$.taskStatus").value("PENDING"));
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.analysisType").value("REVIEWER_ASSIST"))
+                .andExpect(jsonPath("$.businessStatus").value("REQUESTED"))
+                .andExpect(jsonPath("$.taskStatus").doesNotExist());
 
-        Assertions.assertEquals(1, agentClient.createRequests.get());
-        Assertions.assertEquals("REVIEW_ASSIST_ANALYSIS", agentClient.lastCreateRequest.taskType());
-        Assertions.assertEquals(fixture.roundId(), agentClient.lastCreateRequest.roundId());
-        Object reviewerAssistObject = agentClient.lastCreateRequest.requestPayload().get("reviewerAssist");
-        Assertions.assertInstanceOf(Map.class, reviewerAssistObject);
-        Map<?, ?> reviewerAssist = (Map<?, ?>) reviewerAssistObject;
-        Assertions.assertEquals(fixture.assignmentId(), ((Number) reviewerAssist.get("assignmentId")).longValue());
-        Assertions.assertEquals("checklist_only", reviewerAssist.get("allowedOutput"));
-        Assertions.assertFalse(agentClient.lastCreateRequest.requestPayload().containsKey("reviewReports"));
+        Assertions.assertEquals(0, agentClient.createRequests.get());
+        Map<String, Object> outbox = jdbcTemplate.queryForMap("SELECT MESSAGE_TYPE, MESSAGE_PAYLOAD FROM ANALYSIS_OUTBOX");
+        Assertions.assertEquals("analysis.requested", outbox.get("MESSAGE_TYPE"));
+        JsonNode message = objectMapper.readTree(outbox.get("MESSAGE_PAYLOAD").toString());
+        Assertions.assertEquals("REVIEWER_ASSIST", message.get("analysisType").asText());
+        Assertions.assertTrue(message.hasNonNull("idempotencyKey"));
+        Assertions.assertEquals(fixture.assignmentId(), message.at("/requestPayload/reviewerAssist/assignmentId").asLong());
+        Assertions.assertEquals("checklist_only", message.at("/requestPayload/reviewerAssist/allowedOutput").asText());
     }
 
     @Test
@@ -235,9 +239,8 @@ class AgentIntegrationServiceTest {
         mockMvc.perform(get("/api/review-assignments/{assignmentId}/agent-assist", fixture.assignmentId())
                         .header("Authorization", "Bearer " + reviewerToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.task.taskType").value("REVIEW_ASSIST_ANALYSIS"))
-                .andExpect(jsonPath("$.results[0].redactedResult.summary").value("redacted summary"))
-                .andExpect(jsonPath("$.results[0].rawResult").doesNotExist());
+                .andExpect(jsonPath("$.intent").doesNotExist())
+                .andExpect(jsonPath("$.projections").isArray());
 
         mockMvc.perform(post("/api/review-assignments/{assignmentId}/agent-assist", fixture.assignmentId())
                         .header("Authorization", "Bearer " + reviewerToken)

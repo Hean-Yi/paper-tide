@@ -4,8 +4,6 @@ import com.example.review.agent.AgentDtos.AgentResultResponse;
 import com.example.review.agent.AgentDtos.AgentTaskListResponse;
 import com.example.review.agent.AgentDtos.AgentTaskResponse;
 import com.example.review.agent.AgentDtos.CreateAgentTaskRequest;
-import com.example.review.agent.AgentDtos.CreateReviewerAssistRequest;
-import com.example.review.agent.AgentDtos.ReviewerAssistResponse;
 import com.example.review.auth.CurrentUserPrincipal;
 import java.util.List;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -62,27 +60,6 @@ public class AgentTaskController {
             @PathVariable long versionId
     ) {
         return agentIntegrationService.listResults(principal, manuscriptId, versionId);
-    }
-
-    @PostMapping("/review-assignments/{assignmentId}/agent-assist")
-    public AgentTaskResponse createReviewerAssist(
-            @AuthenticationPrincipal CurrentUserPrincipal principal,
-            @PathVariable long assignmentId,
-            @RequestBody(required = false) CreateReviewerAssistRequest request
-    ) {
-        return agentIntegrationService.createReviewerAssist(
-                principal,
-                assignmentId,
-                request != null && request.forceRequested()
-        );
-    }
-
-    @GetMapping("/review-assignments/{assignmentId}/agent-assist")
-    public ReviewerAssistResponse getReviewerAssist(
-            @AuthenticationPrincipal CurrentUserPrincipal principal,
-            @PathVariable long assignmentId
-    ) {
-        return agentIntegrationService.getReviewerAssist(principal, assignmentId);
     }
 
     @GetMapping("/agent-tasks")

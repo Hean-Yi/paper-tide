@@ -4,6 +4,8 @@ import { ElMessage } from "element-plus";
 import { onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 
+import { useApiError } from "../../composables/useApiError";
+import { useAsyncAction } from "../../composables/useAsyncAction";
 import {
   createRevision,
   downloadPdf,
@@ -14,8 +16,11 @@ import {
   type ManuscriptSummary
 } from "../../lib/workflow-api";
 import { formatDateTime, statusTagType, workflowLabel } from "../../lib/workflow-format";
+import { PDF_UPLOAD_LIMIT_ERROR, PDF_UPLOAD_LIMIT_HINT, PDF_UPLOAD_MAX_BYTES } from "../../lib/upload";
 
 const router = useRouter();
+const actions = useAsyncAction();
+const { showApiError } = useApiError();
 const loading = ref(false);
 const manuscripts = ref<ManuscriptSummary[]>([]);
 const revisionDialogOpen = ref(false);
@@ -45,10 +50,24 @@ const revisionRules: FormRules = {
 
 onMounted(loadManuscripts);
 
+function uploadKey(manuscriptId: number) {
+  return `author-upload-pdf:${manuscriptId}`;
+}
+
+function downloadKey(manuscriptId: number) {
+  return `author-download-pdf:${manuscriptId}`;
+}
+
+function submitKey(manuscriptId: number) {
+  return `author-submit-version:${manuscriptId}`;
+}
+
 async function loadManuscripts() {
   loading.value = true;
   try {
     manuscripts.value = await listManuscripts();
+  } catch (error) {
+    showApiError(error, "Manuscripts could not be loaded.");
   } finally {
     loading.value = false;
   }
@@ -58,9 +77,19 @@ async function selectPdf(row: ManuscriptSummary, file: UploadFile) {
   if (!file.raw) {
     return;
   }
-  await uploadPdf(row.manuscriptId, row.currentVersionId, file.raw);
-  ElMessage.success("PDF uploaded.");
-  await loadManuscripts();
+  if (file.raw.size > PDF_UPLOAD_MAX_BYTES) {
+    ElMessage.error(PDF_UPLOAD_LIMIT_ERROR);
+    return;
+  }
+  await actions.run(uploadKey(row.manuscriptId), async () => {
+    try {
+      await uploadPdf(row.manuscriptId, row.currentVersionId, file.raw!);
+      ElMessage.success("PDF uploaded.");
+      await loadManuscripts();
+    } catch (error) {
+      showApiError(error, "PDF could not be uploaded.");
+    }
+  });
 }
 
 function selectPdfForRow(row: ManuscriptSummary) {
@@ -68,16 +97,28 @@ function selectPdfForRow(row: ManuscriptSummary) {
 }
 
 async function submit(row: ManuscriptSummary) {
-  await submitVersion(row.manuscriptId, row.currentVersionId);
-  ElMessage.success("Version submitted.");
-  await loadManuscripts();
+  await actions.run(submitKey(row.manuscriptId), async () => {
+    try {
+      await submitVersion(row.manuscriptId, row.currentVersionId);
+      ElMessage.success("Version submitted.");
+      await loadManuscripts();
+    } catch (error) {
+      showApiError(error, "Version could not be submitted.");
+    }
+  });
 }
 
 async function download(row: ManuscriptSummary) {
-  const blob = await downloadPdf(row.manuscriptId, row.currentVersionId);
-  const url = URL.createObjectURL(blob);
-  window.open(url, "_blank", "noopener");
-  URL.revokeObjectURL(url);
+  await actions.run(downloadKey(row.manuscriptId), async () => {
+    try {
+      const blob = await downloadPdf(row.manuscriptId, row.currentVersionId);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener");
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      showApiError(error, "PDF could not be downloaded.");
+    }
+  });
 }
 
 function openRevision(row: ManuscriptSummary) {
@@ -99,10 +140,16 @@ async function submitRevision() {
   if (!valid) {
     return;
   }
-  await createRevision(revisionManuscriptId.value, revisionForm);
-  revisionDialogOpen.value = false;
-  ElMessage.success("Revision draft created.");
-  await loadManuscripts();
+  await actions.run(`author-create-revision:${revisionManuscriptId.value}`, async () => {
+    try {
+      await createRevision(revisionManuscriptId.value!, revisionForm);
+      revisionDialogOpen.value = false;
+      ElMessage.success("Revision draft created.");
+      await loadManuscripts();
+    } catch (error) {
+      showApiError(error, "Revision could not be created.");
+    }
+  });
 }
 </script>
 
@@ -113,6 +160,7 @@ async function submitRevision() {
         <p class="eyebrow">Author</p>
         <h1>My manuscripts</h1>
         <p class="body">Track submissions, upload PDFs, and submit draft versions.</p>
+        <p class="body">{{ PDF_UPLOAD_LIMIT_HINT }}</p>
       </div>
       <div class="action-row">
         <el-button @click="loadManuscripts">Refresh</el-button>
@@ -141,13 +189,14 @@ async function submitRevision() {
         <template #default="{ row }">
           <div class="action-row">
             <el-upload :auto-upload="false" :show-file-list="false" :on-change="selectPdfForRow(row)">
-              <el-button size="small">Upload PDF</el-button>
+              <el-button size="small" :loading="actions.isPending(uploadKey(row.manuscriptId))">Upload PDF</el-button>
             </el-upload>
-            <el-button size="small" @click="download(row)">Download PDF</el-button>
-            <el-button size="small" type="primary" @click="submit(row)">Submit</el-button>
+            <el-button size="small" :loading="actions.isPending(downloadKey(row.manuscriptId))" @click="download(row)">Download PDF</el-button>
+            <el-button size="small" type="primary" :loading="actions.isPending(submitKey(row.manuscriptId))" @click="submit(row)">Submit</el-button>
             <el-button
               size="small"
               :disabled="row.currentStatus !== 'REVISION_REQUIRED'"
+              :loading="actions.isPending(`author-create-revision:${row.manuscriptId}`)"
               @click="openRevision(row)"
             >
               Create revision

@@ -235,7 +235,7 @@ class ManuscriptServiceTest {
     }
 
     @Test
-    void uploadPdfRejectsFilesOverFiftyMegabytesBeforeReadingBody() throws Exception {
+        void uploadPdfRejectsFilesOverOneHundredMegabytesBeforeReadingBody() throws Exception {
         String token = loginAndExtractToken("author_demo", "demo123");
         ManuscriptIds ids = createDraftManuscript(token, "Huge PDF", "DOUBLE_BLIND");
         MockMultipartFile largeFile = new MockMultipartFile(
@@ -246,7 +246,7 @@ class ManuscriptServiceTest {
         ) {
             @Override
             public long getSize() {
-                return 50L * 1024L * 1024L + 1L;
+                                return 100L * 1024L * 1024L + 1L;
             }
         };
 

@@ -17,7 +17,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class ManuscriptService {
-    private static final long MAX_PDF_BYTES = 50L * 1024L * 1024L;
+    private static final long MAX_PDF_BYTES = 100L * 1024L * 1024L;
+    private static final String MAX_PDF_SIZE_LABEL = "100MB";
     private static final Set<String> VALID_BLIND_MODES = Set.of("DOUBLE_BLIND", "SINGLE_BLIND", "OPEN");
     private static final Set<String> DRAFT_STATUSES = Set.of("DRAFT", "REVISION_REQUIRED");
     private static final byte[] PDF_MAGIC = "%PDF-".getBytes(StandardCharsets.US_ASCII);
@@ -103,7 +104,7 @@ public class ManuscriptService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only PDF uploads are supported");
         }
         if (file.getSize() > MAX_PDF_BYTES) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "PDF uploads must be 50MB or smaller");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "PDF uploads must be " + MAX_PDF_SIZE_LABEL + " or smaller");
         }
         if (manuscript.currentVersionId() == null || manuscript.currentVersionId() != versionId) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "PDF upload is allowed only for the current version");

@@ -11,6 +11,10 @@ spring:
     username: ${ORACLE_USERNAME:review_app}
     password: ${ORACLE_PASSWORD:ReviewApp12345}
     driver-class-name: oracle.jdbc.OracleDriver
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 110MB
 
 server:
   port: 8080

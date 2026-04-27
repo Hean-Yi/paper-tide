@@ -14,6 +14,7 @@ import {
   type ManuscriptSummary
 } from "../../lib/workflow-api";
 import { statusTagType, workflowLabel } from "../../lib/workflow-format";
+import { PDF_UPLOAD_LIMIT_ERROR, PDF_UPLOAD_LIMIT_HINT, PDF_UPLOAD_MAX_BYTES } from "../../lib/upload";
 
 const router = useRouter();
 const submitting = ref(false);
@@ -80,7 +81,17 @@ function removeAuthor(index: number) {
 }
 
 function selectPdf(file: UploadFile) {
-  selectedPdf.value = file.raw ?? null;
+  const raw = file.raw ?? null;
+  if (!raw) {
+    selectedPdf.value = null;
+    return;
+  }
+  if (raw.size > PDF_UPLOAD_MAX_BYTES) {
+    selectedPdf.value = null;
+    ElMessage.error(PDF_UPLOAD_LIMIT_ERROR);
+    return;
+  }
+  selectedPdf.value = raw;
 }
 
 async function createDraft() {
@@ -136,6 +147,7 @@ async function submitCurrentVersion() {
         <p class="eyebrow">Author</p>
         <h1>Submit manuscript</h1>
         <p class="body">Create the manuscript record, upload the PDF, then submit the current version.</p>
+        <p class="body">{{ PDF_UPLOAD_LIMIT_HINT }}</p>
       </div>
     </div>
 
@@ -192,6 +204,7 @@ async function submitCurrentVersion() {
     </el-alert>
 
     <div v-if="created" class="upload-actions">
+      <p class="body">{{ PDF_UPLOAD_LIMIT_HINT }}</p>
       <el-upload :auto-upload="false" :limit="1" :on-change="selectPdf">
         <el-button>Select PDF</el-button>
       </el-upload>

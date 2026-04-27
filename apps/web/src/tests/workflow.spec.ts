@@ -395,6 +395,46 @@ describe("workflow screens", () => {
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:workflow-pdf");
   });
 
+  it("shows author-facing API errors for manuscript download and submit actions", async () => {
+    installAuth(["AUTHOR"]);
+    const messageError = vi.spyOn(ElMessage, "error").mockImplementation(() => undefined as never);
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/manuscripts" && (!init || init.method === undefined)) {
+        return Promise.resolve(jsonResponse([
+          {
+            manuscriptId: 11,
+            currentVersionId: 21,
+            currentStatus: "DRAFT",
+            currentRoundNo: 0,
+            blindMode: "DOUBLE_BLIND",
+            submittedAt: null,
+            lastDecisionCode: null,
+            currentVersionTitle: "Workflow Seed",
+            currentVersionNo: 1
+          }
+        ]));
+      }
+      if (path === "/manuscripts/11/versions/21/pdf") {
+        return Promise.resolve(errorResponse(404, "PDF not found"));
+      }
+      if (path === "/manuscripts/11/versions/21/submit") {
+        return Promise.resolve(errorResponse(400, "A PDF is required before submission"));
+      }
+      return Promise.resolve(jsonResponse({}));
+    }));
+
+    const wrapper = await mountWithRouter(ManuscriptListView);
+
+    await clickButton(wrapper, "Download PDF");
+    await flushPromises();
+    await clickButton(wrapper, "Submit");
+    await flushPromises();
+
+    expect(messageError).toHaveBeenCalledWith("PDF not found");
+    expect(messageError).toHaveBeenCalledWith("A PDF is required before submission");
+  });
+
   it("validates author manuscript form before creating a draft", async () => {
     installAuth(["AUTHOR"]);
     const fetch = vi.fn(() => Promise.resolve(jsonResponse({})));
@@ -404,6 +444,21 @@ describe("workflow screens", () => {
     await clickButton(wrapper, "Create manuscript");
 
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("shows the configured PDF upload limit on author upload screens", async () => {
+    installAuth(["AUTHOR"]);
+    mockApi({
+      "/manuscripts": []
+    });
+
+    const submitWrapper = await mountWithRouter(SubmitManuscriptView);
+    expect(submitWrapper.text()).toContain("100 MB");
+
+    submitWrapper.unmount();
+
+    const listWrapper = await mountWithRouter(ManuscriptListView);
+    expect(listWrapper.text()).toContain("100 MB");
   });
 
   it("validates reviewer report form before submitting", async () => {

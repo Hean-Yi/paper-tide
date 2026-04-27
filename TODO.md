@@ -1,42 +1,70 @@
-# TODO - Known Gaps and Improvements
+# TODO - Module Review Backlog
 
-本清单只保留尚未完成的工作。已完成的 Task 13 P0/P1 修复项和 Task 14 Reviewer Reader / Reviewer Agent Assist 功能已从待办中移除。Task 14 复查和本地运行中发现的缺口已重新补入下方。
+本清单按模块整理当前代码审查结论，目标是把“需要修什么”直接落成可执行待办，而不是停留在泛化意见。优先级含义：
 
-## P0（需要优先修复）
+- `[P0]`：影响真实交付闭环、安全边界或核心运行可信度，需优先修复
+- `[P1]`：明显工程债、边界模糊或可维护性风险，建议尽快修复
+- `[P2]`：中期重构、性能和产品化增强
 
-- [x] 修复 Reviewer Agent Assist 本地运行认证配置：`scripts/dev-up.sh` 和文档应为 API 与 Agent service 设置同一个 `AGENT_INTERNAL_API_KEY`，避免 Python Agent 的 `/agent/tasks` 因缺少或不匹配内部 key 返回 `503/401`。
-- [x] 修复 Spring Security 错误转发被误报为 `Unauthorized`：显式放行 `/error` 或增加统一异常响应，确保 Agent service 的 `503/401` 能在前端显示真实原因，而不是被 `/error` 二次拦截成 `401`。
-- [ ] 收紧 Reviewer 对旧版 Agent results 端点的访问：`GET /api/manuscripts/{manuscriptId}/versions/{versionId}/agent-results` 不应再允许 Reviewer 按版本读取全部 redacted 结果，避免看到 Chair/Admin 触发的决策冲突分析或其他上下文。
-- [ ] 让 Reviewer Assist 真正按 assignment 隔离：当前复用和查询只按 `manuscriptId + versionId + roundId + taskType`，同一轮多个 reviewer 可能串读同一个 assist task；应把 `assignmentId` 纳入任务关联、查询或 payload fingerprint，并补双 reviewer 回归测试。
-- [ ] 为 Reviewer Assist 响应使用专用 DTO：不要复用带 `rawResult` 字段的 `AgentResultResponse`，从响应契约上彻底移除 `rawResult`，并增加响应字符串级别断言。
+## Cross-cutting
 
-## P1（推荐尽快修复）
+- [ ] `[P0]` 完成新的 analysis 平台运行闭环：当前 API 侧只会写 `ANALYSIS_OUTBOX`，agent 侧只组装 runtime 和 `/health`，但仓库里还没有真正的 RabbitMQ 发布/消费生命周期接线、pending outbox 派发器、completion event 回流调度与端到端集成验证。
+- [ ] `[P0]` 统一当前架构叙事：`README.md`、`docs/ARCHITECTURE.md`、`docs/CODE_STRUCTURE.md`、`docs/TESTING.md` 仍混合描述旧的 `/agent/tasks + HTTP polling` 路径与新的 intent/projection/message-driven 路径，需要选定唯一现行实现并同步文档。
+- [ ] `[P1]` 为仓库建立统一错误契约：后端输出稳定 JSON 错误结构（`status`、`code`、`message`、`traceId`），前端不再依赖 `statusText` 和散落的字符串分支。
+- [ ] `[P1]` 增加最小可观测性基线：请求/消息 `traceId`、结构化日志、关键异步链路日志字段、健康检查分层（readiness/liveness），避免 message-driven 路径上线后只能靠手工查表排障。
+- [ ] `[P1]` 增加仓库级 CI：至少覆盖 `apps/api`、`apps/web`、`services/agent` 的自动测试、类型检查和构建，避免当前只能依赖本地脚本。
+- [ ] `[P1]` 补齐环境治理：新增 `.env.example` 或 `docs/ENVIRONMENT.md`，集中说明 Oracle、RabbitMQ、JWT、API/agent 内部 key、OpenAI/OpenRouter、端口和前端代理配置。
 
-- [ ] 在前端 Agent 面板中区分 `401/403/409/502/503` 等错误，并展示可操作文案，例如“Agent service key 未配置”“任务状态不允许重新触发”“Agent 服务暂不可用”；非 Agent 的 author/chair 操作已接入统一 API 错误提示。
-- [ ] 为 Agent task 创建链路增加结构化日志和可观测性：记录本地 taskId、externalTaskId、taskType、assignmentId、Agent HTTP 状态和失败摘要，便于排查 reviewer assist 卡住或失败。
-- [ ] 扩展 `scripts/test-all.sh` 的 Agent 验证范围，至少包含 `test_tasks_api.py`、`test_multipart_tasks_api.py` 和 `test_workflow_schemas.py`，不要只跑 health 子集。
-- [ ] Agent 触发和冲突分析类操作补齐 loading 状态；非 Agent 的筛稿、分配、逾期标记、决策、创建轮次、桌面拒稿、PDF 上传和最终提交已完成。
-- [ ] 避免 Decision Workbench 逐 round 拉取 Agent 结果导致 N+1，改为后端批量接口。
-- [ ] Repository 内重复 RowMapper 提取为常量。
-- [ ] 将运行环境变量集中成 `.env.example` 或 `docs/ENVIRONMENT.md`，覆盖 Oracle、JWT、API/Agent 内部 key、OpenRouter、端口和前端代理配置。
+## apps/api
 
-## P2（中期优化）
+- [ ] `[P0]` 补上 analysis 消息链路的真实运行入口：当前 `AnalysisOutboxPublisher` 只落库，`AnalysisEventConsumer` 只有消费逻辑却没有真正 listener/dispatcher；需要把 broker publishing 和 event consuming 从“代码片段”补成“可运行基础设施”。
+- [ ] `[P1]` 收紧 service 边界：`ManuscriptService`、`ReviewWorkflowService`、`DecisionService` 等大量直接抛 `ResponseStatusException`，把 HTTP 语义带入业务层；需要引入应用/领域异常和统一映射层。
+- [ ] `[P1]` 收敛查询层 N+1：`WorkflowQueryService.listDecisionWorkbench(...)` 先查 round，再逐条补 assignment、intent、projection，属于典型聚合读模型 N+1，应改为面向页面的一次性批量查询。
+- [ ] `[P1]` 把 service 中的 JDBC 细节进一步下沉到 repository：当前仍有直接 `JdbcTemplate.update(...)`、`SELECT ... FOR UPDATE` 和临时 row shape 留在 service 层，导致模块职责不够纯。
+- [ ] `[P1]` 收敛聚合查询文件体积和职责：`WorkflowQueryService.java` 已成为 400+ 行页面读模型拼装层，应拆分 reviewer/chair/admin 查询或引入专门 read-model repository。
+- [ ] `[P1]` 提取重复 RowMapper / SQL 片段为常量或小型 mapper，减少 `WorkflowQueryService`、`ReviewerPaperService`、分析仓储中的重复查询样板。
+- [ ] `[P1]` 为 admin monitor 增加分页、筛选和状态过滤；当前固定返回最新 50 条，只适合 demo，不适合真实治理页面。
+- [ ] `[P2]` 把核心 workflow 状态迁移为显式 `enum + transition table`，替换各 service 中散落的字符串集合判断。
+- [ ] `[P2]` 梳理通知/审计边界：当前核心事务里仍直接调用通知服务并吞异常，后续应统一为事务事件或 outbox 派发模式。
 
-- [ ] 状态机由字符串判断升级为 `enum + transition table`。
-- [ ] 为 Agent 任务建立更明确的数据模型：区分 version-scoped、round-scoped、assignment-scoped 任务，减少通过 payload 隐式表达作用域。
-- [ ] 增加后端统一错误处理层，输出稳定 JSON 错误结构（status、code、message、traceId），让前端不依赖 `statusText`。
-- [ ] 抽取前端通用 `useDialog<T>(submitFn)` composable。
-- [ ] 继续扩展前端通用 `useAsyncAction` / `useApiError` 的使用范围到 Agent 面板、冲突分析和后续新页面；非 Agent author/chair 操作已完成基础接入。
-- [ ] Decision Workbench 拆分为列表页 + 详情页。
-- [ ] Agent 工作流增加轮次上限（Screening 2、Review Assist 4）。
-- [ ] Agent polling 增加更细的重试/退避策略和失败分类，在不引入完整队列前先避免瞬时 Agent 503 直接永久失败。
-- [ ] 通知发送改为事务事件异步化。
+## apps/web
 
-## UI/UX 改进
+- [ ] `[P1]` 拆分 `src/lib/workflow-api.ts`：当前一个文件承载 author/reviewer/chair/admin 全部 API shape 和调用，已经接近单点耦合，应按领域或 actor 拆分。
+- [ ] `[P1]` 收敛 `DecisionWorkbenchView.vue`：页面信息密度过高、表格展开层级深、动作触发后依赖整页刷新，且 `conflict(...)` 未接入统一 loading/error 包装，需拆成列表页 + 详情页或抽出子组件。
+- [ ] `[P1]` 统一前端异步交互：`ReviewerAgentPanel.vue` 仍手写 `loading/running/error`，未复用 `useAsyncAction` / `useApiError`，错误文案也没有区分 `401/403/409/502/503` 的操作建议。
+- [ ] `[P1]` 为 reviewer/chair/admin 的高风险动作补确认步骤，尤其是会触发不可逆 workflow 迁移或外部分析成本的操作。
+- [ ] `[P1]` 优化 auth 生命周期：当前 `auth.ts` 主要依赖本地 JWT 解码恢复会话，缺少统一的 401 失效处理和路由级重新登录策略。
+- [ ] `[P2]` 继续抽取通用表单/对话框模式，例如 `useDialog<T>(submitFn)`，减少 Element Plus 表单在多个页面里重复样板。
+- [ ] `[P2]` 提升 admin monitor 和 reviewer assist 的交互完成度：增加自动刷新策略、最近更新时间、空态/失败态引导和最小筛选能力。
+- [ ] `[P2]` 评估 `SecurePaperReader` 的大文件策略：长论文按页 PNG 渲染的体积、首屏时间、缓存和 WebP 替代方案需要真实样本验证。
 
-- [ ] 降低 Decision Workbench 信息密度，按列表/详情拆分。
-- [ ] 增强异步反馈，减少全量刷新带来的闪烁。
-- [ ] 强化主次按钮视觉层级。
-- [ ] 提升移动端可用性（卡片布局或响应式隐藏列）。
-- [ ] 提升空态/错误态引导。
-- [ ] 在真实长论文样本上评估 Secure Paper Reader 的图片体积、DPI 和 PNG/WebP 策略。
+## services/agent
+
+- [ ] `[P0]` 将 agent 平台从“组装好的对象图”补成“运行中的服务”：`create_app()` 当前只暴露 `/health`，没有 broker consumer、outbox publisher worker、startup/shutdown 生命周期管理，也没有从消息入口真正驱动 `execute_requested_job(...)`。
+- [ ] `[P0]` 明确唯一执行栈：当前同时保留 `agent_platform/handlers/*` 和旧 `app/workflows/*` LangGraph 路径，测试也同时覆盖两套模型；需要确定保留哪一套，避免长期双轨。
+- [ ] `[P1]` 为 provider 执行层建立真实边界：`ProviderExecutor` 目前主要是 deterministic stub，后续要把真实模型调用、超时、错误分类、幂等日志、成本控制和 provider 配置隔离到单独适配层。
+- [ ] `[P1]` 补齐 execution job 生命周期数据：除 `ATTEMPT_COUNT` 外，还需要评估是否应持久化最近错误分类、最后尝试时间、完成时间、发布失败原因等治理字段。
+- [ ] `[P1]` 为 message-driven 路径增加 focused 集成测试：证明“requested message -> execution job -> completed event -> projection ready”能够在真实 broker/DB 条件下跑通，而不仅是仓储和纯内存单测。
+- [ ] `[P2]` 继续清理迁移遗留：删除不再使用的旧 route/task API、旧设计注释和已被 handler 方案替代的 workflow 入口，降低认知负担。
+
+## database/oracle
+
+- [ ] `[P0]` 明确 legacy `AGENT_*` 表与新 `ANALYSIS_*` / `EXECUTION_*` 表的并存策略：当前 schema、seed、trigger、verify 仍同时维护两套 agent 数据模型，容易让后续开发误判真实来源；需要确定淘汰计划或显式标记 legacy only。
+- [ ] `[P1]` 为新的 message-driven 表继续补治理字段和查询索引，只要运行面需要按状态、重试、失败原因或时间窗口排障，就要同步落到 schema 和 `verify_schema.sql`。
+- [ ] `[P1]` 收敛 demo seed 对 legacy agent 数据的依赖，避免真实页面已经切到新读模型，但 seed 和演示脚本仍把旧表当权威来源。
+- [ ] `[P1]` 为 schema 演进补一份迁移说明，明确从 first-generation agent tables 迁移到 new intent/execution tables 的顺序、兼容边界和清理条件。
+- [ ] `[P2]` 评估把页面型聚合查询沉淀为更明确的 read model 或 view，减轻 API 端大量手写 join/count 子查询的维护成本。
+
+## scripts / docs / devops
+
+- [ ] `[P0]` 修正 `scripts/test-all.sh` 的可信度：当前 agent 只跑 `test_health.py`，无法代表 analysis runtime 是否可用；统一验证入口必须覆盖真实关键路径。
+- [ ] `[P1]` 为 `dev-up.sh`、`test-all.sh`、`README.md`、`docs/TESTING.md` 对齐当前架构阶段，避免脚本与文档继续向开发者暗示旧的 HTTP task 模型已经是现行路径。
+- [ ] `[P1]` 增加最小部署资产：至少补齐 CI workflow、容器化或运行拓扑说明；当前更像“本地课程项目 bootstrap”，还不是可重复部署的落地工程。
+- [ ] `[P1]` 为 RabbitMQ / Oracle / agent runtime 的联调失败增加更聚焦的诊断输出与操作指引，减少脚本失败后只能靠读源码排障。
+- [ ] `[P2]` 把 docs 从“设计历史 + 当前说明混放”改成“现行实现文档 + 历史设计归档”结构，降低新开发者误读成本。
+
+## Productization Gaps
+
+- [ ] `[P1]` 定义最小运维面：失败重驱、死信处理、手工补偿、消息积压观察和分析任务审计查询。
+- [ ] `[P1]` 明确安全基线：环境密钥注入方式、JWT secret 管理、内部 broker/consumer 信任边界、敏感日志脱敏策略。
+- [ ] `[P2]` 明确容量与性能基线：大 PDF 渲染、批量 round 查询、analysis projection 列表、message backlog 的容量假设与压测方式。

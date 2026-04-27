@@ -91,6 +91,8 @@ Current lessons captured from recent review cycles:
 - For Oracle `JdbcTemplate` queries that compare nullable numeric keys, do not rely on untyped vararg `null` values in predicates such as `? IS NULL`. Use explicit typed binding via `PreparedStatement` setters so Oracle does not fail with `ORA-17004`.
 - Do not mark an analysis-flow migration complete when only the request/intake path has been moved. Completion requires the paired execution result path too: handler execution, completion-event consumption, intent status update, projection persistence, and a focused test that proves a request can reach `AVAILABLE` without relying on the removed legacy task infrastructure.
 - When removing a legacy actor-facing monitor or workflow page during a refactor, ship a minimal replacement read model and UI in the same slice or explicitly defer the removal in the plan. Do not leave long-lived placeholder routes for admin or operator workflows after retiring the original screen.
+- When a transport or ownership refactor changes the live integration path, update the operational docs in the same slice. Keep `README.md`, `docs/ARCHITECTURE.md`, `docs/CODE_STRUCTURE.md`, `docs/TESTING.md`, and bootstrap instructions aligned with the current runtime path; do not leave legacy HTTP/task-flow descriptions as if they were still authoritative.
+- Message-driven refactors are not complete when only schema, repositories, and in-process handlers exist. Completion requires broker lifecycle wiring, pending-message dispatch, completion-event intake, and a repository-level verification command that exercises more than `/health`.
 
 ## Plan File Discipline
 Execution work must stay anchored to one authoritative implementation plan file.

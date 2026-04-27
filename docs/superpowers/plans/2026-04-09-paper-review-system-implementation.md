@@ -63,6 +63,11 @@
 - Spring Agent integration and e2e tests were attempted on 2026-04-22 with:
   - `mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AgentIntegrationServiceTest,ReviewFlowE2eTest test`
   - Result: failed in the sandbox due to Oracle connectivity restrictions, reporting `ORA-17820` and `SocketException: Operation not permitted`.
+- Detailed repository review and backlog synchronization completed on 2026-04-23:
+  - Re-reviewed `apps/api`, `apps/web`, `services/agent`, `database/oracle`, and developer scripts against the current split-sovereignty design.
+  - Rewrote `TODO.md` into a module-by-module backlog with explicit `P0/P1/P2` priorities covering runtime closure, boundary cleanup, documentation drift, validation gaps, and productization work.
+  - Updated `AGENTS.md` with reusable lessons about keeping operational docs aligned with live integration paths and treating message-driven refactors as incomplete until broker wiring and repository-level verification exist.
+  - Verification: static code review of the referenced files plus `git diff --check`.
 
 ## Task Ledger
 
@@ -1621,3 +1626,9 @@ git commit -m "fix: complete analysis platform remediation program"
   - no `TBD`, `implement later`, or deferred code steps remain in the refactor task section
 - Type consistency:
   - the plan uses `AnalysisIntent`, `AnalysisProjection`, `ExecutionJob`, `AnalysisType`, and projection-oriented response contracts consistently across all tasks
+
+- [ ] **Phase 4 / Step 1: Split WorkflowQueryService into DecisionWorkbenchQueryService**
+  - Create `DecisionWorkbenchQueryService` and `DecisionWorkbenchReadRepository`.
+  - Migrate `listDecisionWorkbench` to the new service.
+  - Implement bulk read methods in the repository to eliminate N+1 queries.
+  - Leave existing `WorkflowQueryService` controller and tests as regression guards.

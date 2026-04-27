@@ -6,7 +6,7 @@ from app.agent_platform.consumer import AnalysisRequestedConsumer
 from app.agent_platform.handler_registry import AnalysisHandlerRegistry
 from app.agent_platform.outbox import InMemoryExecutionOutbox, OracleExecutionOutbox
 from app.agent_platform.provider_executor import ProviderExecutor
-from app.agent_platform.publisher import AnalysisRequestedPublisher
+from app.agent_platform.publisher import AnalysisCompletedPublisher, AnalysisRequestedPublisher
 from app.agent_platform.repositories import InMemoryExecutionJobRepository, OracleExecutionJobRepository
 from app.agent_platform.runtime import AgentPlatformRuntime
 from app.agent_platform.state_machine import ExecutionStateMachine
@@ -17,6 +17,7 @@ def create_app(
     enable_background_execution: bool = True,
     require_internal_api_key: bool = True,
     db_connection_factory: Callable[[], Any] | None = None,
+    provider_executor: ProviderExecutor | None = None,
 ) -> FastAPI:
     app = FastAPI(title="review-agent")
     agent_platform_config = AgentPlatformConfig.from_env()
@@ -31,14 +32,19 @@ def create_app(
         execution_outbox,
         topic=agent_platform_config.analysis_requested_topic,
     )
+    execution_completed_publisher = AnalysisCompletedPublisher(
+        execution_outbox,
+        topic=agent_platform_config.analysis_completed_topic,
+    )
     analysis_requested_consumer = AnalysisRequestedConsumer(execution_job_repository)
     execution_state_machine = ExecutionStateMachine(agent_platform_config.max_attempts)
     handler_registry = AnalysisHandlerRegistry()
-    provider_executor = ProviderExecutor()
+    provider_executor = provider_executor or ProviderExecutor(agent_platform_config)
     agent_platform = AgentPlatformRuntime(
         config=agent_platform_config,
         analysis_requested_consumer=analysis_requested_consumer,
         execution_message_publisher=execution_message_publisher,
+        execution_completed_publisher=execution_completed_publisher,
         execution_state_machine=execution_state_machine,
         execution_job_repository=execution_job_repository,
         handler_registry=handler_registry,
@@ -48,6 +54,7 @@ def create_app(
     app.state.agent_platform_config = agent_platform_config
     app.state.agent_platform = agent_platform
     app.state.execution_message_publisher = execution_message_publisher
+    app.state.execution_completed_publisher = execution_completed_publisher
     app.state.analysis_requested_consumer = analysis_requested_consumer
     app.state.execution_state_machine = execution_state_machine
     app.state.handler_registry = handler_registry

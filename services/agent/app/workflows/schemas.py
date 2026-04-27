@@ -13,6 +13,8 @@ class ScoredAnalysis(BaseModel):
 
 
 class ScreeningAnalysisResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     taskType: Literal["SCREENING_ANALYSIS"]
     manuscriptId: str
     versionId: str
@@ -44,6 +46,8 @@ class ReviewAssistResult(BaseModel):
 
 
 class ConflictAnalysisResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     taskType: Literal["DECISION_CONFLICT_ANALYSIS"]
     manuscriptId: str
     versionId: str

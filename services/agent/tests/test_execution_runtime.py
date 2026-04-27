@@ -1,9 +1,16 @@
+import pytest
+
 from app.agent_platform.messages import AnalysisRequestedMessage
+from app.agent_platform.provider_executor import ProviderExecutor
 from app.main import create_app
 
 
 def test_runtime_executes_reviewer_assist_and_emits_completed_event() -> None:
-    app = create_app(enable_background_execution=False, require_internal_api_key=False)
+    app = create_app(
+        enable_background_execution=False,
+        require_internal_api_key=False,
+        provider_executor=ProviderExecutor(),
+    )
     runtime = app.state.agent_platform
     requested = AnalysisRequestedMessage(
         idempotency_key="key-1",
@@ -32,6 +39,10 @@ def test_runtime_executes_reviewer_assist_and_emits_completed_event() -> None:
     assert event["businessStatus"] == "AVAILABLE"
     assert event["summaryProjection"]["businessStatus"] == "AVAILABLE"
     assert event["redactedResult"]["taskType"] == "REVIEW_ASSIST_ANALYSIS"
+    pending_events = app.state.execution_completed_publisher.pending()
+    assert len(pending_events) == 1
+    assert pending_events[0].topic == "analysis.completed"
+    assert pending_events[0].payload["eventType"] == "analysis.completed"
 
 
 def test_runtime_uses_durable_repository_when_db_config_present(monkeypatch) -> None:
@@ -125,6 +136,7 @@ def test_runtime_uses_durable_repository_when_db_config_present(monkeypatch) -> 
         enable_background_execution=False,
         require_internal_api_key=False,
         db_connection_factory=lambda: connection,
+        provider_executor=ProviderExecutor(),
     )
     runtime = app.state.agent_platform
     requested = AnalysisRequestedMessage(
@@ -151,3 +163,36 @@ def test_runtime_uses_durable_repository_when_db_config_present(monkeypatch) -> 
     assert event["intentId"] == 202
     assert persisted is not None
     assert persisted.execution_state == "SUCCEEDED"
+
+
+class ExplodingProviderExecutor(ProviderExecutor):
+    def run_reviewer_assist(self, paper: dict[str, object]) -> dict[str, object]:
+        raise RuntimeError("provider timeout")
+
+
+def test_runtime_marks_provider_failure_retryable_instead_of_leaving_job_running() -> None:
+    app = create_app(
+        enable_background_execution=False,
+        require_internal_api_key=False,
+        provider_executor=ExplodingProviderExecutor(),
+    )
+    runtime = app.state.agent_platform
+    requested = AnalysisRequestedMessage(
+        idempotency_key="key-failure",
+        analysis_type="REVIEWER_ASSIST",
+        intent_reference="303",
+        request_payload={
+            "title": "Failure Paper",
+            "abstract": "A paper about failure handling.",
+            "reviewerAssist": {"assignmentId": 1, "roundId": 2, "manuscriptId": 3, "versionId": 4},
+        },
+    )
+    job = runtime.analysis_requested_consumer.handle(requested)
+
+    with pytest.raises(RuntimeError, match="provider timeout"):
+        runtime.execute_requested_job(job)
+
+    persisted = runtime.execution_job_repository.get(job.job_id)
+    assert persisted is not None
+    assert persisted.execution_state == "FAILED_RETRYABLE"
+    assert persisted.failure_reason == "provider timeout"

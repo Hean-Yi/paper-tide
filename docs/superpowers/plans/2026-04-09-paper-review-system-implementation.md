@@ -1616,6 +1616,17 @@ git commit -m "fix: complete analysis platform remediation program"
   - Updated those docs to match the live `analysis/*` API boundary, `agent_platform/*` execution runtime, current workflow endpoints, the `008_agent_platform_refactor.sql` schema, and the actual `scripts/test-all.sh` behavior.
   - Verification: targeted residue scan for legacy task-type and old endpoint text returned no matches in the touched docs; follow-up repository diff check remained clean.
   - Current completion state: Task 19 remains complete, and the core documentation drift called out in the backlog is now closed for the primary docs set.
+- Agent LLM provider configuration completed on 2026-04-27:
+  - Updated `services/agent/.env` to use `MODEL=Qwen/Qwen3-VL-32B-Thinking`.
+  - Added `.env` loading for the current `API`, `URL`, and `MODEL` keys while retaining compatibility with previous provider key names.
+  - Normalized full chat-completions URLs such as `https://api.siliconflow.cn/v1/chat/completions` to the OpenAI-compatible base URL expected by the SDK.
+  - Wired `ProviderExecutor` to call the configured OpenAI-compatible provider with strict `json_schema` response format for screening, reviewer assist, and conflict analysis while preserving deterministic offline fallback when no provider config is present.
+  - Added explicit provider-executor injection to `create_app()` so ordinary unit tests do not consume local `.env` credentials or require network access.
+  - Verification:
+    - `cd services/agent && ../../.venv/bin/python -m pytest tests/test_provider_config.py tests/test_provider_executor.py -q` passed.
+    - `cd services/agent && ../../.venv/bin/python -m pytest tests -q` passed with the existing LangGraph deprecation warnings.
+    - Live SiliconFlow smoke test against `Qwen/Qwen3-VL-32B-Thinking` passed after network approval and returned a `SCREENING_ANALYSIS` payload.
+  - Current completion state: Agent LLM calls now use the `.env` provider configuration, and local tests remain offline by default.
 
 ## Plan Self-Review
 
@@ -1637,3 +1648,49 @@ git commit -m "fix: complete analysis platform remediation program"
   - Migrate `listDecisionWorkbench` to the new service.
   - Implement bulk read methods in the repository to eliminate N+1 queries.
   - Leave existing `WorkflowQueryService` controller and tests as regression guards.
+
+### Task 20: Agent Runtime Hardening After Live LLM Provider Wiring
+
+**Status:** In progress on 2026-04-27.
+
+**Scope:**
+
+- Add the latest Agent workflow review items to `TODO.md`.
+- Keep ordinary tests offline while preserving the live provider path.
+- Harden the immediate execution path before adding the larger RabbitMQ worker slice:
+  - failed handler/provider/schema execution must not leave jobs in `RUNNING`
+  - successful execution must enqueue an `analysis.completed` event in `EXECUTION_OUTBOX`
+  - LLM prompts must apply a bounded input budget before serializing payloads
+  - screening/conflict/reviewer schemas must apply consistent extra-field rejection
+
+**Deferred from this slice:**
+
+- Real RabbitMQ lifecycle workers for API outbox dispatch, Agent request consumption, Agent completion publishing, and API completion-event intake remain a separate P0 runtime slice because they require cross-service process wiring and integration verification.
+
+**Execution notes, 2026-04-27:**
+
+- Added the reviewed Agent workflow optimization items to `TODO.md`, marking the items completed in this slice after implementation:
+  - runtime failure-state closure
+  - completion-event persistence into `EXECUTION_OUTBOX`
+  - LLM input budgeting
+  - consistent extra-field rejection across Agent output schemas
+- Added focused red tests first:
+  - runtime writes `analysis.completed` to an outbox publisher
+  - provider failures persist `FAILED_RETRYABLE` instead of leaving jobs in `RUNNING`
+  - long `pdfText` and section payloads are truncated before prompting
+  - screening/conflict schemas reject extra model output
+- Implemented the green slice:
+  - added `analysis_completed_topic` to `AgentPlatformConfig`
+  - added `AnalysisCompletedPublisher`
+  - wired `create_app()` and `AgentPlatformRuntime` with a completion-event publisher
+  - `execute_requested_job(...)` now persists retryable failure state before re-raising provider/handler/schema exceptions
+  - successful execution publishes `AnalysisCompletedMessage` into the execution outbox before returning the event dict
+  - `ProviderExecutor` now serializes a budgeted prompt payload, truncating long `pdfText` and major section fields
+  - `ScreeningAnalysisResult` and `ConflictAnalysisResult` now use `extra="forbid"` like `ReviewAssistResult`
+- Verification:
+  - `cd services/agent && ../../.venv/bin/python -m pytest tests/test_execution_runtime.py tests/test_provider_executor.py tests/test_workflow_schemas.py -q` passed.
+  - `cd services/agent && ../../.venv/bin/python -m pytest tests -q` passed: 40 tests, with existing LangGraph deprecation warnings.
+  - Live SiliconFlow smoke test against `Qwen/Qwen3-VL-32B-Thinking` passed with a long `pdfText` payload after network approval, returning a strict `SCREENING_ANALYSIS` key set.
+- Current completion state:
+  - The focused Agent hardening slice is complete in local code.
+  - The larger RabbitMQ lifecycle worker slice remains open in `TODO.md` as the next P0 runtime closure item.

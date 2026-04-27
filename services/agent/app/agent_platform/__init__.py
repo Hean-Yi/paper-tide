@@ -2,9 +2,9 @@ from .config import AgentPlatformConfig
 from .consumer import AnalysisRequestedConsumer
 from .domain import ExecutionJob
 from .handler_registry import AnalysisHandlerRegistry
-from .messages import AnalysisRequestedMessage
+from .messages import AnalysisCompletedMessage, AnalysisRequestedMessage
 from .outbox import ExecutionOutboxMessage, InMemoryExecutionOutbox, OracleExecutionOutbox
-from .publisher import AnalysisRequestedPublisher
+from .publisher import AnalysisCompletedPublisher, AnalysisRequestedPublisher
 from .runtime import AgentPlatformRuntime
 from .repositories import InMemoryExecutionJobRepository, OracleExecutionJobRepository
 from .state_machine import ExecutionStateMachine
@@ -12,6 +12,8 @@ from .state_machine import ExecutionStateMachine
 __all__ = [
     "AgentPlatformConfig",
     "AnalysisHandlerRegistry",
+    "AnalysisCompletedMessage",
+    "AnalysisCompletedPublisher",
     "AnalysisRequestedConsumer",
     "AnalysisRequestedMessage",
     "AnalysisRequestedPublisher",

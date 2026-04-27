@@ -72,6 +72,25 @@ def test_screening_schema_has_scope_fit() -> None:
         )
 
 
+def test_screening_schema_rejects_extra_model_output() -> None:
+    with pytest.raises(ValidationError):
+        ScreeningAnalysisResult.model_validate(
+            {
+                "taskType": "SCREENING_ANALYSIS",
+                "manuscriptId": "101",
+                "versionId": "201",
+                "status": "SUCCESS",
+                "topicCategory": "Systems",
+                "scopeFit": "FIT",
+                "formatRisks": [],
+                "blindnessRisks": [],
+                "screeningSummary": "In scope",
+                "confidence": 0.8,
+                "authorGuess": "Example University",
+            }
+        )
+
+
 def test_conflict_schema_has_consensus_and_conflicts() -> None:
     with pytest.raises(ValidationError):
         ConflictAnalysisResult.model_validate(
@@ -83,6 +102,24 @@ def test_conflict_schema_has_consensus_and_conflicts() -> None:
                 "highRiskIssues": [],
                 "decisionSummary": "Reviews agree on method weakness",
                 "confidence": 0.6,
+            }
+        )
+
+
+def test_conflict_schema_rejects_extra_model_output() -> None:
+    with pytest.raises(ValidationError):
+        ConflictAnalysisResult.model_validate(
+            {
+                "taskType": "DECISION_CONFLICT_ANALYSIS",
+                "manuscriptId": "101",
+                "versionId": "201",
+                "status": "SUCCESS",
+                "consensusPoints": ["Clear contribution"],
+                "conflictPoints": ["Evaluation disagreement"],
+                "highRiskIssues": [],
+                "decisionSummary": "Reviews disagree on evaluation.",
+                "confidence": 0.6,
+                "recommendation": "ACCEPT",
             }
         )
 

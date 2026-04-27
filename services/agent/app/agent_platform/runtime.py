@@ -8,7 +8,7 @@ from app.agent_platform.consumer import AnalysisRequestedConsumer
 from app.agent_platform.handler_registry import AnalysisHandlerRegistry
 from app.agent_platform.messages import AnalysisCompletedMessage
 from app.agent_platform.provider_executor import ProviderExecutor
-from app.agent_platform.publisher import AnalysisRequestedPublisher
+from app.agent_platform.publisher import AnalysisCompletedPublisher, AnalysisRequestedPublisher
 from app.agent_platform.repositories import ExecutionJobRepository
 from app.agent_platform.domain import ExecutionJob
 from app.agent_platform.state_machine import ExecutionStateMachine
@@ -19,6 +19,7 @@ class AgentPlatformRuntime:
     config: AgentPlatformConfig
     analysis_requested_consumer: AnalysisRequestedConsumer
     execution_message_publisher: AnalysisRequestedPublisher
+    execution_completed_publisher: AnalysisCompletedPublisher
     execution_state_machine: ExecutionStateMachine
     execution_job_repository: ExecutionJobRepository
     handler_registry: AnalysisHandlerRegistry
@@ -32,7 +33,12 @@ class AgentPlatformRuntime:
         self.execution_job_repository.save(running_job)
 
         handler = self.handler_registry.get(running_job.analysis_type)
-        result = handler.execute(running_job, self.provider_executor)
+        try:
+            result = handler.execute(running_job, self.provider_executor)
+        except Exception as exc:
+            failed_job = self.execution_state_machine.mark_retryable_failure(running_job, str(exc))
+            self.execution_job_repository.save(failed_job)
+            raise
 
         completed_job = self.execution_state_machine.mark_succeeded(running_job)
         self.execution_job_repository.save(completed_job)
@@ -46,4 +52,5 @@ class AgentPlatformRuntime:
             summary_projection=result["summary_projection"],
             redacted_result=result["redacted_result"],
         )
+        self.execution_completed_publisher.publish(event)
         return event.to_dict()

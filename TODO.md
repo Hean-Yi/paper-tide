@@ -42,6 +42,11 @@
 
 - [ ] `[P0]` 将 agent 平台从“组装好的对象图”补成“运行中的服务”：`create_app()` 当前只暴露 `/health`，没有 broker consumer、outbox publisher worker、startup/shutdown 生命周期管理，也没有从消息入口真正驱动 `execute_requested_job(...)`。
 - [ ] `[P0]` 明确唯一执行栈：当前同时保留 `agent_platform/handlers/*` 和旧 `app/workflows/*` LangGraph 路径，测试也同时覆盖两套模型；需要确定保留哪一套，避免长期双轨。
+- [x] `[P0]` 修复 execution runtime 的失败状态闭环：handler、LLM、JSON parse、schema validation 任一异常都必须写回 `FAILED_RETRYABLE`、`DEAD_LETTERED` 或 `FAILED_TERMINAL`，不能让 `EXECUTION_JOB` 停留在 `RUNNING`。
+- [x] `[P0]` 将 `analysis.completed` 从 runtime 返回值升级为可靠 outbox 事件：执行成功后必须写入 `EXECUTION_OUTBOX`，后续由 publisher/worker 投递并标记发布，避免进程崩溃丢 completion event。
+- [ ] `[P1]` 为 LLM provider 输出建立失败分类和重试语义：区分 provider timeout/connection、schema/JSON 错误、业务不可恢复输入错误，并把错误类别落入 job failure reason 或治理字段。
+- [x] `[P1]` 为 LLM 输入增加预算层：按 analysis type 选择字段、限制 `pdfText`/sections 长度、记录被截断信息，避免长 PDF 直接进入 prompt 带来成本和延迟失控。
+- [x] `[P1]` 统一 Agent 输出 schema 的严格性：screening、reviewer assist、conflict analysis 都应禁止额外字段，避免 strict provider 输出和本地 Pydantic 接受规则不一致。
 - [ ] `[P1]` 为 provider 执行层建立真实边界：`ProviderExecutor` 目前主要是 deterministic stub，后续要把真实模型调用、超时、错误分类、幂等日志、成本控制和 provider 配置隔离到单独适配层。
 - [ ] `[P1]` 补齐 execution job 生命周期数据：除 `ATTEMPT_COUNT` 外，还需要评估是否应持久化最近错误分类、最后尝试时间、完成时间、发布失败原因等治理字段。
 - [ ] `[P1]` 为 message-driven 路径增加 focused 集成测试：证明“requested message -> execution job -> completed event -> projection ready”能够在真实 broker/DB 条件下跑通，而不仅是仓储和纯内存单测。

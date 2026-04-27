@@ -1,11 +1,30 @@
 from __future__ import annotations
 
+import json
 from typing import Any
+
+from app.agent_platform.config import AgentPlatformConfig
+from app.workflows.schemas import ConflictAnalysisResult, ReviewAssistResult, ScreeningAnalysisResult
+
+_DEFAULT_TEXT_BUDGET = 4000
+_PDF_TEXT_BUDGET = 3000
+_SECTION_TEXT_BUDGET = 1200
 
 
 class ProviderExecutor:
+    def __init__(self, config: AgentPlatformConfig | None = None, client: Any | None = None) -> None:
+        self._config = config or AgentPlatformConfig()
+        self._client = client
+        if self._client is None and self._config.has_llm_provider():
+            from openai import OpenAI
+
+            self._client = OpenAI(
+                api_key=self._config.llm_api_key,
+                base_url=self._config.llm_base_url,
+            )
+
     def run_reviewer_assist(self, paper: dict[str, Any]) -> dict[str, Any]:
-        return {
+        fallback = {
             "taskType": "REVIEW_ASSIST_ANALYSIS",
             "manuscriptId": str(paper.get("manuscriptId", "")),
             "versionId": str(paper.get("versionId", "")),
@@ -20,6 +39,17 @@ class ProviderExecutor:
             "blindReviewRisks": paper.get("possibleBlindnessRisks", []),
             "confidence": 0.5,
         }
+        return self._request_structured_result(
+            schema_name="review_assist_analysis",
+            schema=ReviewAssistResult.model_json_schema(),
+            instruction=(
+                "Create checklist-only reviewer assistance for a double-blind paper review workflow. "
+                "Do not include scores, recommendations, decisions, complete review text, author names, "
+                "institutions, acknowledgements, grants, or self-citation clues. Return only the schema fields. "
+                f"Paper understanding JSON: {_prompt_json(paper)}"
+            ),
+            fallback=fallback,
+        )
 
     def run_conflict_analysis(self, payload: dict[str, Any]) -> dict[str, Any]:
         context = payload.get("conflictAnalysis") or {}
@@ -40,7 +70,7 @@ class ProviderExecutor:
             if reports
             else "No submitted review reports were supplied."
         ]
-        return {
+        fallback = {
             "taskType": "DECISION_CONFLICT_ANALYSIS",
             "manuscriptId": str(context.get("manuscriptId", "")),
             "versionId": str(context.get("versionId", "")),
@@ -53,6 +83,16 @@ class ProviderExecutor:
             ),
             "confidence": 0.5,
         }
+        return self._request_structured_result(
+            schema_name="decision_conflict_analysis",
+            schema=ConflictAnalysisResult.model_json_schema(),
+            instruction=(
+                "Summarize reviewer consensus and conflicts for the chair decision workflow. "
+                "Use evidence from submitted reports only, keep the output concise, and return only the schema fields. "
+                f"Conflict payload JSON: {_prompt_json(payload)}"
+            ),
+            fallback=fallback,
+        )
 
     def run_screening(self, payload: dict[str, Any]) -> dict[str, Any]:
         context = payload.get("screening") or {}
@@ -69,7 +109,7 @@ class ProviderExecutor:
         for marker in ("author", "institution", "university", "grant"):
             if marker in combined_text:
                 blindness_risks.append(f"Potential blind-review marker: {marker}.")
-        return {
+        fallback = {
             "taskType": "SCREENING_ANALYSIS",
             "manuscriptId": str(context.get("manuscriptId", "")),
             "versionId": str(context.get("versionId", "")),
@@ -81,3 +121,72 @@ class ProviderExecutor:
             "screeningSummary": "Metadata and abstract are ready for chair screening.",
             "confidence": 0.5,
         }
+        return self._request_structured_result(
+            schema_name="screening_analysis",
+            schema=ScreeningAnalysisResult.model_json_schema(),
+            instruction=(
+                "Assess whether this manuscript is ready for chair screening in a paper review system. "
+                "Identify scope fit, format risks, and blind-review risks. Return only the schema fields. "
+                f"Screening payload JSON: {_prompt_json(payload)}"
+            ),
+            fallback=fallback,
+        )
+
+    def _request_structured_result(
+        self,
+        *,
+        schema_name: str,
+        schema: dict[str, Any],
+        instruction: str,
+        fallback: dict[str, Any],
+    ) -> dict[str, Any]:
+        if self._client is None or not self._config.has_llm_provider():
+            return fallback
+
+        response = self._client.chat.completions.create(
+            model=self._config.llm_model,
+            temperature=0,
+            max_tokens=self._config.llm_max_tokens,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": schema_name,
+                    "strict": True,
+                    "schema": schema,
+                },
+            },
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an internal paper-review analysis component. Return strict JSON only. "
+                        "Do not expose chain-of-thought; provide concise final fields that match the schema."
+                    ),
+                },
+                {"role": "user", "content": instruction},
+            ],
+        )
+        content = response.choices[0].message.content or "{}"
+        return {**fallback, **json.loads(content)}
+
+
+def _prompt_json(value: dict[str, Any]) -> str:
+    return json.dumps(_budget_payload(value), ensure_ascii=False, sort_keys=True)
+
+
+def _budget_payload(value: Any, *, key: str | None = None) -> Any:
+    if isinstance(value, dict):
+        return {str(child_key): _budget_payload(child_value, key=str(child_key)) for child_key, child_value in value.items()}
+    if isinstance(value, list):
+        return [_budget_payload(item, key=key) for item in value]
+    if isinstance(value, str):
+        limit = _PDF_TEXT_BUDGET if key == "pdfText" else _SECTION_TEXT_BUDGET if key in {"introduction", "method", "experiment", "conclusion"} else _DEFAULT_TEXT_BUDGET
+        return _truncate_text(value, limit)
+    return value
+
+
+def _truncate_text(value: str, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    omitted = len(value) - limit
+    return value[:limit] + f"... [truncated {omitted} chars]"

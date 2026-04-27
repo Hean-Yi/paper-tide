@@ -93,6 +93,7 @@ Current lessons captured from recent review cycles:
 - When removing a legacy actor-facing monitor or workflow page during a refactor, ship a minimal replacement read model and UI in the same slice or explicitly defer the removal in the plan. Do not leave long-lived placeholder routes for admin or operator workflows after retiring the original screen.
 - When a transport or ownership refactor changes the live integration path, update the operational docs in the same slice. Keep `README.md`, `docs/ARCHITECTURE.md`, `docs/CODE_STRUCTURE.md`, `docs/TESTING.md`, and bootstrap instructions aligned with the current runtime path; do not leave legacy HTTP/task-flow descriptions as if they were still authoritative.
 - Message-driven refactors are not complete when only schema, repositories, and in-process handlers exist. Completion requires broker lifecycle wiring, pending-message dispatch, completion-event intake, and a repository-level verification command that exercises more than `/health`.
+- When wiring live LLM providers from `.env`, keep unit tests deterministic by injecting an offline provider executor or fake client. Do not let ordinary pytest runs consume local API keys or require network access; reserve real provider calls for explicit smoke tests.
 
 ## Plan File Discipline
 Execution work must stay anchored to one authoritative implementation plan file.

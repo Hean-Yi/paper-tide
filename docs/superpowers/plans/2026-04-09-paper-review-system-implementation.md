@@ -1611,6 +1611,11 @@ git commit -m "fix: complete analysis platform remediation program"
   - Phase 3 durable runtime implementation is complete in local code and verified through focused agent tests, full agent pytest, frontend regression, and Oracle-backed full API verification.
   - Task 19 remediation program is complete and ready to exist as an isolated commit.
   - Commit separation is handled by staging only remediation files so unrelated workspace changes remain out of the commit.
+- Post-completion documentation sync completed on 2026-04-27:
+  - Executed a repository-to-docs drift pass focused on `docs/ARCHITECTURE.md`, `docs/CODE_STRUCTURE.md`, `docs/DESIGN_STRUCTURE.md`, `docs/WORKFLOW.md`, `docs/TESTING.md`, and `docs/PROJECT_GUIDE.md`.
+  - Updated those docs to match the live `analysis/*` API boundary, `agent_platform/*` execution runtime, current workflow endpoints, the `008_agent_platform_refactor.sql` schema, and the actual `scripts/test-all.sh` behavior.
+  - Verification: targeted residue scan for legacy task-type and old endpoint text returned no matches in the touched docs; follow-up repository diff check remained clean.
+  - Current completion state: Task 19 remains complete, and the core documentation drift called out in the backlog is now closed for the primary docs set.
 
 ## Plan Self-Review
 

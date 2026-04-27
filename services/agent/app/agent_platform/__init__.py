@@ -1,3 +1,4 @@
+from .broker import AgentPlatformBrokerLifecycle, AgentPlatformBrokerWorker, InMemoryAnalysisBroker
 from .config import AgentPlatformConfig
 from .consumer import AnalysisRequestedConsumer
 from .domain import ExecutionJob
@@ -11,6 +12,8 @@ from .state_machine import ExecutionStateMachine
 
 __all__ = [
     "AgentPlatformConfig",
+    "AgentPlatformBrokerLifecycle",
+    "AgentPlatformBrokerWorker",
     "AnalysisHandlerRegistry",
     "AnalysisCompletedMessage",
     "AnalysisCompletedPublisher",
@@ -21,6 +24,7 @@ __all__ = [
     "ExecutionOutboxMessage",
     "ExecutionStateMachine",
     "InMemoryExecutionJobRepository",
+    "InMemoryAnalysisBroker",
     "InMemoryExecutionOutbox",
     "OracleExecutionJobRepository",
     "OracleExecutionOutbox",

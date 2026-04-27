@@ -1,7 +1,9 @@
 package com.example.review.analysis.infrastructure;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
 import java.util.Map;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -34,11 +36,57 @@ public class AnalysisOutboxRepository {
         }
     }
 
+    public List<AnalysisOutboxMessage> pendingRequested(int limit) {
+        return jdbcTemplate.query(
+                """
+                SELECT MESSAGE_KEY, MESSAGE_TYPE, MESSAGE_PAYLOAD
+                  FROM (
+                    SELECT MESSAGE_KEY, MESSAGE_TYPE, MESSAGE_PAYLOAD
+                      FROM ANALYSIS_OUTBOX
+                     WHERE MESSAGE_STATUS = 'PENDING'
+                       AND MESSAGE_TYPE = 'analysis.requested'
+                     ORDER BY CREATED_AT
+                  )
+                 WHERE ROWNUM <= ?
+                """,
+                (rs, rowNum) -> new AnalysisOutboxMessage(
+                        rs.getString("MESSAGE_KEY"),
+                        rs.getString("MESSAGE_TYPE"),
+                        fromJson(rs.getString("MESSAGE_PAYLOAD"))
+                ),
+                limit
+        );
+    }
+
+    public void markPublished(String messageKey) {
+        jdbcTemplate.update(
+                """
+                UPDATE ANALYSIS_OUTBOX
+                   SET MESSAGE_STATUS = 'PUBLISHED',
+                       RETRY_COUNT = RETRY_COUNT + 1,
+                       PUBLISHED_AT = CURRENT_TIMESTAMP
+                 WHERE MESSAGE_KEY = ?
+                """,
+                messageKey
+        );
+    }
+
     private String toJson(Map<String, Object> payload) {
         try {
             return objectMapper.writeValueAsString(payload);
         } catch (JsonProcessingException ex) {
             throw new IllegalArgumentException("Failed to serialize analysis outbox payload", ex);
         }
+    }
+
+    private Map<String, Object> fromJson(String payload) {
+        try {
+            return objectMapper.readValue(payload, new TypeReference<>() {});
+        } catch (JsonProcessingException ex) {
+            throw new IllegalArgumentException("Failed to parse analysis outbox payload", ex);
+        }
+    }
+
+    public record AnalysisOutboxMessage(String messageKey, String messageType, Map<String, Object> payload) {
     }
 }

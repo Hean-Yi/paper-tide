@@ -1651,7 +1651,7 @@ git commit -m "fix: complete analysis platform remediation program"
 
 ### Task 20: Agent Runtime Hardening After Live LLM Provider Wiring
 
-**Status:** In progress on 2026-04-27.
+**Status:** Completed on 2026-04-27.
 
 **Scope:**
 
@@ -1693,4 +1693,43 @@ git commit -m "fix: complete analysis platform remediation program"
   - Live SiliconFlow smoke test against `Qwen/Qwen3-VL-32B-Thinking` passed with a long `pdfText` payload after network approval, returning a strict `SCREENING_ANALYSIS` key set.
 - Current completion state:
   - The focused Agent hardening slice is complete in local code.
+  - Committed as `31d689f fix(agent): harden execution runtime and llm output handling`.
   - The larger RabbitMQ lifecycle worker slice remains open in `TODO.md` as the next P0 runtime closure item.
+
+### Task 21: Message-Driven Runtime Lifecycle Wiring
+
+**Status:** Completed as a focused lifecycle slice on 2026-04-27.
+
+**Scope:**
+
+- Execute the next P0 plan item after committing Task 20.
+- Add runnable but opt-in message lifecycle wiring around the existing split-sovereignty analysis platform:
+  - API outbox dispatch from `ANALYSIS_OUTBOX` to RabbitMQ
+  - API completion listener that delegates broker payloads to `AnalysisEventConsumer`
+  - RabbitMQ exchange, request queue, completion queue, and bindings
+  - deterministic scheduler entrypoint for API outbox polling
+  - Agent RabbitMQ consumer lifecycle that turns `analysis.requested` messages into execution jobs
+  - Agent completion publisher loop that flushes `EXECUTION_OUTBOX` to RabbitMQ
+
+**Execution notes, 2026-04-27:**
+
+- Step 1 executed first: reran the Agent hardening verification and committed the completed slice as `31d689f`.
+- Added red tests for the runtime lifecycle slice:
+  - `AnalysisBrokerDispatchTest` covers API outbox dispatch, completion listener delegation, and deterministic scheduler polling.
+  - `test_broker_worker.py` covers Agent broker request handling, completion outbox publishing, async broker publishing, and broker environment configuration.
+- Implemented the green slice:
+  - added `AnalysisOutboxDispatcher`, `AnalysisOutboxDispatchScheduler`, `AnalysisCompletionListener`, and `AnalysisRabbitConfiguration`
+  - enabled scheduling in the Spring Boot application and added opt-in broker properties under `review.analysis`
+  - changed `AnalysisOutboxRepository.pendingRequested(...)` to use an Oracle-safe `ROWNUM <= ?` ordered subquery
+  - added Agent broker lifecycle settings to `AgentPlatformConfig`
+  - added `AioPikaAnalysisBroker` and `AgentPlatformBrokerLifecycle`
+  - wired `create_app()` startup/shutdown hooks only when `AGENT_PLATFORM_BROKER_ENABLED=true`
+  - kept broker integration disabled by default so ordinary tests and local health checks do not require RabbitMQ
+- Verification:
+  - `cd services/agent && ../../.venv/bin/python -m pytest tests/test_broker_worker.py -q` passed.
+  - `cd services/agent && ../../.venv/bin/python -m pytest tests -q` passed: 44 tests, with existing LangGraph deprecation warnings.
+  - `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisBrokerDispatchTest test` passed: 3 tests.
+  - `cd apps/api && mvn -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AnalysisBrokerDispatchTest,AnalysisOutboxPublisherTest,AnalysisEventConsumerTest test` passed: 5 tests.
+- Current completion state:
+  - API and Agent now have opt-in runnable message lifecycle wiring.
+  - The remaining open cross-cutting item is repository-level verification against real Oracle + RabbitMQ and inclusion of that path in `scripts/test-all.sh`; this remains tracked in `TODO.md`.

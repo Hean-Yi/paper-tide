@@ -23,3 +23,6 @@ class AnalysisCompletedPublisher:
 
     def pending(self) -> list[ExecutionOutboxMessage]:
         return self._outbox.pending()
+
+    def mark_published(self, message_id: str) -> ExecutionOutboxMessage | None:
+        return self._outbox.mark_published(message_id)

@@ -8,7 +8,7 @@
 
 ## Cross-cutting
 
-- [ ] `[P0]` 完成新的 analysis 平台运行闭环：当前 API 侧只会写 `ANALYSIS_OUTBOX`，agent 侧只组装 runtime 和 `/health`，但仓库里还没有真正的 RabbitMQ 发布/消费生命周期接线、pending outbox 派发器、completion event 回流调度与端到端集成验证。
+- [ ] `[P0]` 完成新的 analysis 平台运行闭环：API pending outbox 派发器、completion listener、RabbitMQ 队列绑定、agent request consumer 生命周期和 completion outbox publisher 已补上；剩余工作是用真实 Oracle + RabbitMQ 做端到端集成验证，并把该验证纳入统一脚本。
 - [ ] `[P0]` 统一当前架构叙事：`README.md`、`docs/ARCHITECTURE.md`、`docs/CODE_STRUCTURE.md`、`docs/TESTING.md` 仍混合描述旧的 `/agent/tasks + HTTP polling` 路径与新的 intent/projection/message-driven 路径，需要选定唯一现行实现并同步文档。
 - [ ] `[P1]` 为仓库建立统一错误契约：后端输出稳定 JSON 错误结构（`status`、`code`、`message`、`traceId`），前端不再依赖 `statusText` 和散落的字符串分支。
 - [ ] `[P1]` 增加最小可观测性基线：请求/消息 `traceId`、结构化日志、关键异步链路日志字段、健康检查分层（readiness/liveness），避免 message-driven 路径上线后只能靠手工查表排障。
@@ -17,7 +17,7 @@
 
 ## apps/api
 
-- [ ] `[P0]` 补上 analysis 消息链路的真实运行入口：当前 `AnalysisOutboxPublisher` 只落库，`AnalysisEventConsumer` 只有消费逻辑却没有真正 listener/dispatcher；需要把 broker publishing 和 event consuming 从“代码片段”补成“可运行基础设施”。
+- [x] `[P0]` 补上 analysis 消息链路的真实运行入口：当前 `AnalysisOutboxPublisher` 只落库，`AnalysisEventConsumer` 只有消费逻辑却没有真正 listener/dispatcher；需要把 broker publishing 和 event consuming 从“代码片段”补成“可运行基础设施”。
 - [ ] `[P1]` 收紧 service 边界：`ManuscriptService`、`ReviewWorkflowService`、`DecisionService` 等大量直接抛 `ResponseStatusException`，把 HTTP 语义带入业务层；需要引入应用/领域异常和统一映射层。
 - [ ] `[P1]` 收敛查询层 N+1：`WorkflowQueryService.listDecisionWorkbench(...)` 先查 round，再逐条补 assignment、intent、projection，属于典型聚合读模型 N+1，应改为面向页面的一次性批量查询。
 - [ ] `[P1]` 把 service 中的 JDBC 细节进一步下沉到 repository：当前仍有直接 `JdbcTemplate.update(...)`、`SELECT ... FOR UPDATE` 和临时 row shape 留在 service 层，导致模块职责不够纯。
@@ -40,7 +40,7 @@
 
 ## services/agent
 
-- [ ] `[P0]` 将 agent 平台从“组装好的对象图”补成“运行中的服务”：`create_app()` 当前只暴露 `/health`，没有 broker consumer、outbox publisher worker、startup/shutdown 生命周期管理，也没有从消息入口真正驱动 `execute_requested_job(...)`。
+- [x] `[P0]` 将 agent 平台从“组装好的对象图”补成“运行中的服务”：`create_app()` 当前只暴露 `/health`，没有 broker consumer、outbox publisher worker、startup/shutdown 生命周期管理，也没有从消息入口真正驱动 `execute_requested_job(...)`。
 - [ ] `[P0]` 明确唯一执行栈：当前同时保留 `agent_platform/handlers/*` 和旧 `app/workflows/*` LangGraph 路径，测试也同时覆盖两套模型；需要确定保留哪一套，避免长期双轨。
 - [x] `[P0]` 修复 execution runtime 的失败状态闭环：handler、LLM、JSON parse、schema validation 任一异常都必须写回 `FAILED_RETRYABLE`、`DEAD_LETTERED` 或 `FAILED_TERMINAL`，不能让 `EXECUTION_JOB` 停留在 `RUNNING`。
 - [x] `[P0]` 将 `analysis.completed` 从 runtime 返回值升级为可靠 outbox 事件：执行成功后必须写入 `EXECUTION_OUTBOX`，后续由 publisher/worker 投递并标记发布，避免进程崩溃丢 completion event。
@@ -49,7 +49,7 @@
 - [x] `[P1]` 统一 Agent 输出 schema 的严格性：screening、reviewer assist、conflict analysis 都应禁止额外字段，避免 strict provider 输出和本地 Pydantic 接受规则不一致。
 - [ ] `[P1]` 为 provider 执行层建立真实边界：`ProviderExecutor` 目前主要是 deterministic stub，后续要把真实模型调用、超时、错误分类、幂等日志、成本控制和 provider 配置隔离到单独适配层。
 - [ ] `[P1]` 补齐 execution job 生命周期数据：除 `ATTEMPT_COUNT` 外，还需要评估是否应持久化最近错误分类、最后尝试时间、完成时间、发布失败原因等治理字段。
-- [ ] `[P1]` 为 message-driven 路径增加 focused 集成测试：证明“requested message -> execution job -> completed event -> projection ready”能够在真实 broker/DB 条件下跑通，而不仅是仓储和纯内存单测。
+- [ ] `[P1]` 为 message-driven 路径增加 focused 集成测试：证明“requested message -> execution job -> completed event -> projection ready”能够在真实 broker/DB 条件下跑通，而不仅是仓储、listener、dispatcher 和纯内存 worker 单测。
 - [ ] `[P2]` 继续清理迁移遗留：删除不再使用的旧 route/task API、旧设计注释和已被 handler 方案替代的 workflow 入口，降低认知负担。
 
 ## database/oracle

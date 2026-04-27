@@ -20,8 +20,13 @@ server:
 
 review:
   analysis:
+    broker-enabled: ${REVIEW_ANALYSIS_BROKER_ENABLED:false}
     broker-exchange: review.analysis.exchange
+    request-queue: analysis.requested.agent
     request-routing-key: analysis.requested
+    completion-queue: analysis.completed.api
+    completion-routing-key: analysis.completed
+    outbox-dispatch-delay-ms: ${REVIEW_ANALYSIS_OUTBOX_DISPATCH_DELAY_MS:5000}
   jwt:
     secret: ${REVIEW_JWT_SECRET:ReviewJwtSecretKeyForLocalDevOnly12345}
     issuer: ${REVIEW_JWT_ISSUER:review-api}

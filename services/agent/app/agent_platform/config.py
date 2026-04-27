@@ -20,6 +20,13 @@ class AgentPlatformConfig:
     llm_base_url: str | None = None
     llm_model: str | None = None
     llm_max_tokens: int = 1200
+    broker_enabled: bool = False
+    rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
+    broker_exchange: str = "review.analysis.exchange"
+    request_queue: str = "analysis.requested.agent"
+    request_routing_key: str = "analysis.requested"
+    completed_routing_key: str = "analysis.completed"
+    completed_publish_interval_seconds: float = 5.0
 
     @classmethod
     def from_env(cls, env_file: str | PathLike[str] | None = None) -> "AgentPlatformConfig":
@@ -40,6 +47,15 @@ class AgentPlatformConfig:
             llm_base_url=_normalize_llm_base_url(os.getenv("URL") or os.getenv("OPENROUTER_BASE_URL")),
             llm_model=os.getenv("MODEL") or os.getenv("LLM_MODEL") or os.getenv("OPENROUTER_MODEL"),
             llm_max_tokens=int(os.getenv("LLM_MAX_TOKENS", "1200")),
+            broker_enabled=_env_bool("AGENT_PLATFORM_BROKER_ENABLED", False),
+            rabbitmq_url=os.getenv("AGENT_PLATFORM_RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+            broker_exchange=os.getenv("AGENT_PLATFORM_BROKER_EXCHANGE", "review.analysis.exchange"),
+            request_queue=os.getenv("AGENT_PLATFORM_REQUEST_QUEUE", "analysis.requested.agent"),
+            request_routing_key=os.getenv("AGENT_PLATFORM_REQUEST_ROUTING_KEY", analysis_requested_topic),
+            completed_routing_key=os.getenv("AGENT_PLATFORM_COMPLETED_ROUTING_KEY", analysis_completed_topic),
+            completed_publish_interval_seconds=float(
+                os.getenv("AGENT_PLATFORM_COMPLETED_PUBLISH_INTERVAL_SECONDS", "5.0")
+            ),
         )
 
     def has_durable_execution_store(self) -> bool:
@@ -57,3 +73,10 @@ def _normalize_llm_base_url(value: str | None) -> str | None:
     if normalized.endswith(chat_suffix):
         normalized = normalized[: -len(chat_suffix)]
     return normalized or None
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}

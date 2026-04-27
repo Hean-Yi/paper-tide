@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from typing import Any, Callable
 
+from app.agent_platform.broker import AgentPlatformBrokerLifecycle
 from app.agent_platform.config import AgentPlatformConfig
 from app.agent_platform.consumer import AnalysisRequestedConsumer
 from app.agent_platform.handler_registry import AnalysisHandlerRegistry
@@ -59,6 +60,17 @@ def create_app(
     app.state.execution_state_machine = execution_state_machine
     app.state.handler_registry = handler_registry
     app.state.provider_executor = provider_executor
+    if enable_background_execution and agent_platform_config.broker_enabled:
+        broker_lifecycle = AgentPlatformBrokerLifecycle(agent_platform, agent_platform_config)
+        app.state.agent_platform_broker_lifecycle = broker_lifecycle
+
+        @app.on_event("startup")
+        async def start_agent_platform_broker() -> None:
+            await broker_lifecycle.start()
+
+        @app.on_event("shutdown")
+        async def stop_agent_platform_broker() -> None:
+            await broker_lifecycle.stop()
 
     @app.get("/health")
     def health() -> dict[str, str]:

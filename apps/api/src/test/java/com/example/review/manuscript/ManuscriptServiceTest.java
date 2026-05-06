@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -54,22 +55,27 @@ class ManuscriptServiceTest {
         jdbcTemplate.update("UPDATE MANUSCRIPT SET CURRENT_VERSION_ID = NULL");
         jdbcTemplate.update("DELETE FROM MANUSCRIPT_VERSION");
         jdbcTemplate.update("DELETE FROM MANUSCRIPT");
+        jdbcTemplate.update("DELETE FROM CONFERENCE_PHASE");
+        jdbcTemplate.update("DELETE FROM CONFERENCE");
         seedSecondaryAuthor();
     }
 
     @Test
     void createDraftManuscriptPersistsAggregate() throws Exception {
         String token = loginAndExtractToken("author_demo", "demo123");
+        long conferenceId = seedConference("submission-open-2026", "SINGLE_BLIND", "OPEN_FOR_SUBMISSION",
+                Instant.parse("2026-12-31T00:00:00Z"));
 
         MvcResult result = mockMvc.perform(post("/api/manuscripts")
                         .header("Authorization", "Bearer " + token)
                         .contentType(APPLICATION_JSON)
-                        .content(createManuscriptPayload("Graph-Aware Ranking", "DOUBLE_BLIND")))
+                        .content(createManuscriptPayload("Graph-Aware Ranking", "DOUBLE_BLIND", conferenceId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.manuscriptId").isNumber())
+                .andExpect(jsonPath("$.conferenceId").value((int) conferenceId))
                 .andExpect(jsonPath("$.currentVersionId").isNumber())
                 .andExpect(jsonPath("$.currentStatus").value("DRAFT"))
-                .andExpect(jsonPath("$.blindMode").value("DOUBLE_BLIND"))
+                .andExpect(jsonPath("$.blindMode").value("SINGLE_BLIND"))
                 .andReturn();
 
         JsonNode root = objectMapper.readTree(result.getResponse().getContentAsString());
@@ -78,7 +84,7 @@ class ManuscriptServiceTest {
 
         Map<String, Object> manuscriptRow = jdbcTemplate.queryForMap(
                 """
-                SELECT MANUSCRIPT_ID, SUBMITTER_ID, CURRENT_VERSION_ID, CURRENT_STATUS, BLIND_MODE
+                SELECT MANUSCRIPT_ID, SUBMITTER_ID, CONFERENCE_ID, CURRENT_VERSION_ID, CURRENT_STATUS, BLIND_MODE
                 FROM MANUSCRIPT
                 WHERE MANUSCRIPT_ID = ?
                 """,
@@ -105,13 +111,59 @@ class ManuscriptServiceTest {
         );
 
         org.junit.jupiter.api.Assertions.assertEquals("DRAFT", manuscriptRow.get("CURRENT_STATUS"));
-        org.junit.jupiter.api.Assertions.assertEquals("DOUBLE_BLIND", manuscriptRow.get("BLIND_MODE"));
+        org.junit.jupiter.api.Assertions.assertEquals("SINGLE_BLIND", manuscriptRow.get("BLIND_MODE"));
+        org.junit.jupiter.api.Assertions.assertEquals(conferenceId, ((Number) manuscriptRow.get("CONFERENCE_ID")).longValue());
         org.junit.jupiter.api.Assertions.assertEquals(1001L, ((Number) manuscriptRow.get("SUBMITTER_ID")).longValue());
         org.junit.jupiter.api.Assertions.assertEquals(versionId, ((Number) manuscriptRow.get("CURRENT_VERSION_ID")).longValue());
         org.junit.jupiter.api.Assertions.assertEquals(1L, ((Number) versionRow.get("VERSION_NO")).longValue());
         org.junit.jupiter.api.Assertions.assertEquals("INITIAL", versionRow.get("VERSION_TYPE"));
         org.junit.jupiter.api.Assertions.assertNull(versionRow.get("SOURCE_DECISION_ID"));
         org.junit.jupiter.api.Assertions.assertEquals(2, authorCount);
+    }
+
+    @Test
+    void createDraftRequiresOpenConferenceAndCopiesConferenceBlindMode() throws Exception {
+        String token = loginAndExtractToken("author_demo", "demo123");
+        long closedConferenceId = seedConference("closed-2026", "DOUBLE_BLIND", "SUBMISSION_CLOSED",
+                Instant.parse("2026-12-31T00:00:00Z"));
+        long expiredConferenceId = seedConference("expired-2026", "OPEN", "OPEN_FOR_SUBMISSION",
+                Instant.parse("2020-01-01T00:00:00Z"));
+
+        mockMvc.perform(post("/api/manuscripts")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(createManuscriptPayload("Missing Conference", "DOUBLE_BLIND", null)))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/manuscripts")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(createManuscriptPayload("Closed Conference", "DOUBLE_BLIND", closedConferenceId)))
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(post("/api/manuscripts")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(createManuscriptPayload("Expired Conference", "DOUBLE_BLIND", expiredConferenceId)))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void submitAndPdfReplacementRejectAfterSubmissionClose() throws Exception {
+        String token = loginAndExtractToken("author_demo", "demo123");
+        long conferenceId = seedConference("deadline-2026", "DOUBLE_BLIND", "OPEN_FOR_SUBMISSION",
+                Instant.parse("2026-12-31T00:00:00Z"));
+        ManuscriptIds ids = createDraftManuscript(token, "Deadline Guard", "OPEN", conferenceId);
+        uploadPdf(token, ids.manuscriptId(), ids.versionId(), "paper.pdf", "application/pdf", validPdfBytes("deadline"))
+                .andExpect(status().isOk());
+        closeSubmission(conferenceId, Instant.parse("2020-01-01T00:00:00Z"));
+
+        uploadPdf(token, ids.manuscriptId(), ids.versionId(), "replacement.pdf", "application/pdf", validPdfBytes("late"))
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(post("/api/manuscripts/{id}/versions/{versionId}/submit", ids.manuscriptId(), ids.versionId())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isConflict());
     }
 
     @Test
@@ -363,10 +415,18 @@ class ManuscriptServiceTest {
     }
 
     private ManuscriptIds createDraftManuscript(String token, String title, String blindMode) throws Exception {
+        long conferenceId = seedConference("test-conf-" + title.toLowerCase().replaceAll("[^a-z0-9]+", "-"),
+                blindMode,
+                "OPEN_FOR_SUBMISSION",
+                Instant.parse("2026-12-31T00:00:00Z"));
+        return createDraftManuscript(token, title, blindMode, conferenceId);
+    }
+
+    private ManuscriptIds createDraftManuscript(String token, String title, String blindMode, long conferenceId) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/manuscripts")
                         .header("Authorization", "Bearer " + token)
                         .contentType(APPLICATION_JSON)
-                        .content(createManuscriptPayload(title, blindMode)))
+                        .content(createManuscriptPayload(title, blindMode, conferenceId)))
                 .andExpect(status().isOk())
                 .andReturn();
 
@@ -375,31 +435,94 @@ class ManuscriptServiceTest {
     }
 
     private String createManuscriptPayload(String title, String blindMode) throws Exception {
-        return objectMapper.writeValueAsString(Map.of(
-                "title", title,
-                "abstract", title + " abstract",
-                "keywords", "graphs,ranking",
-                "blindMode", blindMode,
-                "authors", List.of(
-                        Map.of(
-                                "authorName", "Author Demo",
-                                "email", "author_demo@example.com",
-                                "institution", "Southeast University",
-                                "authorOrder", 1,
-                                "userId", 1001,
-                                "isCorresponding", true,
-                                "isExternal", false
-                        ),
-                        Map.of(
-                                "authorName", "External Collaborator",
-                                "email", "external@example.com",
-                                "institution", "Zhejiang University",
-                                "authorOrder", 2,
-                                "isCorresponding", false,
-                                "isExternal", true
-                        )
+        long conferenceId = seedConference("payload-conf-" + title.toLowerCase().replaceAll("[^a-z0-9]+", "-"),
+                blindMode,
+                "OPEN_FOR_SUBMISSION",
+                Instant.parse("2026-12-31T00:00:00Z"));
+        return createManuscriptPayload(title, blindMode, conferenceId);
+    }
+
+    private String createManuscriptPayload(String title, String blindMode, Long conferenceId) throws Exception {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("title", title);
+        payload.put("abstract", title + " abstract");
+        payload.put("keywords", "graphs,ranking");
+        payload.put("blindMode", blindMode);
+        payload.put("conferenceId", conferenceId);
+        payload.put("authors", List.of(
+                Map.of(
+                        "authorName", "Author Demo",
+                        "email", "author_demo@example.com",
+                        "institution", "Southeast University",
+                        "authorOrder", 1,
+                        "userId", 1001,
+                        "isCorresponding", true,
+                        "isExternal", false
+                ),
+                Map.of(
+                        "authorName", "External Collaborator",
+                        "email", "external@example.com",
+                        "institution", "Zhejiang University",
+                        "authorOrder", 2,
+                        "isCorresponding", false,
+                        "isExternal", true
                 )
         ));
+        return objectMapper.writeValueAsString(payload);
+    }
+
+    private long seedConference(String slug, String blindMode, String status, Instant submissionCloseAt) {
+        long conferenceId = jdbcTemplate.queryForObject("SELECT SEQ_CONFERENCE.NEXTVAL FROM DUAL", Long.class);
+        Instant submissionOpenAt = submissionCloseAt.minusSeconds(31536000);
+        jdbcTemplate.update(
+                """
+                INSERT INTO CONFERENCE (
+                  CONFERENCE_ID, NAME, ACRONYM, CONFERENCE_YEAR, ORGANIZER_USER_ID,
+                  CONFERENCE_STATUS, BLIND_MODE, CFP_TEXT, TOPIC_AREAS_JSON,
+                  TARGET_REVIEWS_PER_PAPER, DEFAULT_REVIEWER_MAX_LOAD, PUBLIC_SLUG, CFP_PUBLISHED
+                ) VALUES (?, ?, ?, 2026, 1003, ?, ?, 'Call for papers', '["NLP"]', 3, 3, ?, 1)
+                """,
+                conferenceId,
+                "Test Conference " + conferenceId,
+                "TC" + conferenceId,
+                status,
+                blindMode,
+                slug
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO CONFERENCE_PHASE (
+                  PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, SUBMISSION_CLOSE_AT,
+                  BIDDING_OPEN_AT, BIDDING_CLOSE_AT, REVIEW_DEADLINE_AT, DECISION_RELEASE_AT
+                ) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                conferenceId,
+                Timestamp.from(submissionOpenAt),
+                Timestamp.from(submissionCloseAt),
+                Timestamp.from(submissionCloseAt.plusSeconds(86400)),
+                Timestamp.from(submissionCloseAt.plusSeconds(172800)),
+                Timestamp.from(submissionCloseAt.plusSeconds(259200)),
+                Timestamp.from(submissionCloseAt.plusSeconds(345600))
+        );
+        return conferenceId;
+    }
+
+    private void closeSubmission(long conferenceId, Instant submissionCloseAt) {
+        jdbcTemplate.update(
+                """
+                UPDATE CONFERENCE_PHASE
+                SET SUBMISSION_OPEN_AT = ?, SUBMISSION_CLOSE_AT = ?, BIDDING_OPEN_AT = ?, BIDDING_CLOSE_AT = ?,
+                    REVIEW_DEADLINE_AT = ?, DECISION_RELEASE_AT = ?
+                WHERE CONFERENCE_ID = ?
+                """,
+                Timestamp.from(Instant.parse("2019-01-01T00:00:00Z")),
+                Timestamp.from(submissionCloseAt),
+                Timestamp.from(submissionCloseAt.plusSeconds(86400)),
+                Timestamp.from(submissionCloseAt.plusSeconds(172800)),
+                Timestamp.from(submissionCloseAt.plusSeconds(259200)),
+                Timestamp.from(submissionCloseAt.plusSeconds(345600)),
+                conferenceId
+        );
     }
 
     private String createRevisionPayload(String title) throws Exception {

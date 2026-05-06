@@ -2028,8 +2028,38 @@ Expected after implementation: both commands pass.
         - The next `verify_schema.sql` run failed with `Expected 42 indexes, found 35`; investigation showed the local database was missing the seven hotspot indexes from `010_database_query_optimization.sql`.
         - Applied missing prior migration `010_database_query_optimization.sql`.
         - Final real Oracle verification passed with `Schema verification passed.`
-- [ ] **Task 25.3: Conference-scoped submission migration**
+- [x] **Task 25.3: Conference-scoped submission migration**
   - Add nullable/backfilled `MANUSCRIPT.CONFERENCE_ID`, legacy/default conference support, conference blind-mode snapshot behavior, and author conference selection.
+  - Planned execution scope:
+    - Add migration `015_conference_scoped_submission.sql` after the completed conference lifecycle migration.
+    - Add nullable `MANUSCRIPT.CONFERENCE_ID`, a foreign key to `CONFERENCE`, and a lookup index; backfill existing manuscripts to an idempotent `legacy-platform-default` conference.
+    - Extend schema verification and both bootstrap paths for migration `015`.
+    - Update manuscript API request/response/list rows to carry `conferenceId`.
+    - Add a manuscript-side conference lookup repository that returns only valid author submission targets and exposes the conference blind-mode snapshot.
+    - Change initial manuscript creation so callers must choose an open conference, the manuscript snapshot copies `CONFERENCE.BLIND_MODE`, and submissions/PDF replacement reject after `CONFERENCE_PHASE.SUBMISSION_CLOSE_AT`.
+    - Add frontend author submission selection from public CFPs; hide manual blind-mode selection because blind mode is now conference-owned.
+    - Verification target: focused backend manuscript/schema/code-quality tests, focused frontend workflow test, typecheck/build if frontend changes compile cleanly, script syntax checks, and real Oracle `verify_schema.sql` after applying `015`.
+  - Execution notes, 2026-05-06:
+    - Added `015_conference_scoped_submission.sql` with nullable `MANUSCRIPT.CONFERENCE_ID`, idempotent `legacy-platform-default` conference and phase backfill, `FK_MANUSCRIPT_CONFERENCE`, and `IDX_MANUSCRIPT_CONFERENCE_STATUS`.
+    - Wired `015_conference_scoped_submission.sql` into full schema apply, incremental `dev-up.sh`, and `verify_schema.sql`; schema verification now checks `MANUSCRIPT.CONFERENCE_ID`, `FK_MANUSCRIPT_CONFERENCE`, and 43 custom indexes.
+    - Updated manuscript create/list/detail DTOs and repository rows to carry `conferenceId`.
+    - Added `ManuscriptConferenceRepository` for manuscript-side conference submission policy reads without coupling manuscript service to conference controller DTOs.
+    - Changed initial manuscript creation so `conferenceId` is required, the target conference must be `OPEN_FOR_SUBMISSION`, the submission close timestamp must still be in the future, and `MANUSCRIPT.BLIND_MODE` is copied from `CONFERENCE.BLIND_MODE` instead of trusting the client payload.
+    - Added submission-deadline checks to PDF upload/replacement and final version submission.
+    - Updated author submission UI to load public CFPs, auto-select the first available conference, display the conference-owned blind mode/deadline, and submit `conferenceId` with the manuscript payload.
+    - Verification:
+      - Red run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=ConferenceSubmissionSchemaTest,ManuscriptServiceTest test` first failed in the sandbox due to Oracle socket restrictions, then outside the sandbox failed with missing `015_conference_scoped_submission.sql`, missing `conferenceId` response data, and missing deadline guards.
+      - Applied real Oracle migration with `docker exec review-oracle bash -lc "sqlplus -s review_app/ReviewApp12345@localhost/FREEPDB1 @/tmp/015_conference_scoped_submission.sql"`, creating the column, default conference backfill, FK, and index.
+      - Green backend run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=ConferenceSubmissionSchemaTest,ManuscriptServiceTest,ConferenceSchemaTest,RegistrationSchemaTest,CodeQualityTest test` passed.
+      - API compile check: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -DskipTests test` passed.
+      - Frontend red run: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts` initially could not start because the new worktree lacked `node_modules`; a temporary ignored symlink to the main worktree's `apps/web/node_modules` was used for verification only.
+      - Frontend green run: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts` passed with 27 tests.
+      - `cd apps/web && npm run typecheck` passed.
+      - `cd apps/web && npm run build` passed with the existing Vite large chunk warning.
+      - `bash -n scripts/oracle-schema-apply.sh` and `bash -n scripts/dev-up.sh` passed.
+      - Real Oracle `verify_schema.sql` passed after updating the verification SQL in the container.
+    - Current completion state:
+      - 25.3 conference-scoped submission migration is implemented, frontend selection is wired, and the local Oracle schema has been migrated through `015`.
 - [ ] **Task 25.4: Reviewer pool, conflicts, and bidding**
   - Add platform-approved reviewer pool membership, `CONFERENCE_REVIEWER` research-area snapshots from `USER_RESEARCH_AREA`, de-identified bidding views, bid persistence, conflict reuse through `CONFLICT_CHECK_RECORD`, phase boundary checks, and multi-conference isolation checks.
 - [ ] **Task 25.5: Guided deterministic assignment**

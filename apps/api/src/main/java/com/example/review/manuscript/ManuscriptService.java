@@ -5,6 +5,7 @@ import com.example.review.auth.RoleGuard;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
@@ -26,27 +27,33 @@ public class ManuscriptService {
     private final ManuscriptRepository manuscriptRepository;
     private final VersionRepository versionRepository;
     private final AuthorRepository authorRepository;
+    private final ManuscriptConferenceRepository conferenceRepository;
+    private final Clock clock;
 
     public ManuscriptService(
             ManuscriptRepository manuscriptRepository,
             VersionRepository versionRepository,
-            AuthorRepository authorRepository
+            AuthorRepository authorRepository,
+            ManuscriptConferenceRepository conferenceRepository,
+            Clock clock
     ) {
         this.manuscriptRepository = manuscriptRepository;
         this.versionRepository = versionRepository;
         this.authorRepository = authorRepository;
+        this.conferenceRepository = conferenceRepository;
+        this.clock = clock;
     }
 
     @Transactional
     public ManuscriptResponse createManuscript(CurrentUserPrincipal principal, CreateManuscriptRequest request) {
         RoleGuard.requireRole(principal, "AUTHOR");
-        validateBlindMode(request.blindMode());
+        ConferenceSubmissionTarget conference = requireOpenSubmissionConference(request.conferenceId());
         validateAuthors(request.authors());
 
         long manuscriptId = manuscriptRepository.nextManuscriptId();
         long versionId = versionRepository.nextVersionId();
 
-        manuscriptRepository.insert(manuscriptId, principal.userId(), request.blindMode());
+        manuscriptRepository.insert(manuscriptId, principal.userId(), conference.conferenceId(), conference.blindMode());
         versionRepository.insert(
                 versionId,
                 manuscriptId,
@@ -99,6 +106,7 @@ public class ManuscriptService {
         ManuscriptRow manuscript = findOwnedManuscriptForUpdate(principal, manuscriptId);
         VersionRow version = findVersion(versionId);
         ensureVersionBelongsToManuscript(version, manuscriptId);
+        ensureSubmissionOpen(manuscript);
 
         if (!isPdf(file)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only PDF uploads are supported");
@@ -148,6 +156,7 @@ public class ManuscriptService {
         ManuscriptRow manuscript = findOwnedManuscriptForUpdate(principal, manuscriptId);
         VersionRow version = findVersion(versionId);
         ensureVersionBelongsToManuscript(version, manuscriptId);
+        ensureSubmissionOpen(manuscript);
 
         if (manuscript.currentVersionId() == null || manuscript.currentVersionId() != versionId) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only the current version can be submitted");
@@ -202,6 +211,7 @@ public class ManuscriptService {
         return manuscriptRepository.listBySubmitter(principal.userId()).stream()
                 .map(row -> new ManuscriptSummaryResponse(
                         row.manuscriptId(),
+                        row.conferenceId(),
                         row.currentVersionId(),
                         row.currentStatus(),
                         row.currentRoundNo(),
@@ -234,6 +244,7 @@ public class ManuscriptService {
         return new ManuscriptResponse(
                 manuscript.manuscriptId(),
                 manuscript.submitterId(),
+                manuscript.conferenceId(),
                 manuscript.currentVersionId() == null ? 0 : manuscript.currentVersionId(),
                 manuscript.currentStatus(),
                 manuscript.currentRoundNo(),
@@ -289,9 +300,32 @@ public class ManuscriptService {
         return false;
     }
 
-    private void validateBlindMode(String blindMode) {
-        if (blindMode == null || !VALID_BLIND_MODES.contains(blindMode)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid blind mode");
+    private ConferenceSubmissionTarget requireOpenSubmissionConference(Long conferenceId) {
+        if (conferenceId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Conference selection is required");
+        }
+        ConferenceSubmissionTarget conference = conferenceRepository.findSubmissionTarget(conferenceId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Conference not found"));
+        if (!VALID_BLIND_MODES.contains(conference.blindMode())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Conference blind mode is invalid");
+        }
+        if (!"OPEN_FOR_SUBMISSION".equals(conference.status())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Conference is not open for submission");
+        }
+        if (!Instant.now(clock).isBefore(conference.submissionCloseAt())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Conference submission deadline has passed");
+        }
+        return conference;
+    }
+
+    private void ensureSubmissionOpen(ManuscriptRow manuscript) {
+        if (manuscript.conferenceId() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Manuscript is not associated with a conference");
+        }
+        ConferenceSubmissionTarget conference = conferenceRepository.findSubmissionTarget(manuscript.conferenceId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Conference not found"));
+        if (!Instant.now(clock).isBefore(conference.submissionCloseAt())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Conference submission deadline has passed");
         }
     }
 

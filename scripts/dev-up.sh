@@ -107,6 +107,13 @@ apply_oracle_conference_cfp_lifecycle_schema() {
     >/dev/null
 }
 
+apply_oracle_conference_scoped_submission_schema() {
+  docker cp "$ROOT_DIR/database/oracle/015_conference_scoped_submission.sql" "$DEFAULT_ORACLE_CONTAINER:/tmp/015_conference_scoped_submission.sql" >/dev/null
+  docker exec "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE} @/tmp/015_conference_scoped_submission.sql" \
+    >/dev/null
+}
+
 oracle_column_exists() {
   local table_name="$1"
   local column_name="$2"
@@ -182,6 +189,11 @@ ensure_oracle_schema() {
   if ! oracle_table_exists "CONFERENCE"; then
     echo "Oracle schema detected without 014 conference CFP lifecycle objects. Applying incremental schema..." >&2
     apply_oracle_conference_cfp_lifecycle_schema
+  fi
+
+  if oracle_table_exists "MANUSCRIPT" && ! oracle_column_exists "MANUSCRIPT" "CONFERENCE_ID"; then
+    echo "Oracle schema detected without 015 conference-scoped submission objects. Applying incremental schema..." >&2
+    apply_oracle_conference_scoped_submission_schema
   fi
 
   if verify_oracle_schema; then

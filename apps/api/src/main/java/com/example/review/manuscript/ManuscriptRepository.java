@@ -18,22 +18,24 @@ public class ManuscriptRepository {
         return jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT.NEXTVAL FROM DUAL", Long.class);
     }
 
-    public void insert(long manuscriptId, long submitterId, String blindMode) {
+    public void insert(long manuscriptId, long submitterId, long conferenceId, String blindMode) {
         jdbcTemplate.update(
                 """
                 INSERT INTO MANUSCRIPT (
                   MANUSCRIPT_ID,
                   SUBMITTER_ID,
+                  CONFERENCE_ID,
                   CURRENT_VERSION_ID,
                   CURRENT_STATUS,
                   CURRENT_ROUND_NO,
                   BLIND_MODE,
                   SUBMITTED_AT,
                   LAST_DECISION_CODE
-                ) VALUES (?, ?, NULL, 'DRAFT', 0, ?, NULL, NULL)
+                ) VALUES (?, ?, ?, NULL, 'DRAFT', 0, ?, NULL, NULL)
                 """,
                 manuscriptId,
                 submitterId,
+                conferenceId,
                 blindMode
         );
     }
@@ -68,6 +70,7 @@ public class ManuscriptRepository {
                 """
                 SELECT M.MANUSCRIPT_ID,
                        M.SUBMITTER_ID,
+                       M.CONFERENCE_ID,
                        M.CURRENT_VERSION_ID,
                        M.CURRENT_STATUS,
                        M.CURRENT_ROUND_NO,
@@ -86,6 +89,7 @@ public class ManuscriptRepository {
                     return new ManuscriptRow(
                             rs.getLong("MANUSCRIPT_ID"),
                             rs.getLong("SUBMITTER_ID"),
+                            rs.getObject("CONFERENCE_ID", Long.class),
                             currentVersionId,
                             rs.getString("CURRENT_STATUS"),
                             rs.getInt("CURRENT_ROUND_NO"),
@@ -106,6 +110,7 @@ public class ManuscriptRepository {
                 """
                 SELECT M.MANUSCRIPT_ID,
                        M.SUBMITTER_ID,
+                       M.CONFERENCE_ID,
                        M.CURRENT_VERSION_ID,
                        M.CURRENT_STATUS,
                        M.CURRENT_ROUND_NO,
@@ -121,6 +126,7 @@ public class ManuscriptRepository {
                     return new ManuscriptRow(
                             rs.getLong("MANUSCRIPT_ID"),
                             rs.getLong("SUBMITTER_ID"),
+                            rs.getObject("CONFERENCE_ID", Long.class),
                             currentVersionId,
                             rs.getString("CURRENT_STATUS"),
                             rs.getInt("CURRENT_ROUND_NO"),
@@ -160,6 +166,7 @@ public class ManuscriptRepository {
         return jdbcTemplate.query(
                 """
                 SELECT M.MANUSCRIPT_ID,
+                       M.CONFERENCE_ID,
                        M.CURRENT_VERSION_ID,
                        M.CURRENT_STATUS,
                        M.CURRENT_ROUND_NO,
@@ -175,6 +182,7 @@ public class ManuscriptRepository {
                 """,
                 (rs, rowNum) -> new ManuscriptSummaryRow(
                         rs.getLong("MANUSCRIPT_ID"),
+                        rs.getObject("CONFERENCE_ID", Long.class),
                         rs.getLong("CURRENT_VERSION_ID"),
                         rs.getString("CURRENT_STATUS"),
                         rs.getInt("CURRENT_ROUND_NO"),
@@ -218,6 +226,7 @@ public class ManuscriptRepository {
 record ManuscriptRow(
         long manuscriptId,
         long submitterId,
+        Long conferenceId,
         Long currentVersionId,
         String currentStatus,
         int currentRoundNo,
@@ -231,6 +240,7 @@ record ManuscriptRow(
 
 record ManuscriptSummaryRow(
         long manuscriptId,
+        Long conferenceId,
         long currentVersionId,
         String currentStatus,
         int currentRoundNo,

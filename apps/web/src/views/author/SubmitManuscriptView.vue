@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import type { FormInstance, FormItemRule, FormRules, UploadFile } from "element-plus";
 import { ElMessage } from "element-plus";
-import { reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 
 import { useApiError } from "../../composables/useApiError";
 import { useAsyncAction } from "../../composables/useAsyncAction";
 import {
   createManuscript,
+  listPublicCfps,
   submitVersion,
   uploadPdf,
   type AuthorInput,
+  type ConferenceCfpSummary,
   type ManuscriptSummary
 } from "../../lib/workflow-api";
-import { statusTagType, workflowLabel } from "../../lib/workflow-format";
+import { formatDateTime, statusTagType, workflowLabel } from "../../lib/workflow-format";
 import { PDF_UPLOAD_LIMIT_ERROR, PDF_UPLOAD_LIMIT_HINT, PDF_UPLOAD_MAX_BYTES } from "../../lib/upload";
 
 const router = useRouter();
@@ -21,13 +23,16 @@ const submitting = ref(false);
 const actions = useAsyncAction();
 const { showApiError } = useApiError();
 const created = ref<ManuscriptSummary | null>(null);
+const conferences = ref<ConferenceCfpSummary[]>([]);
+const loadingConferences = ref(false);
 const selectedPdf = ref<File | null>(null);
 const draftFormRef = ref<FormInstance>();
 const form = reactive({
+  conferenceId: undefined as number | undefined,
   title: "",
   abstract: "",
   keywords: "",
-  blindMode: "DOUBLE_BLIND",
+  blindMode: "",
   authors: [
     {
       authorName: "Author Demo",
@@ -51,14 +56,18 @@ const requiredTrimmed = (message: string): FormItemRule => ({
   }
 });
 const draftRules: FormRules = {
+  conferenceId: [{ required: true, message: "Conference is required", trigger: "change" }],
   title: [requiredTrimmed("Title is required")],
   abstract: [requiredTrimmed("Abstract is required")],
-  keywords: [requiredTrimmed("Keywords are required")],
-  blindMode: [{ required: true, message: "Blind mode is required", trigger: "change" }]
+  keywords: [requiredTrimmed("Keywords are required")]
 };
 
+const selectedConference = computed(() =>
+  conferences.value.find((conference) => conference.conferenceId === form.conferenceId) ?? null
+);
+
 function hasRequiredDraftValues() {
-  return Boolean(form.title.trim() && form.abstract.trim() && form.keywords.trim() && form.blindMode);
+  return Boolean(form.conferenceId && form.title.trim() && form.abstract.trim() && form.keywords.trim());
 }
 
 function addAuthor() {
@@ -101,7 +110,16 @@ async function createDraft() {
   }
   submitting.value = true;
   try {
-    created.value = await createManuscript(form);
+    if (!form.conferenceId) {
+      return;
+    }
+    created.value = await createManuscript({
+      conferenceId: form.conferenceId,
+      title: form.title,
+      abstract: form.abstract,
+      keywords: form.keywords,
+      authors: form.authors
+    });
     ElMessage.success("Manuscript created.");
   } catch (error) {
     showApiError(error, "Manuscript could not be created.");
@@ -138,6 +156,28 @@ async function submitCurrentVersion() {
     }
   });
 }
+
+async function loadConferences() {
+  loadingConferences.value = true;
+  try {
+    conferences.value = await listPublicCfps();
+    if (!form.conferenceId && conferences.value.length > 0) {
+      form.conferenceId = conferences.value[0].conferenceId;
+    }
+  } catch (error) {
+    showApiError(error, "Conferences could not be loaded.");
+  } finally {
+    loadingConferences.value = false;
+  }
+}
+
+function formatDeadline(value: string | null | undefined) {
+  return formatDateTime(value);
+}
+
+onMounted(() => {
+  void loadConferences();
+});
 </script>
 
 <template>
@@ -152,8 +192,24 @@ async function submitCurrentVersion() {
     </div>
 
     <el-form ref="draftFormRef" class="workflow-form" :model="form" :rules="draftRules" label-position="top" @submit.prevent="createDraft">
+      <el-form-item label="Conference" prop="conferenceId">
+        <el-select v-model="form.conferenceId" data-test="manuscript-conference" :loading="loadingConferences" placeholder="Select conference">
+          <el-option
+            v-for="conference in conferences"
+            :key="conference.conferenceId"
+            :label="`${conference.name} ${conference.year}`"
+            :value="conference.conferenceId"
+          />
+        </el-select>
+      </el-form-item>
+      <el-alert v-if="selectedConference" class="workflow-alert compact-alert" type="info" :closable="false">
+        <template #title>
+          {{ selectedConference.name }} uses {{ workflowLabel(selectedConference.blindMode) }} review.
+        </template>
+        Submission closes {{ formatDeadline(selectedConference.submissionCloseAt) }}.
+      </el-alert>
       <el-form-item label="Title" prop="title">
-        <el-input v-model="form.title" />
+        <el-input v-model="form.title" placeholder="Title" />
       </el-form-item>
       <el-form-item label="Abstract" prop="abstract">
         <el-input v-model="form.abstract" type="textarea" :rows="5" />
@@ -161,14 +217,6 @@ async function submitCurrentVersion() {
       <el-form-item label="Keywords" prop="keywords">
         <el-input v-model="form.keywords" placeholder="comma,separated,keywords" />
       </el-form-item>
-      <el-form-item label="Blind mode" prop="blindMode">
-        <el-select v-model="form.blindMode">
-          <el-option label="Double blind" value="DOUBLE_BLIND" />
-          <el-option label="Single blind" value="SINGLE_BLIND" />
-          <el-option label="Open" value="OPEN" />
-        </el-select>
-      </el-form-item>
-
       <section class="subsection">
         <div class="subsection-heading">
           <h2>Authors</h2>

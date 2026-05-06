@@ -5,6 +5,7 @@ import java.sql.Timestamp;
 import java.util.List;
 
 record CreateManuscriptRequest(
+        Long conferenceId,
         String title,
         @JsonProperty("abstract") String abstractText,
         String keywords,
@@ -35,6 +36,7 @@ record AuthorRequest(
 record ManuscriptResponse(
         long manuscriptId,
         long submitterId,
+        Long conferenceId,
         long currentVersionId,
         String currentStatus,
         int currentRoundNo,
@@ -48,6 +50,7 @@ record ManuscriptResponse(
 
 record ManuscriptSummaryResponse(
         long manuscriptId,
+        Long conferenceId,
         long currentVersionId,
         String currentStatus,
         int currentRoundNo,

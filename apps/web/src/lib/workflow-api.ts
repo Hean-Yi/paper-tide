@@ -12,6 +12,7 @@ export interface AuthorInput {
 
 export interface ManuscriptSummary {
   manuscriptId: number;
+  conferenceId: number | null;
   currentVersionId: number;
   currentStatus: string;
   currentRoundNo: number;
@@ -138,6 +139,18 @@ export interface AdminAnalysisMonitorItem {
   projectionUpdatedAt: string | null;
 }
 
+export interface ConferenceCfpSummary {
+  conferenceId: number;
+  name: string;
+  acronym: string;
+  year: number;
+  status: string;
+  blindMode: string;
+  publicSlug: string;
+  submissionOpenAt: string | null;
+  submissionCloseAt: string | null;
+}
+
 export interface ReviewReportForm {
   noveltyScore: number;
   methodScore: number;
@@ -156,15 +169,20 @@ export function listManuscripts() {
   return apiRequest<ManuscriptSummary[]>("/manuscripts");
 }
 
+export function listPublicCfps() {
+  return apiRequest<ConferenceCfpSummary[]>("/conferences/cfp");
+}
+
 export function listVersions(manuscriptId: number) {
   return apiRequest<VersionSummary[]>(`/manuscripts/${manuscriptId}/versions`);
 }
 
 export function createManuscript(payload: {
+  conferenceId: number;
   title: string;
   abstract: string;
   keywords: string;
-  blindMode: string;
+  blindMode?: string;
   authors: AuthorInput[];
 }) {
   return apiRequest<ManuscriptSummary>("/manuscripts", { method: "POST", json: payload });

@@ -36,6 +36,7 @@ Reference comparison:
 In scope:
 
 - Three public registration types: Author, Reviewer, Organizer.
+- Organizer is a registration label only. Approval grants the existing global `CHAIR` role; the design does not add a separate global `ORGANIZER` role.
 - Admin-only platform administration; Admin is not publicly registered.
 - Reviewer and organizer approval before privileged access.
 - Conference creation, approval, CFP publishing, and fixed lifecycle states.
@@ -60,10 +61,10 @@ Reuse the existing `SYS_USER` and `SYS_ROLE` model. Add one lightweight profile/
 Public registration types:
 
 - `AUTHOR`: email verification activates the user and grants `AUTHOR`.
-- `REVIEWER`: user submits academic profile data and remains pending until Chair/Admin approval grants `REVIEWER`.
-- `ORGANIZER`: user submits organizer and planned conference data and remains pending until Admin approval grants `CHAIR`.
+- `REVIEWER`: user submits academic profile data and remains pending until Admin approval grants `REVIEWER`.
+- `ORGANIZER`: user submits organizer and planned conference data and remains pending until Admin approval grants the existing global `CHAIR` role.
 
-Admin accounts remain internal and are created by seed or privileged backend tooling.
+Admin accounts remain internal. The initial Admin should be created by a seed script after `002_seed_roles.sql`; later Admins are promoted from existing `ACTIVE` users by an existing Admin in the management console, not through public registration.
 
 Profile fields:
 
@@ -76,6 +77,12 @@ Profile fields:
 - reviewer capacity defaults
 - reviewed by, reviewed at, rejection reason
 
+Reviewer approval baseline:
+
+- Admin approval should require at least one verifiable academic profile URL or identifier.
+- Reviewer applications should include recent representative work metadata, such as up to five recent publication titles or profile-sourced publication evidence.
+- Rejection must store a reason so applicants and future Admin reviews are auditable.
+
 Approval statuses:
 
 - `PENDING_EMAIL_VERIFICATION`
@@ -85,6 +92,12 @@ Approval statuses:
 
 Implementation note: role assignment happens only after the approval rule for that registration type passes. This avoids letting pending reviewer or organizer accounts access privileged routes.
 
+Abuse controls:
+
+- Email verification tokens expire after 24 hours and are single-use.
+- Public registration and email-verification endpoints need rate limiting.
+- Optional institution-domain allowlists or blocklists may be configured for reviewer and organizer approval, but they are advisory unless an implementation slice explicitly makes them mandatory.
+
 ## Conference And CFP Model
 
 Add a compact conference layer instead of a configurable venue engine.
@@ -93,8 +106,21 @@ Core entities:
 
 - `CONFERENCE`: name, acronym, year, organizer user id, status, blind mode, CFP text, topic areas, target reviews per paper, default reviewer max load, public visibility fields.
 - `CONFERENCE_PHASE`: fixed phase timestamps for submission open/close, bidding open/close, review deadline, decision release.
-- `CONFERENCE_REVIEWER`: conference reviewer pool with user id, status, research-area snapshot, max load, current load, PC-member flag.
-- `MANUSCRIPT.CONFERENCE_ID`: manuscript belongs to one conference.
+- `CONFERENCE_REVIEWER`: conference reviewer pool with user id, status, research-area snapshot, max load, PC-member flag. Current load is derived from `REVIEW_ASSIGNMENT` counts at read time, not stored as a mutable counter.
+- `MANUSCRIPT.CONFERENCE_ID`: manuscript belongs to one conference for new submissions.
+
+Migration strategy:
+
+- Add `database/oracle/010_conference_onboarding.sql` after the existing `009_execution_job_attempt_count.sql`.
+- Add `MANUSCRIPT.CONFERENCE_ID` as nullable first to avoid breaking existing seed data and historical manuscripts.
+- Create a `Legacy / Platform Default` conference and backfill existing manuscripts to it in the migration.
+- After backfill and seed updates are stable, a later migration may tighten `MANUSCRIPT.CONFERENCE_ID` to `NOT NULL`.
+
+Blind mode ownership:
+
+- `CONFERENCE.BLIND_MODE` is the authority for new submissions.
+- `MANUSCRIPT.BLIND_MODE` remains as a denormalized snapshot copied from the conference at submission creation time, preserving existing workflow code and historical decisions.
+- Review and reviewer visibility checks should use the manuscript snapshot for the submitted version being reviewed.
 
 Conference lifecycle:
 
@@ -112,11 +138,12 @@ DRAFT
 
 Rules:
 
-- Only approved organizers/chairs can create conference drafts.
+- Only approved `CHAIR` users can create conference drafts.
 - Admin approval is required before a conference can become publicly visible.
 - Authors can submit only to `OPEN_FOR_SUBMISSION` conferences.
 - Existing manuscript/version/PDF validation continues to apply.
 - Review rounds remain the existing review execution unit, but they become conference-scoped through the manuscript.
+- Conference status transitions are triggered explicitly by Chair/Admin actions and must be idempotent. Phase timestamps are used for display and boundary validation; for example, the API rejects new submissions after `submission_close_at` even if the status has not yet been manually advanced.
 
 ## Reviewer Pool, Conflicts, And Bidding
 
@@ -124,20 +151,24 @@ Add only the data required for guided assignment.
 
 Reviewer pool:
 
-- Chair/Admin can invite or approve reviewers into a conference pool.
+- Reviewer registration approval creates membership in the platform reviewer pool only.
+- Chair/Admin can invite or approve platform-approved reviewers into a specific conference pool.
 - Reviewer membership stores max load and research-area snapshot for that conference.
 - A reviewer can be globally approved but not yet part of a specific conference.
 
 Conflict model:
 
 - First version supports institution/domain conflicts and manual declared conflicts.
+- Reuse `CONFLICT_CHECK_RECORD` rather than adding a parallel conflict table. The `010_conference_onboarding.sql` migration should extend it for pre-assignment use by allowing `ASSIGNMENT_ID` to be nullable and by expanding supported `CONFLICT_TYPE` values such as `INSTITUTION`, `DECLARED`, and `SELF_CITATION`.
+- Assignment-created conflict checks still populate `ASSIGNMENT_ID`; bidding and recommendation visibility checks may record manuscript/reviewer conflicts before an assignment exists.
 - Deterministic conflict checks block visibility during bidding and block assignment confirmation.
 - Later slices may extend conflict types, but final assignment must always call the deterministic backend guard.
 
 Bidding:
 
 - Bidding is allowed only in `BIDDING_OPEN`.
-- Reviewers see only non-conflicting manuscript title, abstract, keywords, and topic areas.
+- Reviewers see only non-conflicting, de-identified manuscript title, abstract, keywords, and topic areas.
+- Bidding previews must follow the same double-blind redaction policy as reviewer-facing paper access: no author names, institutions, acknowledgements, identifying links, or raw PDF download. If redacted metadata is not available, the API must generate or store a redacted metadata snapshot before exposing the paper for bidding.
 - Bid values: `EAGER`, `WILLING`, `NEUTRAL`, `NOT_WILLING`.
 - Bids influence recommendations but do not override hard constraints.
 
@@ -152,7 +183,7 @@ New concept:
 Flow:
 
 1. Chair moves the conference into `REVIEW_ASSIGNMENT`.
-2. API builds eligible candidates for each manuscript from the conference reviewer pool.
+2. API builds eligible candidates for the target manuscript from the conference reviewer pool.
 3. Hard filters remove non-reviewers, inactive reviewers, conflicted reviewers, and over-capacity reviewers.
 4. API computes a basic score from research-area overlap, bid value, current load, and target review count.
 5. Chair sees ranked candidates and can create or edit a draft.
@@ -173,7 +204,8 @@ REVIEWER_ASSIGNMENT_ASSIST
 
 Anchor:
 
-- First version anchors to `reviewRoundId`, because assignment is performed per review round.
+- First version anchors to the target manuscript version (`manuscriptId + versionId`) and includes `roundId` in the request payload for authorization and workflow context.
+- One assist request produces reviewer recommendations for one manuscript only. It does not perform cross-conference or all-submissions batch optimization.
 
 API responsibilities:
 
@@ -186,15 +218,15 @@ API responsibilities:
 
 Agent input payload:
 
-- conference id, round id, target reviews per paper, reviewer max-load policy
-- manuscript titles, abstracts, keywords, topic areas
+- conference id, manuscript id, version id, round id, target reviews per paper, reviewer max-load policy
+- manuscript title, abstract, keywords, topic areas
 - candidate reviewers with research areas, current load, max load, bid values
 - deterministic conflict-filter results
 - missing-data indicators
 
 Agent output:
 
-- recommended reviewer sets per manuscript
+- recommended reviewer set for the manuscript
 - ranked alternatives with explanation
 - risk flags for candidate shortage, weak topic coverage, low willingness, load imbalance, or dense conflicts
 - a proposed draft payload that Chair can copy into `ASSIGNMENT_DRAFT`
@@ -208,10 +240,10 @@ Keep the UI to five primary entry points:
 - Public CFP: conference list and conference detail pages visible before login.
 - Register: one page with Author, Reviewer, and Organizer tabs.
 - Author: existing manuscript screens plus conference selection and deadline visibility.
-- Organizer/Chair: a conference console for drafts, approval submission, phases, submissions, reviewer pool, bidding, assignment drafts, Agent assist, and decisions.
+- Chair: a conference console for drafts, approval submission, phases, submissions, reviewer pool, bidding, assignment drafts, Agent assist, and decisions. The public registration tab may be labeled Organizer, but the approved role is `CHAIR`.
 - Admin: one approval workbench for reviewer registrations, organizer registrations, and conference publication requests; keep existing Agent monitor.
 
-The current role-aware shell remains. Route metadata should follow backend role helpers: Author pages require `AUTHOR`, reviewer work requires `REVIEWER`, organizer/chair work requires `CHAIR` or `ADMIN`, and admin approval work requires `ADMIN`.
+The current role-aware shell remains. Route metadata should follow backend role helpers: Author pages require `AUTHOR`, reviewer work requires `REVIEWER`, Chair conference-console work requires `CHAIR` or `ADMIN`, and admin approval work requires `ADMIN`.
 
 ## Testing And Verification Strategy
 
@@ -222,9 +254,11 @@ Backend:
 - Conference lifecycle tests for allowed and rejected transitions.
 - Manuscript submission tests proving authors can submit only to open conferences.
 - Reviewer pool and bidding tests proving conflicted manuscripts are hidden.
+- Multi-conference isolation tests proving a reviewer for conference A cannot see conference B manuscripts in bidding or assignment views.
 - Assignment recommendation tests proving hard constraints are enforced before scoring.
 - Assignment confirmation tests proving Agent output cannot create invalid assignments.
 - Agent intent tests for `REVIEWER_ASSIGNMENT_ASSIST`.
+- Registration abuse-control tests for token expiry, single-use verification, and endpoint rate-limit hooks where implemented.
 
 Frontend:
 
@@ -246,8 +280,10 @@ Operational docs:
 ## Simplification Decisions
 
 - One profile/application layer, not separate application tables for each registration type.
+- Organizer is not a separate global role. It is the public registration path that grants the existing `CHAIR` role after Admin approval.
 - One conference entity with fixed phase timestamps, not arbitrary workflow configuration.
 - One conference reviewer pool, not a full PC/AC/SAC hierarchy.
+- Reviewer global approval is Admin-owned; conference-specific reviewer membership is Chair/Admin-owned inside that conference.
 - One bidding model with four values, not configurable bid scales.
 - One assignment draft model for system, Agent, and manual proposals.
 - One Agent type for reviewer assignment assistance, using the existing analysis platform.
@@ -255,5 +291,5 @@ Operational docs:
 
 ## Open Implementation Notes
 
-- The implementation plan should split this into small slices: registration, conference/CFP, conference-scoped submission, reviewer pool/conflicts/bidding, guided assignment, Agent assist, frontend integration, docs.
+- The implementation plan should split this into small slices: registration and abuse controls, conference/CFP schema and lifecycle, conference-scoped submission and legacy migration, reviewer pool/conflicts/bidding, guided assignment, Agent assist, frontend integration, docs.
 - The existing architecture-refactor stream is still active in the authoritative plan. This design should be planned as a new task group after the current active remediation/commit-separation work is resolved or explicitly paused.

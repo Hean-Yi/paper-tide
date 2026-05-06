@@ -86,6 +86,13 @@ apply_oracle_legacy_agent_retirement_schema() {
     >/dev/null
 }
 
+apply_oracle_registration_schema() {
+  docker cp "$ROOT_DIR/database/oracle/012_registration_foundation.sql" "$DEFAULT_ORACLE_CONTAINER:/tmp/012_registration_foundation.sql" >/dev/null
+  docker exec "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE} @/tmp/012_registration_foundation.sql" \
+    >/dev/null
+}
+
 oracle_column_exists() {
   local table_name="$1"
   local column_name="$2"
@@ -146,6 +153,11 @@ ensure_oracle_schema() {
   if oracle_table_exists "AGENT_ANALYSIS_TASK"; then
     echo "Oracle schema detected with retired legacy AGENT_* tables. Applying retirement schema..." >&2
     apply_oracle_legacy_agent_retirement_schema
+  fi
+
+  if ! oracle_table_exists "ROLE_APPLICATION"; then
+    echo "Oracle schema detected without 012 registration foundation objects. Applying incremental schema..." >&2
+    apply_oracle_registration_schema
   fi
 
   if verify_oracle_schema; then

@@ -1,0 +1,273 @@
+package com.example.review.registration;
+
+import com.example.review.auth.CurrentUserPrincipal;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Base64;
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class RegistrationService {
+    private static final String EMAIL_VERIFICATION_PURPOSE = "EMAIL_VERIFICATION";
+    private final RegistrationRepository repository;
+    private final PasswordEncoder passwordEncoder;
+    private final ObjectMapper objectMapper;
+    private final InMemoryVerificationEmailGateway emailGateway;
+    private final Clock clock;
+
+    public RegistrationService(
+            RegistrationRepository repository,
+            PasswordEncoder passwordEncoder,
+            ObjectMapper objectMapper,
+            InMemoryVerificationEmailGateway emailGateway,
+            Clock clock
+    ) {
+        this.repository = repository;
+        this.passwordEncoder = passwordEncoder;
+        this.objectMapper = objectMapper;
+        this.emailGateway = emailGateway;
+        this.clock = clock;
+    }
+
+    @Transactional
+    public RegistrationResponse register(RegistrationRequest request) {
+        RegistrationType type = RegistrationType.from(request.registrationType());
+        validateAccountFields(request);
+        validateProfileForPrivilegedRegistration(type, request.academicProfile());
+
+        if (repository.usernameExists(request.username())) {
+            throw new RegistrationValidationException("Username is already registered");
+        }
+        if (repository.emailExists(request.email())) {
+            throw new RegistrationValidationException("Email is already registered");
+        }
+
+        long userId = repository.createUser(new UserRegistrationDraft(
+                request.username().trim(),
+                passwordEncoder.encode(request.password()),
+                request.realName().trim(),
+                request.email().trim().toLowerCase(Locale.ROOT),
+                normalizeNullable(request.institution()),
+                "PENDING_EMAIL_VERIFICATION"
+        ));
+
+        if (request.academicProfile() != null) {
+            repository.saveAcademicProfile(userId, request.academicProfile());
+        }
+        repository.replaceResearchAreas(userId, request.researchAreas() == null ? List.of() : request.researchAreas());
+
+        long applicationId = repository.createRoleApplication(new RoleApplicationDraft(
+                userId,
+                type.name(),
+                "PENDING_EMAIL_VERIFICATION",
+                payloadSnapshot(request)
+        ));
+
+        String rawToken = newRawToken();
+        Instant expiresAt = Instant.now(clock).plus(24, ChronoUnit.HOURS);
+        repository.createEmailVerificationToken(new EmailVerificationTokenDraft(
+                userId,
+                applicationId,
+                hashToken(rawToken),
+                EMAIL_VERIFICATION_PURPOSE,
+                expiresAt
+        ));
+        emailGateway.sendVerificationEmail(new VerificationEmailMessage(
+                userId,
+                applicationId,
+                request.email().trim().toLowerCase(Locale.ROOT),
+                rawToken,
+                expiresAt
+        ));
+
+        return new RegistrationResponse(userId, applicationId, type.name(), "PENDING_EMAIL_VERIFICATION", true);
+    }
+
+    @Transactional
+    public EmailVerificationResponse verifyEmail(String rawToken) {
+        if (isBlank(rawToken)) {
+            throw new RegistrationValidationException("Verification token is required");
+        }
+
+        EmailVerificationTokenRecord token = repository.findVerificationToken(hashToken(rawToken))
+                .orElseThrow(() -> new RegistrationValidationException("Invalid verification token"));
+        if (token.consumed()) {
+            throw new RegistrationValidationException("Verification token has already been used");
+        }
+        if (token.expiresAt().isBefore(Instant.now(clock))) {
+            throw new RegistrationValidationException("Verification token has expired");
+        }
+
+        RoleApplicationRecord application = repository.findRoleApplication(token.roleApplicationId())
+                .orElseThrow(() -> new RegistrationNotFoundException("Role application was not found"));
+        RegistrationType type = RegistrationType.from(application.registrationType());
+
+        repository.consumeVerificationToken(token.tokenId());
+        repository.activateUser(token.userId());
+
+        String nextStatus;
+        if (type == RegistrationType.AUTHOR) {
+            nextStatus = "APPROVED";
+            repository.updateRoleApplicationStatus(application.applicationId(), nextStatus, null, null);
+            repository.grantRole(application.userId(), "AUTHOR");
+        } else {
+            nextStatus = "PENDING_ADMIN_APPROVAL";
+            repository.updateRoleApplicationStatus(application.applicationId(), nextStatus, null, null);
+        }
+
+        return new EmailVerificationResponse(application.userId(), application.applicationId(), type.name(), "ACTIVE", nextStatus);
+    }
+
+    public List<RoleApplicationRecord> listPendingAdminApplications(CurrentUserPrincipal principal) {
+        requireAdmin(principal);
+        return repository.listPendingAdminApplications();
+    }
+
+    @Transactional
+    public ApplicationReviewResponse approveApplication(
+            long applicationId,
+            CurrentUserPrincipal principal,
+            String rejectionReason
+    ) {
+        requireAdmin(principal);
+        RoleApplicationRecord application = repository.findRoleApplication(applicationId)
+                .orElseThrow(() -> new RegistrationNotFoundException("Role application was not found"));
+        if (!"PENDING_ADMIN_APPROVAL".equals(application.status())) {
+            throw new RegistrationValidationException("Only pending admin applications can be approved");
+        }
+
+        RegistrationType type = RegistrationType.from(application.registrationType());
+        if (type == RegistrationType.AUTHOR) {
+            throw new RegistrationValidationException("Author applications are approved by email verification");
+        }
+
+        String roleCode = type.grantedRole();
+        repository.updateRoleApplicationStatus(applicationId, "APPROVED", principal.userId(), rejectionReason);
+        repository.grantRole(application.userId(), roleCode);
+        return new ApplicationReviewResponse(applicationId, application.userId(), type.name(), "APPROVED", roleCode);
+    }
+
+    @Transactional
+    public ApplicationReviewResponse rejectApplication(
+            long applicationId,
+            CurrentUserPrincipal principal,
+            String rejectionReason
+    ) {
+        requireAdmin(principal);
+        if (isBlank(rejectionReason)) {
+            throw new RegistrationValidationException("Rejection reason is required");
+        }
+        RoleApplicationRecord application = repository.findRoleApplication(applicationId)
+                .orElseThrow(() -> new RegistrationNotFoundException("Role application was not found"));
+        if (!"PENDING_ADMIN_APPROVAL".equals(application.status())) {
+            throw new RegistrationValidationException("Only pending admin applications can be rejected");
+        }
+
+        repository.updateRoleApplicationStatus(applicationId, "REJECTED", principal.userId(), rejectionReason.trim());
+        return new ApplicationReviewResponse(applicationId, application.userId(), application.registrationType(), "REJECTED", null);
+    }
+
+    private void validateAccountFields(RegistrationRequest request) {
+        if (isBlank(request.username()) || isBlank(request.password()) || isBlank(request.realName()) || isBlank(request.email())) {
+            throw new RegistrationValidationException("Username, password, real name, and email are required");
+        }
+        if (request.password().length() < 6) {
+            throw new RegistrationValidationException("Password must be at least 6 characters");
+        }
+        if (!request.email().contains("@")) {
+            throw new RegistrationValidationException("Email is invalid");
+        }
+    }
+
+    private void requireAdmin(CurrentUserPrincipal principal) {
+        if (principal == null || !principal.roles().contains("ADMIN")) {
+            throw new RegistrationAccessException("ADMIN role is required");
+        }
+    }
+
+    private void validateProfileForPrivilegedRegistration(RegistrationType type, AcademicProfileRequest profile) {
+        if (type == RegistrationType.AUTHOR) {
+            return;
+        }
+        if (profile == null) {
+            throw new RegistrationValidationException("Academic profile is required");
+        }
+        boolean hasVerifiedProfile = !isBlank(profile.homepageUrl())
+                || !isBlank(profile.orcid())
+                || !isBlank(profile.dblpUrl())
+                || !isBlank(profile.googleScholarUrl());
+        boolean hasRepresentativeWork = profile.representativeWorks() != null && !profile.representativeWorks().isEmpty();
+        if (!hasVerifiedProfile || !hasRepresentativeWork) {
+            throw new RegistrationValidationException("Reviewer and organizer applications require academic evidence");
+        }
+    }
+
+    private String payloadSnapshot(RegistrationRequest request) {
+        try {
+            return objectMapper.writeValueAsString(request);
+        } catch (JsonProcessingException ex) {
+            throw new RegistrationValidationException("Registration payload could not be recorded");
+        }
+    }
+
+    static String hashToken(String rawToken) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(rawToken.getBytes(StandardCharsets.UTF_8));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is required", ex);
+        }
+    }
+
+    private String newRawToken() {
+        return Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8));
+    }
+
+    private String normalizeNullable(String value) {
+        return isBlank(value) ? null : value.trim();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private enum RegistrationType {
+        AUTHOR("AUTHOR"),
+        REVIEWER("REVIEWER"),
+        ORGANIZER("CHAIR");
+
+        private final String grantedRole;
+
+        RegistrationType(String grantedRole) {
+            this.grantedRole = grantedRole;
+        }
+
+        String grantedRole() {
+            return grantedRole;
+        }
+
+        static RegistrationType from(String value) {
+            if (value == null) {
+                throw new RegistrationValidationException("Registration type is required");
+            }
+            try {
+                return RegistrationType.valueOf(value.trim().toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException ex) {
+                throw new RegistrationValidationException("Registration type must be AUTHOR, REVIEWER, or ORGANIZER");
+            }
+        }
+    }
+}

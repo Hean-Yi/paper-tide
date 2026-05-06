@@ -21,6 +21,9 @@ BEGIN
      'SYS_ROLE',
      'SYS_USER_ROLE',
      'USER_RESEARCH_AREA',
+     'USER_ACADEMIC_PROFILE',
+     'ROLE_APPLICATION',
+     'EMAIL_VERIFICATION_TOKEN',
      'MANUSCRIPT',
      'MANUSCRIPT_VERSION',
      'MANUSCRIPT_AUTHOR',
@@ -50,6 +53,9 @@ BEGIN
      'SEQ_SYS_ROLE',
      'SEQ_SYS_USER_ROLE',
      'SEQ_USER_RESEARCH_AREA',
+     'SEQ_USER_ACADEMIC_PROFILE',
+     'SEQ_ROLE_APPLICATION',
+     'SEQ_EMAIL_VERIFICATION_TOKEN',
      'SEQ_MANUSCRIPT',
      'SEQ_MANUSCRIPT_VERSION',
      'SEQ_MANUSCRIPT_AUTHOR',
@@ -78,6 +84,9 @@ BEGIN
      'TRG_SYS_ROLE_BI',
      'TRG_SYS_USER_ROLE_BI',
      'TRG_USER_RESEARCH_AREA_BI',
+     'TRG_USER_ACADEMIC_PROFILE_BI',
+     'TRG_ROLE_APPLICATION_BI',
+     'TRG_EMAIL_VERIFICATION_TOKEN_BI',
      'TRG_MANUSCRIPT_BI',
      'TRG_MANUSCRIPT_VERSION_BI',
      'TRG_MANUSCRIPT_AUTHOR_BI',
@@ -107,6 +116,8 @@ BEGIN
    WHERE INDEX_NAME IN (
      'IDX_SYS_USER_STATUS',
      'IDX_SYS_USER_ROLE_ROLE',
+     'IDX_ROLE_APPLICATION_STATUS_TYPE',
+     'IDX_EMAIL_VERIFICATION_USER_APP',
      'IDX_MANUSCRIPT_SUBMITTER',
      'IDX_MANUSCRIPT_STATUS',
      'IDX_MANUSCRIPT_VERSION_SUBMITTED_BY',
@@ -159,6 +170,9 @@ BEGIN
        'TRG_SYS_ROLE_BI',
        'TRG_SYS_USER_ROLE_BI',
        'TRG_USER_RESEARCH_AREA_BI',
+       'TRG_USER_ACADEMIC_PROFILE_BI',
+       'TRG_ROLE_APPLICATION_BI',
+       'TRG_EMAIL_VERIFICATION_TOKEN_BI',
        'TRG_MANUSCRIPT_BI',
        'TRG_MANUSCRIPT_VERSION_BI',
        'TRG_MANUSCRIPT_AUTHOR_BI',
@@ -193,6 +207,9 @@ BEGIN
      'TRG_SYS_ROLE_BI',
      'TRG_SYS_USER_ROLE_BI',
      'TRG_USER_RESEARCH_AREA_BI',
+     'TRG_USER_ACADEMIC_PROFILE_BI',
+     'TRG_ROLE_APPLICATION_BI',
+     'TRG_EMAIL_VERIFICATION_TOKEN_BI',
      'TRG_MANUSCRIPT_BI',
      'TRG_MANUSCRIPT_VERSION_BI',
      'TRG_MANUSCRIPT_AUTHOR_BI',
@@ -228,24 +245,24 @@ BEGIN
    WHERE TABLE_NAME = 'EXECUTION_JOB'
      AND COLUMN_NAME = 'ATTEMPT_COUNT';
 
-  IF v_table_count <> 23 THEN
-    RAISE_APPLICATION_ERROR(-20001, 'Expected 23 tables, found ' || v_table_count);
+  IF v_table_count <> 26 THEN
+    RAISE_APPLICATION_ERROR(-20001, 'Expected 26 tables, found ' || v_table_count);
   END IF;
 
-  IF v_sequence_count <> 22 THEN
-    RAISE_APPLICATION_ERROR(-20002, 'Expected 22 sequences, found ' || v_sequence_count);
+  IF v_sequence_count <> 25 THEN
+    RAISE_APPLICATION_ERROR(-20002, 'Expected 25 sequences, found ' || v_sequence_count);
   END IF;
 
-  IF v_trigger_count <> 25 THEN
-    RAISE_APPLICATION_ERROR(-20003, 'Expected 25 triggers, found ' || v_trigger_count);
+  IF v_trigger_count <> 28 THEN
+    RAISE_APPLICATION_ERROR(-20003, 'Expected 28 triggers, found ' || v_trigger_count);
   END IF;
 
   IF v_procedure_count <> 2 THEN
     RAISE_APPLICATION_ERROR(-20004, 'Expected 2 procedures, found ' || v_procedure_count);
   END IF;
 
-  IF v_index_count <> 34 THEN
-    RAISE_APPLICATION_ERROR(-20005, 'Expected 34 indexes, found ' || v_index_count);
+  IF v_index_count <> 36 THEN
+    RAISE_APPLICATION_ERROR(-20005, 'Expected 36 indexes, found ' || v_index_count);
   END IF;
 
   IF v_role_count <> 4 THEN

@@ -118,6 +118,8 @@ BEGIN
      'IDX_SYS_USER_ROLE_ROLE',
      'IDX_ROLE_APPLICATION_STATUS_TYPE',
      'IDX_EMAIL_VERIFICATION_USER_APP',
+     'IDX_EMAIL_VERIFICATION_EXPIRES',
+     'IDX_EMAIL_VERIFICATION_USER_PURPOSE',
      'IDX_MANUSCRIPT_SUBMITTER',
      'IDX_MANUSCRIPT_STATUS',
      'IDX_MANUSCRIPT_VERSION_SUBMITTED_BY',
@@ -261,8 +263,8 @@ BEGIN
     RAISE_APPLICATION_ERROR(-20004, 'Expected 2 procedures, found ' || v_procedure_count);
   END IF;
 
-  IF v_index_count <> 36 THEN
-    RAISE_APPLICATION_ERROR(-20005, 'Expected 36 indexes, found ' || v_index_count);
+  IF v_index_count <> 38 THEN
+    RAISE_APPLICATION_ERROR(-20005, 'Expected 38 indexes, found ' || v_index_count);
   END IF;
 
   IF v_role_count <> 4 THEN

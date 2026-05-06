@@ -74,6 +74,31 @@ record RoleApplicationRecord(
 ) {
 }
 
+record RoleApplicationDetail(
+        long applicationId,
+        long userId,
+        String registrationType,
+        String status,
+        String rejectionReason,
+        Instant submittedAt,
+        String username,
+        String realName,
+        String email,
+        String institution,
+        String homepageUrl,
+        String orcid,
+        String dblpUrl,
+        String googleScholarUrl,
+        List<String> representativeWorks,
+        List<String> conflictDomains,
+        String plannedConferenceTitle,
+        List<ResearchAreaSummary> researchAreas
+) {
+}
+
+record ResearchAreaSummary(String areaCode, String areaName) {
+}
+
 record UserRegistrationDraft(
         String username,
         String passwordHash,
@@ -82,6 +107,9 @@ record UserRegistrationDraft(
         String institution,
         String status
 ) {
+}
+
+record ExistingUserSummary(long userId, String username, String email, String status) {
 }
 
 record RoleApplicationDraft(

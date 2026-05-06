@@ -28,7 +28,21 @@ interface RegistrationRepository {
 
     List<RoleApplicationRecord> listPendingAdminApplications();
 
+    List<RoleApplicationDetail> listPendingAdminApplicationDetails();
+
     void updateRoleApplicationStatus(long applicationId, String status, Long reviewedBy, String rejectionReason);
 
     void grantRole(long userId, String roleCode);
+
+    int deleteExpiredTokens(java.time.Instant cutoff);
+
+    Optional<ExistingUserSummary> findUserByEmail(String email);
+
+    Optional<RoleApplicationRecord> findApplicationByUserAndType(long userId, String registrationType);
+
+    void resetUserForResubmit(long userId, String passwordHash, String realName, String institution);
+
+    void resetRoleApplicationToPending(long applicationId, String payloadSnapshot);
+
+    void clearUnconsumedVerificationTokens(long applicationId);
 }

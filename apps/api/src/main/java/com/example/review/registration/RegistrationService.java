@@ -13,6 +13,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -50,18 +51,26 @@ public class RegistrationService {
         validateAccountFields(request);
         validateProfileForPrivilegedRegistration(type, request.academicProfile());
 
-        if (repository.usernameExists(request.username())) {
+        String normalizedEmail = request.email().trim().toLowerCase(Locale.ROOT);
+        String normalizedUsername = request.username().trim();
+        Optional<ExistingUserSummary> existing = repository.findUserByEmail(normalizedEmail);
+
+        if (existing.isPresent() && resubmitAllowed(existing.get(), normalizedUsername, type)) {
+            return resubmitRejectedApplication(existing.get(), type, request);
+        }
+
+        if (repository.usernameExists(normalizedUsername)) {
             throw new RegistrationValidationException("Username is already registered");
         }
-        if (repository.emailExists(request.email())) {
+        if (existing.isPresent()) {
             throw new RegistrationValidationException("Email is already registered");
         }
 
         long userId = repository.createUser(new UserRegistrationDraft(
-                request.username().trim(),
+                normalizedUsername,
                 passwordEncoder.encode(request.password()),
                 request.realName().trim(),
-                request.email().trim().toLowerCase(Locale.ROOT),
+                normalizedEmail,
                 normalizeNullable(request.institution()),
                 "PENDING_EMAIL_VERIFICATION"
         ));
@@ -78,6 +87,49 @@ public class RegistrationService {
                 payloadSnapshot(request)
         ));
 
+        issueVerificationEmail(userId, applicationId, normalizedEmail);
+
+        return new RegistrationResponse(userId, applicationId, type.name(), "PENDING_EMAIL_VERIFICATION", true);
+    }
+
+    private boolean resubmitAllowed(ExistingUserSummary existing, String normalizedUsername, RegistrationType type) {
+        if (!existing.username().equals(normalizedUsername)) {
+            return false;
+        }
+        Optional<RoleApplicationRecord> application = repository.findApplicationByUserAndType(existing.userId(), type.name());
+        return application.isPresent() && "REJECTED".equals(application.get().status());
+    }
+
+    private RegistrationResponse resubmitRejectedApplication(
+            ExistingUserSummary existing,
+            RegistrationType type,
+            RegistrationRequest request
+    ) {
+        RoleApplicationRecord application = repository.findApplicationByUserAndType(existing.userId(), type.name())
+                .orElseThrow(() -> new RegistrationValidationException("Role application was not found"));
+        String normalizedEmail = existing.email().toLowerCase(Locale.ROOT);
+
+        repository.resetUserForResubmit(
+                existing.userId(),
+                passwordEncoder.encode(request.password()),
+                request.realName().trim(),
+                normalizeNullable(request.institution())
+        );
+        if (request.academicProfile() != null) {
+            repository.saveAcademicProfile(existing.userId(), request.academicProfile());
+        }
+        repository.replaceResearchAreas(existing.userId(),
+                request.researchAreas() == null ? List.of() : request.researchAreas());
+        repository.resetRoleApplicationToPending(application.applicationId(), payloadSnapshot(request));
+        repository.clearUnconsumedVerificationTokens(application.applicationId());
+
+        issueVerificationEmail(existing.userId(), application.applicationId(), normalizedEmail);
+
+        return new RegistrationResponse(existing.userId(), application.applicationId(),
+                type.name(), "PENDING_EMAIL_VERIFICATION", true);
+    }
+
+    private void issueVerificationEmail(long userId, long applicationId, String normalizedEmail) {
         String rawToken = newRawToken();
         Instant expiresAt = Instant.now(clock).plus(24, ChronoUnit.HOURS);
         repository.createEmailVerificationToken(new EmailVerificationTokenDraft(
@@ -90,12 +142,10 @@ public class RegistrationService {
         emailGateway.sendVerificationEmail(new VerificationEmailMessage(
                 userId,
                 applicationId,
-                request.email().trim().toLowerCase(Locale.ROOT),
+                normalizedEmail,
                 rawToken,
                 expiresAt
         ));
-
-        return new RegistrationResponse(userId, applicationId, type.name(), "PENDING_EMAIL_VERIFICATION", true);
     }
 
     @Transactional
@@ -135,6 +185,11 @@ public class RegistrationService {
     public List<RoleApplicationRecord> listPendingAdminApplications(CurrentUserPrincipal principal) {
         requireAdmin(principal);
         return repository.listPendingAdminApplications();
+    }
+
+    public List<RoleApplicationDetail> listPendingAdminApplicationDetails(CurrentUserPrincipal principal) {
+        requireAdmin(principal);
+        return repository.listPendingAdminApplicationDetails();
     }
 
     @Transactional

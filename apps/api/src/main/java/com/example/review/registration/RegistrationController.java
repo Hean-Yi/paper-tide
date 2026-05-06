@@ -42,11 +42,11 @@ public class RegistrationController {
     }
 
     @GetMapping("/admin/role-applications")
-    public List<RoleApplicationRecord> listPendingRoleApplications(
+    public List<RoleApplicationDetail> listPendingRoleApplications(
             @AuthenticationPrincipal CurrentUserPrincipal principal
     ) {
         try {
-            return registrationService.listPendingAdminApplications(principal);
+            return registrationService.listPendingAdminApplicationDetails(principal);
         } catch (RegistrationAccessException ex) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage());
         }

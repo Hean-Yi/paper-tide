@@ -138,6 +138,44 @@ class RegistrationServiceTest {
     }
 
     @Test
+    void rejectedReviewerMayResubmitSameApplicationRow() {
+        RegistrationResponse first = service.register(reviewerRequest("retry_reviewer", "retry@example.com"));
+        service.verifyEmail(emailGateway.messages().getFirst().rawToken());
+        service.rejectApplication(first.applicationId(), adminPrincipal(), "Evidence too thin");
+
+        RegistrationResponse second = service.register(reviewerRequest("retry_reviewer", "retry@example.com"));
+
+        assertEquals(first.userId(), second.userId());
+        assertEquals(first.applicationId(), second.applicationId());
+        assertEquals("PENDING_EMAIL_VERIFICATION", second.applicationStatus());
+        assertEquals(2, emailGateway.messages().size());
+        RoleApplicationRecord application = repository.applications.get(first.applicationId());
+        assertEquals("PENDING_EMAIL_VERIFICATION", application.status());
+        assertTrue(application.rejectionReason() == null);
+    }
+
+    @Test
+    void resubmitIsRejectedWhenUsernameDoesNotMatch() {
+        RegistrationResponse first = service.register(reviewerRequest("original_user", "dupe@example.com"));
+        service.verifyEmail(emailGateway.messages().getFirst().rawToken());
+        service.rejectApplication(first.applicationId(), adminPrincipal(), "Evidence too thin");
+
+        RegistrationRequest mismatched = new RegistrationRequest(
+                "REVIEWER",
+                "hijacker",
+                "demo123",
+                "Hijacker",
+                "dupe@example.com",
+                "Somewhere",
+                new AcademicProfileRequest("https://x.example.edu/", null, null, null,
+                        List.of("Work"), List.of(), 3, null),
+                List.of()
+        );
+
+        assertThrows(RegistrationValidationException.class, () -> service.register(mismatched));
+    }
+
+    @Test
     void reviewerRegistrationRequiresVerifiableAcademicEvidence() {
         RegistrationRequest request = new RegistrationRequest(
                 "REVIEWER",
@@ -310,6 +348,29 @@ class RegistrationServiceTest {
         }
 
         @Override
+        public List<RoleApplicationDetail> listPendingAdminApplicationDetails() {
+            return applications.values().stream()
+                    .filter(application -> "PENDING_ADMIN_APPROVAL".equals(application.status()))
+                    .map(application -> {
+                        FakeUser user = users.get(application.userId());
+                        return new RoleApplicationDetail(
+                                application.applicationId(),
+                                application.userId(),
+                                application.registrationType(),
+                                application.status(),
+                                application.rejectionReason(),
+                                Instant.parse("2026-05-06T00:00:00Z"),
+                                user == null ? null : user.username(),
+                                user == null ? null : user.realName(),
+                                user == null ? null : user.email(),
+                                user == null ? null : user.institution(),
+                                null, null, null, null, List.of(), List.of(), null, List.of()
+                        );
+                    })
+                    .toList();
+        }
+
+        @Override
         public void updateRoleApplicationStatus(long applicationId, String status, Long reviewedBy, String rejectionReason) {
             RoleApplicationRecord application = applications.get(applicationId);
             applications.put(applicationId, new RoleApplicationRecord(application.applicationId(), application.userId(),
@@ -322,6 +383,54 @@ class RegistrationServiceTest {
             if (!rolesByUser.get(userId).contains(roleCode)) {
                 rolesByUser.get(userId).add(roleCode);
             }
+        }
+
+        @Override
+        public Optional<ExistingUserSummary> findUserByEmail(String email) {
+            return users.values().stream()
+                    .filter(user -> user.email().equalsIgnoreCase(email))
+                    .findFirst()
+                    .map(user -> new ExistingUserSummary(user.userId(), user.username(), user.email(), user.status()));
+        }
+
+        @Override
+        public Optional<RoleApplicationRecord> findApplicationByUserAndType(long userId, String registrationType) {
+            return applications.values().stream()
+                    .filter(application -> application.userId() == userId
+                            && application.registrationType().equals(registrationType))
+                    .findFirst();
+        }
+
+        @Override
+        public void resetUserForResubmit(long userId, String passwordHash, String realName, String institution) {
+            FakeUser user = users.get(userId);
+            users.put(userId, new FakeUser(user.userId(), user.username(), passwordHash, realName,
+                    user.email(), institution, "PENDING_EMAIL_VERIFICATION"));
+        }
+
+        @Override
+        public void resetRoleApplicationToPending(long applicationId, String payloadSnapshot) {
+            RoleApplicationRecord application = applications.get(applicationId);
+            applications.put(applicationId, new RoleApplicationRecord(application.applicationId(), application.userId(),
+                    application.registrationType(), "PENDING_EMAIL_VERIFICATION", null, null, null));
+        }
+
+        @Override
+        public void clearUnconsumedVerificationTokens(long applicationId) {
+            for (int i = 0; i < tokens.size(); i++) {
+                EmailVerificationTokenRecord token = tokens.get(i);
+                if (token.roleApplicationId() == applicationId && !token.consumed()) {
+                    tokens.set(i, new EmailVerificationTokenRecord(token.tokenId(), token.userId(),
+                            token.roleApplicationId(), token.tokenHash(), token.purpose(), token.expiresAt(), true));
+                }
+            }
+        }
+
+        @Override
+        public int deleteExpiredTokens(Instant cutoff) {
+            int before = tokens.size();
+            tokens.removeIf(token -> token.expiresAt().isBefore(cutoff));
+            return before - tokens.size();
         }
     }
 }

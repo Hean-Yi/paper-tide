@@ -54,6 +54,12 @@
 - RabbitMQ bootstrap hardening completed on 2026-04-23: `scripts/rabbitmq-up.sh` now keeps the broker container for restart/log inspection, waits through a startup grace window, checks state via `docker inspect`, and retries once with a clean container before failing. Verification: `bash -n scripts/rabbitmq-up.sh`, `bash scripts/rabbitmq-up.sh --optional`, and `bash scripts/dev-up.sh`.
 - Non-agent frontend loading-state cleanup completed on 2026-04-14 with successful Vitest, `vue-tsc`, and Vite build verification.
 - Non-agent frontend API error feedback cleanup completed on 2026-04-14 with successful frontend verification and `git diff --check`.
+- Review editor visual hardening completed on 2026-04-27: the reviewer workspace now uses a narrower bounded assist sidebar, collapses to a reader-only layout, and keeps the review score inputs in a side-panel-friendly grid so the sidebar no longer overflows the `Review editor` width. Verification: `cd apps/web && npm run test -- --run`, `cd apps/web && npm run typecheck`, and `cd apps/web && npm run build`.
+- Review editor width follow-up completed on 2026-04-27: the reviewer workspace now widens the main shell only for `Review editor`, trims the assist rail width again, and lets the PDF reader consume more of the remaining left-side space without changing other workflow pages. Verification: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts`, `cd apps/web && npm run typecheck`, and `cd apps/web && npm run build`.
+- Review editor reader-height follow-up completed on 2026-04-27: the reviewer PDF reader now allocates the preview frame as the flexible remainder of the left column and raises its default minimum height so the rendered page occupies more of the reading area vertically. Verification: `cd apps/web && npm run build` and `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts`.
+- Review editor reader-overflow follow-up completed on 2026-04-27: the reviewer PDF preview frame now uses border-box sizing so its `height: 100%` constraint includes padding and border, preventing the small bottom overflow past the left-column boundary. Verification: `cd apps/web && npm run build`.
+- Review editor assist-rail width follow-up completed on 2026-04-27: the reviewer assist rail is widened again and the `Agent Trace` action row now stays horizontally aligned on desktop widths so `Run review assistant`, `Refresh`, and the status chip fit on one line. Verification: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts` and `cd apps/web && npm run build`.
+- Review editor column-balance follow-up completed on 2026-04-27: the desktop review workspace now uses a proportional two-column grid that narrows the left reader column and grants the assist rail a larger bounded share, keeping the right rail inside the `Review editor` container width. Verification: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts` and `cd apps/web && npm run build`.
 - Documentation onboarding and optimization pack completed on 2026-04-13 across `README.md`, `CONTRIBUTING.md`, `TODO.md`, `docs/PROJECT_GUIDE.md`, and the expanded `docs/` bundle.
 - Demo documentation pack completed on 2026-04-13 under `docs/demo/`.
 - Architecture refactor design completed on 2026-04-22 in `docs/superpowers/specs/2026-04-22-agent-platform-boundary-and-execution-refactor-design.md`. The approved direction replaces mirrored API/Agent task ownership with a split-sovereignty model: `apps/api` owns business intent and result projections, `services/agent` owns execution jobs and platform governance, and RabbitMQ plus outbox/inbox patterns become the inter-service coordination backbone.
@@ -230,15 +236,26 @@
 
 ### Task 12: Demo and Visual Hardening Design
 
-**Status:** Designed on 2026-04-13; implementation state remains partial and scoped by later priorities.
+**Status:** Designed on 2026-04-13; partial frontend visual hardening update executed on 2026-04-27.
 
 **What changed:**
 
 - Captured the approved e2e and demo direction in a dedicated design doc.
+- Updated the reviewer `Review editor` workspace so the assist area can be collapsed away completely, leaving only `Secure Paper Reader`.
+- Reduced and bounded the right-side assist rail width and adapted the review score grid to two columns so the side panel plus reader stay visually contained within the page shell.
+- Added a follow-up layout pass that widens the application shell only on the reviewer `Review editor` route and slightly trims the assist rail again so the PDF pane occupies more horizontal space.
+- Added a second reader-layout follow-up that makes the PDF preview frame fill the remaining left-column height instead of staying at a comparatively short fixed viewport slice.
+- Added a small constraint follow-up so the preview frame height calculation includes its own padding and border instead of overshooting the left-column boundary.
+- Added a right-rail width follow-up so the `Agent Trace` controls fit horizontally without wrapping while preserving the mobile stacked layout.
+- Added a column-balance follow-up so the left reader yields width to the assist rail on desktop instead of letting the right side feel visually pushed past the review workspace boundary.
 
 **Verification run:**
 
 - Design review and later local operational checks
+- `cd apps/web && npm run test -- --run`
+- `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts`
+- `cd apps/web && npm run typecheck`
+- `cd apps/web && npm run build`
 
 ### Task 13: Architecture Refactor Design For Agent Platform Split Sovereignty
 
@@ -1627,6 +1644,14 @@ git commit -m "fix: complete analysis platform remediation program"
     - `cd services/agent && ../../.venv/bin/python -m pytest tests -q` passed with the existing LangGraph deprecation warnings.
     - Live SiliconFlow smoke test against `Qwen/Qwen3-VL-32B-Thinking` passed after network approval and returned a `SCREENING_ANALYSIS` payload.
   - Current completion state: Agent LLM calls now use the `.env` provider configuration, and local tests remain offline by default.
+- Author workflow feedback hardening completed on 2026-04-27:
+  - Rechecked the Author manuscript list actions against the live manuscript endpoints and confirmed the frontend route-to-API mapping already matched the backend for upload, download, and submit.
+  - Fixed `apps/web/src/views/author/ManuscriptListView.vue` so upload, download, submit, and revision-creation actions no longer use bare awaited calls; they now route failures through the shared API error presenter and expose per-row loading states.
+  - Added a focused regression in `apps/web/src/tests/workflow.spec.ts` that proves manuscript download and submit failures surface user-facing error messages instead of failing silently.
+  - Verification:
+    - `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts` passed.
+    - Editor diagnostics reported no errors in the touched Vue and test files.
+  - Current completion state: Author manuscript actions now provide explicit feedback when backend state or file prerequisites reject the request, so missing-PDF and missing-file cases no longer appear as no-ops.
 
 ## Plan Self-Review
 
@@ -1733,3 +1758,370 @@ git commit -m "fix: complete analysis platform remediation program"
 - Current completion state:
   - API and Agent now have opt-in runnable message lifecycle wiring.
   - The remaining open cross-cutting item is repository-level verification against real Oracle + RabbitMQ and inclusion of that path in `scripts/test-all.sh`; this remains tracked in `TODO.md`.
+
+### Task 22: Author PDF Upload Limit Alignment
+
+**Status:** Completed as a focused UX/runtime alignment slice on 2026-04-27.
+
+**Scope:**
+
+- Resolve author-facing `413 Payload Too Large` uploads by aligning the framework multipart ceiling with the manuscript service PDF limit.
+- Reassess the PDF cap against mainstream conference systems and expose the chosen limit directly in the author UI.
+
+**Execution notes, 2026-04-27:**
+
+- Verified the local mismatch first: `ManuscriptService` enforced a 50MB business rule, but `application.yml` did not set `spring.servlet.multipart` limits, leaving uploads vulnerable to framework-level rejection before service validation.
+- Checked public platform guidance before changing the cap:
+  - OpenReview publicly documents a 100MB upload maximum.
+  - HotCRP exposes submission upload sizing as an admin-controlled setting rather than a fixed tiny default.
+- Implemented the green slice:
+  - raised the manuscript PDF business limit from 50MB to 100MB
+  - added Spring multipart `max-file-size: 100MB` and `max-request-size: 110MB`
+  - added shared frontend upload-limit constants
+  - surfaced the 100MB cap on both author upload screens
+  - added client-side oversize checks so authors get an immediate message before the request is sent
+- Verification:
+  - `cd apps/api && mvn -Dtest=ManuscriptServiceTest test` passed: 11 tests, 0 failures, 0 errors.
+  - `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts` passed: 1 file, 26 tests.
+- Current completion state:
+  - The upload limit is now aligned across UI hinting, client-side validation, Spring multipart handling, and backend business validation in code.
+
+### Task 23: Empty Success Body Handling In Frontend API Client
+
+**Status:** Completed as a focused frontend correctness slice on 2026-04-27.
+
+**Scope:**
+
+- Resolve the browser-side `Failed to execute 'json' on 'Response': Unexpected end of JSON input` error triggered after successful mutation requests that return an empty body.
+- Keep shared API parsing logic aligned with backend endpoints such as manuscript PDF upload that intentionally return `ResponseEntity<Void>`.
+
+**Execution notes, 2026-04-27:**
+
+- Reproduced the local root cause from code inspection:
+  - backend manuscript PDF upload returns `200 OK` with an empty response body
+  - frontend `apiRequest(...)` unconditionally called `response.json()` for all non-`204` success responses
+- Implemented the green slice:
+  - taught `apiRequest(...)` to return `undefined` for `Content-Length: 0` success responses
+  - added a defensive fallback for empty-body JSON parse `SyntaxError`
+  - added a focused frontend test proving successful empty responses resolve as `undefined`
+- Verification:
+  - `cd apps/web && npm run test -- --run src/tests/login.spec.ts` passed: 1 file, 10 tests.
+- Current completion state:
+  - successful empty-body mutation responses no longer surface client-side JSON parse errors in the shared frontend API layer.
+
+### Task 24: Reviewer Assist Progress Feedback And Review Editor Layout
+
+**Status:** Completed as a focused reviewer UX slice on 2026-04-27.
+
+**Design reference:** `docs/superpowers/specs/2026-04-27-reviewer-assist-progress-and-editor-layout-design.md`
+
+**Scope:**
+
+- Add immediate "request submitted / analysis in progress" feedback after reviewer assist is started.
+- Poll the assignment-scoped reviewer assist API until a projection is available or a failed status is returned.
+- Show a lightweight animated in-progress treatment and explicit error/Retry states.
+- Rebalance the Review editor layout toward the paper reader, make the right panel collapsible, and collapse Assignment details by default.
+
+**Files:**
+
+- Modify: `apps/web/src/components/reviewer/ReviewerAgentPanel.vue`
+- Modify: `apps/web/src/views/reviewer/ReviewEditorView.vue`
+- Modify: `apps/web/src/style.css`
+- Modify: `apps/web/src/tests/workflow.spec.ts`
+- Modify: `docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md`
+
+- [x] **Step 1: Write failing frontend tests for reviewer assist progress and editor layout**
+
+Run: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts`
+
+Expected before implementation: focused assertions fail because the in-progress status, polling behavior, failed Retry state, default-collapsed Assignment panel, and collapsible right panel are not implemented.
+
+- [x] **Step 2: Implement reviewer assist polling and progress UI**
+
+Update `ReviewerAgentPanel.vue` to keep the returned intent visible, start a bounded polling loop after POST success, show an animated progress block while status is pending, stop timers on unmount/assignment changes, and show Retry for failed visible states.
+
+- [x] **Step 3: Implement the Review editor layout changes**
+
+Update `ReviewEditorView.vue` and `style.css` so Assignment details are collapsed by default, the side panel can be collapsed, the reader receives the dominant desktop width, and the workspace stays aligned to the header width.
+
+- [x] **Step 4: Run focused frontend verification**
+
+Run: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts`
+
+Expected after implementation: workflow spec passes.
+
+- [x] **Step 5: Run frontend typecheck and build**
+
+Run:
+
+```bash
+cd apps/web && npm run typecheck
+cd apps/web && npm run build
+```
+
+Expected after implementation: both commands pass.
+
+**Execution notes, 2026-04-27:**
+
+- Root cause confirmed from the red test run:
+  - POST `/review-assignments/{assignmentId}/agent-assist` accepted the request, but the frontend performed only one follow-up GET and rendered the empty-state alert while asynchronous execution was still pending.
+  - `FAILED_VISIBLE` states exposed Retry but did not include an explicit failure explanation.
+  - Review editor layout used a broad right column and always-open Assignment descriptions, leaving the reader visually compressed.
+- Implemented the green slice:
+  - `ReviewerAgentPanel.vue` now preserves the returned intent, shows "Analysis in progress" immediately, renders a shimmer/pulse progress animation, polls every three seconds until projection availability or failure, and clears polling on assignment changes or unmount.
+  - Reviewer assist projections now show `summaryText` before the structured redacted JSON.
+  - `ReviewEditorView.vue` now provides a collapsible right panel and default-collapsed Assignment details with a compact summary.
+  - `style.css` now gives the reader the dominant desktop width, keeps the workspace aligned to the page header, and styles the progress animation and collapsed assignment block.
+  - `workflow-format.ts` now treats `FAILED_VISIBLE` as a danger status.
+  - `AGENTS.md` now captures the reusable lesson for actor-facing asynchronous agent actions.
+- Verification:
+  - Red run before implementation: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts` failed with three expected assertions for missing progress, failure feedback, and layout controls.
+  - Green run after implementation: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts` passed: 1 file, 29 tests.
+  - `cd apps/web && npm run typecheck` passed.
+  - `cd apps/web && npm run build` passed; Vite reported the existing large chunk warning.
+  - API use-case check: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=RequestReviewerAssistUseCaseTest test` passed.
+  - Oracle-backed API flow check attempted with `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=RequestReviewerAssistUseCaseTest,AnalysisIntentFlowTest test`; `AnalysisIntentFlowTest` was blocked by local Oracle connectivity in the sandbox with `ORA-17820` and `SocketException: Operation not permitted`.
+  - Current completion state:
+  - Reviewer assist request acceptance is now visible, pending execution is animated and auto-refreshed, failed states have explicit Retry feedback, and the Review editor prioritizes paper reading space with a collapsible auxiliary column.
+
+### Task 25: Conference Onboarding And Reviewer Assignment Design
+
+**Status:** Designed on 2026-05-06; review feedback incorporated and awaiting final user review before implementation planning.
+
+**Design reference:** `docs/superpowers/specs/2026-05-06-conference-onboarding-and-assignment-design.md`
+
+**Scope:**
+
+- Define a simplified mature conference-management upgrade path without adding a full venue-workflow configuration engine.
+- Add three public registration types: Author, Reviewer, and Organizer, while keeping Admin internal.
+- Add conference/CFP publishing, conference-scoped submission, reviewer pool, conflicts, bidding, guided reviewer assignment, and Agent-assisted assignment recommendations.
+- Reuse the current AnalysisIntent/outbox/RabbitMQ/Agent projection platform for a new `REVIEWER_ASSIGNMENT_ASSIST` type.
+- Keep final assignment authority in the Spring API; Agent output remains advisory and chair-confirmed.
+
+**Execution notes, 2026-05-06:**
+
+- Reviewed the current repository context first, including auth, manuscript, review assignment, Oracle schema, frontend routes, and the active plan file.
+- Compared current gaps against mature conference systems:
+  - EasyChair for CFP, submission, reviewer management, preference-based assignment, communication, and monitoring.
+  - OpenReview for venue workflow stages, user groups, bidding, assignment, decision, and visibility concepts.
+  - HotCRP and CMT for bidding, conflict checks, and assignment workflows.
+- User approved the simplified integrated direction:
+  - public registration is limited to Author, Reviewer, and Organizer
+  - conference phases are fixed lifecycle states instead of arbitrary custom workflow configuration
+  - reviewer assignment uses guided recommendations with deterministic constraints
+  - Agent assignment assist is a new analysis type, not a repurposed reviewer-assist endpoint
+- Verification:
+  - Spec self-review checked for placeholder markers and scope contradictions.
+  - No implementation code was changed in this design cycle.
+- Review remediation, 2026-05-06:
+  - Clarified that public Organizer registration grants the existing global `CHAIR` role after Admin approval; no durable `ORGANIZER` role is introduced.
+  - Moved Reviewer global approval to Admin only, with Chair/Admin responsible only for conference-scoped `CONFERENCE_REVIEWER` membership.
+  - Added migration rules for `010_conference_onboarding.sql`, including nullable `MANUSCRIPT.CONFERENCE_ID`, legacy/default conference backfill, and later optional `NOT NULL` tightening.
+  - Declared `CONFERENCE.BLIND_MODE` authoritative for new submissions and `MANUSCRIPT.BLIND_MODE` an immutable snapshot.
+  - Required de-identified bidding previews for double-blind workflows.
+  - Changed `REVIEWER_ASSIGNMENT_ASSIST` to one manuscript version per request, with `roundId` only as workflow context.
+  - Specified manual/idempotent phase transitions with timestamp-based boundary checks, runtime reviewer-load aggregation, reuse of `CONFLICT_CHECK_RECORD`, public-registration abuse controls, Admin provisioning, multi-conference isolation tests, and reviewer approval evidence.
+  - Updated `AGENTS.md` with reusable design rules from the review.
+- Second review remediation, 2026-05-06:
+  - Split registration/profile storage into `SYS_USER`, `USER_ACADEMIC_PROFILE`, existing `USER_RESEARCH_AREA`, `ROLE_APPLICATION`, and `EMAIL_VERIFICATION_TOKEN`, with independent multi-role applications per user.
+  - Clarified `USER_RESEARCH_AREA` as the platform-level source and `CONFERENCE_REVIEWER` as the conference-scoped snapshot owner.
+  - Added the minimal email-delivery boundary for verification, approval, rejection, and reviewer invitation, with SMTP production config and fake/logging local/test adapters.
+  - Specified `ASSIGNMENT_DRAFT` as one row per proposed `(ROUND_ID, REVIEWER_ID)` candidate, not an opaque JSON bundle.
+  - Required assignment confirmation to lock selected `CONFERENCE_REVIEWER` rows and recompute confirmed load in the transaction before inserting `REVIEW_ASSIGNMENT`.
+  - Expanded phase-boundary semantics for submission close, bidding close, review deadline, and decision release.
+  - Added backend test requirements for multi-role users, profile persistence, fake-email verification, phase boundaries, and concurrent assignment confirmation.
+  - Updated `AGENTS.md` with reusable rules for profile ownership, email verification boundaries, draft granularity, assignment locking, and phase deadline semantics.
+- Current completion state:
+  - Revised written design is ready for user review.
+  - Next step after approval is to invoke the writing-plans workflow and create an implementation plan anchored to this authoritative plan file.
+
+**Planned implementation slices after spec approval:**
+
+- [ ] **Task 25.1: Registration and approval foundation**
+  - Add public registration APIs/UI for Author, Reviewer, and Organizer-to-Chair approval.
+  - Include `SYS_USER`, `USER_ACADEMIC_PROFILE`, `ROLE_APPLICATION`, `EMAIL_VERIFICATION_TOKEN`, email verification, token expiry, fake/logging and SMTP email adapters, rate-limit hooks, Admin-only reviewer approval, multi-role users, and Admin provisioning rules.
+  - Backend execution slice:
+    - Add `012_registration_foundation.sql` with `USER_ACADEMIC_PROFILE`, `ROLE_APPLICATION`, and `EMAIL_VERIFICATION_TOKEN`; extend `SYS_USER.STATUS` with `PENDING_EMAIL_VERIFICATION`; add indexes and schema verification coverage.
+    - Add registration domain/application classes under `apps/api/src/main/java/com/example/review/registration`.
+    - Add public endpoints under `/api/auth/register` and `/api/auth/verify-email`.
+    - Add admin endpoints under `/api/admin/role-applications` for listing pending applications and approving/rejecting Reviewer and Organizer applications.
+    - Use a fake/logging email adapter that records verification delivery locally without storing raw tokens in Oracle.
+    - TDD target: `RegistrationServiceTest`, `RegistrationSchemaTest`, and focused auth/security route checks.
+    - First completion point: authors can self-register and become `AUTHOR` after email verification; reviewers and organizers can register, verify email, and wait for Admin approval; Admin approval grants `REVIEWER` or existing `CHAIR`.
+  - Execution notes, 2026-05-06:
+    - Added the backend registration service, controller, JDBC repository, fake/logging verification email gateway, and UTC clock bean.
+    - Added public `/api/auth/register` and `/api/auth/verify-email` endpoints.
+    - Added Admin-only `/api/admin/role-applications` list/approve/reject endpoints.
+    - Added `012_registration_foundation.sql` with `USER_ACADEMIC_PROFILE`, `ROLE_APPLICATION`, `EMAIL_VERIFICATION_TOKEN`, `PENDING_EMAIL_VERIFICATION`, role-application status/type constraints, and non-redundant lookup indexes.
+    - Wired `012` into `oracle-schema-apply.sh`, `dev-up.sh`, and `verify_schema.sql`.
+    - Registration behavior now supports Author email self-approval, Reviewer admin approval, Organizer approval to existing `CHAIR`, reviewer evidence validation, hashed single-use email tokens, and multi-role-friendly `(USER_ID, REGISTRATION_TYPE)` application uniqueness.
+    - Verification:
+      - Red run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=RegistrationServiceTest test` failed with missing registration classes.
+      - Red run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=RegistrationSchemaTest test` failed with missing `012_registration_foundation.sql`.
+      - Green run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=RegistrationServiceTest,RegistrationSchemaTest,CodeQualityTest test` passed.
+      - `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -DskipTests test` passed.
+      - `bash -n scripts/oracle-schema-apply.sh` and `bash -n scripts/dev-up.sh` passed.
+    - Current completion state:
+      - 25.1 backend registration foundation is implemented and locally verified without Oracle connectivity.
+      - Frontend registration tabs and Admin approval workbench remain for the next frontend slice.
+  - Frontend execution notes, 2026-05-06:
+    - Added `/register` as a public route with Author, Reviewer, and Organizer tabs.
+    - Added a registration form that posts to `/api/auth/register`, includes academic evidence fields for Reviewer/Organizer, and shows the email-verification next step after success.
+    - Added `/admin/role-applications` as an Admin-only route and workbench for pending role applications with approve/reject actions.
+    - Added a Dashboard entry for Admin role applications and a Login page link to account creation.
+    - Verification:
+      - Red run: `cd apps/web && npm run test -- --run src/tests/registration.spec.ts` failed because `RegisterView.vue` did not exist.
+      - Green run: `cd apps/web && npm run test -- --run src/tests/registration.spec.ts` passed.
+      - `cd apps/web && npm run typecheck` passed.
+      - `cd apps/web && npm run build` passed with the existing large chunk warning.
+    - Current completion state:
+      - 25.1 now has both backend and frontend foundations for public registration and Admin approval.
+      - Full browser/API e2e verification remains dependent on an Oracle-backed local stack.
+  - Continuation notes, 2026-05-06:
+    - Checked the in-progress Admin payload-summary work after user reported registration `Internal Server Error`.
+    - Found backend work partly complete: `GET /api/admin/role-applications` had been moved toward `RoleApplicationDetail` and `JdbcRegistrationRepository` was parsing `SUBMITTED_PAYLOAD_JSON`, but frontend `RoleApplicationsView.vue` still rendered only application id, user id, type, and status.
+    - Root-cause evidence for the registration `Internal Server Error` could not be read from live API logs because no API process was listening on `localhost:8080` in this environment. The most likely runtime cause remains an unapplied registration migration: registration writes `SYS_USER.STATUS = 'PENDING_EMAIL_VERIFICATION'` and inserts into `ROLE_APPLICATION` and `EMAIL_VERIFICATION_TOKEN`, so local Oracle must have `012_registration_foundation.sql` applied.
+    - Fixed the in-progress schema follow-up so newly added email-token indexes are delivered by `013_registration_token_indexes.sql` rather than mutating already-committed `012_registration_foundation.sql`; wired `013` into full apply and incremental `dev-up.sh`.
+    - Changed `USER_ACADEMIC_PROFILE` persistence from insert-only to `MERGE` so a rejected Reviewer/Organizer can resubmit with the same account without hitting the profile unique key and surfacing a 500.
+    - Added frontend test coverage that fails unless the Admin role-application workbench renders applicant identity, profile links, representative works, conflict domains, planned conference title, and research-area summary.
+    - Updated `RoleApplicationsView.vue` to display the payload summary fields returned by `RoleApplicationDetail`.
+    - Verification:
+      - Red run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=RegistrationSchemaTest test` failed because `013_registration_token_indexes.sql` was missing.
+      - Red run: `cd apps/web && npm run test -- --run src/tests/registration.spec.ts` failed because the Admin workbench did not render `New Reviewer` from the payload summary.
+      - Green run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=RegistrationServiceTest,RegistrationSchemaTest,CodeQualityTest test` passed.
+      - Green run: `cd apps/web && npm run test -- --run src/tests/registration.spec.ts` passed.
+      - `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -DskipTests test` passed.
+      - `cd apps/web && npm run typecheck` passed.
+      - `cd apps/web && npm run build` passed with the existing large chunk warning.
+      - `.venv/bin/python -m pytest services/agent/tests/test_health.py -q` passed.
+      - `bash -n scripts/oracle-schema-apply.sh && bash -n scripts/dev-up.sh` passed.
+      - `git diff --check` passed.
+      - `bash scripts/test-all.sh` was attempted but did not enter test execution because the local Docker engine was unreachable and the Oracle container `review-oracle` was not running.
+    - Current completion state:
+      - Admin workbench payload-summary support is implemented at backend DTO/query and frontend rendering levels.
+      - To clear the reported registration 500 locally, run the Oracle bootstrap/apply path so migrations `012` and `013` are present in the database, then retry registration with API logs visible if it still fails.
+- [ ] **Task 25.2: Conference and CFP schema/lifecycle**
+  - Add `010_conference_onboarding.sql`, `CONFERENCE`, `CONFERENCE_PHASE`, lifecycle services, public CFP reads, Admin conference approval, and schema verification.
+- [ ] **Task 25.3: Conference-scoped submission migration**
+  - Add nullable/backfilled `MANUSCRIPT.CONFERENCE_ID`, legacy/default conference support, conference blind-mode snapshot behavior, and author conference selection.
+- [ ] **Task 25.4: Reviewer pool, conflicts, and bidding**
+  - Add platform-approved reviewer pool membership, `CONFERENCE_REVIEWER` research-area snapshots from `USER_RESEARCH_AREA`, de-identified bidding views, bid persistence, conflict reuse through `CONFLICT_CHECK_RECORD`, phase boundary checks, and multi-conference isolation checks.
+- [ ] **Task 25.5: Guided deterministic assignment**
+  - Add ranked candidate queries, hard constraint filtering, runtime load calculation, per-candidate assignment drafts, bulk chair confirmation with selected reviewer row locks, and final `REVIEW_ASSIGNMENT` validation.
+- [ ] **Task 25.6: Reviewer assignment Agent assist**
+  - Add `REVIEWER_ASSIGNMENT_ASSIST` across API analysis type, intent use case, Agent handler, projection, and chair-facing progress/error UI.
+- [ ] **Task 25.7: Integrated frontend workflows**
+  - Add Public CFP, Register tabs, Author conference submission path, Chair conference console, Admin approval workbench, and route-guard coverage.
+- [ ] **Task 25.8: Operational docs and verification**
+  - Update README, architecture, workflow, code-structure, testing, demo docs, seed scripts, and repository verification commands for the new conference flow.
+
+### Task 26: Database Query Optimization And Read Model Cleanup
+
+**Status:** Completed as a focused database/query optimization slice on 2026-05-06.
+
+**Scope:**
+
+- Add indexes for current workflow and analysis query hotspots identified from repository code.
+- Make `verify_schema.sql` validate both base business indexes and analysis/execution indexes.
+- Wire the latest schema migrations into full schema apply and incremental local dev bootstrap.
+- Route the chair decision workbench endpoint through the existing bulk read model instead of the old per-round N+1 path.
+
+**Files:**
+
+- Modify: `apps/api/src/main/java/com/example/review/workflow/WorkflowQueryController.java`
+- Modify: `apps/api/src/main/java/com/example/review/workflow/WorkflowQueryService.java`
+- Modify: `apps/api/src/test/java/com/example/review/CodeQualityTest.java`
+- Create: `database/oracle/010_database_query_optimization.sql`
+- Modify: `database/oracle/verify_schema.sql`
+- Modify: `scripts/oracle-schema-apply.sh`
+- Modify: `scripts/dev-up.sh`
+- Modify: `TODO.md`
+- Modify: `AGENTS.md`
+- Modify: `docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md`
+
+**Execution notes, 2026-05-06:**
+
+- Reviewed current Oracle schema, index declarations, verification SQL, and repository query paths.
+- Confirmed the main schema dependencies remain reasonable, but found real query hotspots without matching verification coverage:
+  - decision workbench round status scan
+  - assignment lookup by round
+  - reviewer paper access lookup by manuscript/version/reviewer
+  - review report counts and lists by round
+  - conflict lookup by manuscript/reviewer
+  - screening queue status/date ordering
+  - analysis projection ordering
+- Red tests:
+  - Added `CodeQualityTest.databaseQueryHotspotsHaveSchemaIndexesAndVerificationCoverage`, which failed because the new hotspot indexes and migration wiring were absent.
+  - Added `CodeQualityTest.decisionWorkbenchEndpointUsesBulkReadModel`, which failed because the endpoint still delegated to the old `WorkflowQueryService` N+1 implementation.
+- Implemented the green slice:
+  - Added `database/oracle/010_database_query_optimization.sql` with seven hotspot indexes.
+  - Expanded `verify_schema.sql` index verification from the 14 analysis/execution indexes to all 38 custom indexes.
+  - Updated `scripts/oracle-schema-apply.sh` to apply `009_execution_job_attempt_count.sql` and `010_database_query_optimization.sql`.
+  - Updated `scripts/dev-up.sh` to detect and apply missing 009/010 incremental schema pieces on existing local Oracle databases.
+  - Changed `WorkflowQueryController` so `/api/chair/decision-workbench` uses `DecisionWorkbenchQueryService`.
+  - Removed the old `WorkflowQueryService` per-round decision workbench assembly helpers.
+  - Marked the TODO item for decision-workbench N+1 cleanup complete.
+  - Updated `AGENTS.md` with reusable rules about page-shaped read models, composite query indexes, schema verification coverage, and migration bootstrap wiring.
+- Verification:
+  - Red run before implementation: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=CodeQualityTest test` failed with the expected missing index/migration and bulk-read assertions.
+  - Green run after implementation: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=CodeQualityTest test` passed.
+  - `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=DecisionWorkbenchQueryTest,AdminAnalysisMonitorQueryTest test` passed.
+  - `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=WorkflowQueryServiceTest test` was attempted but could not reach Oracle in the current sandbox (`ORA-17820`, `java.net.SocketException: Operation not permitted`), so endpoint-level Oracle integration verification remains blocked by environment access rather than a failed assertion.
+- Current completion state:
+  - Query hotspot indexes are declared and covered by schema verification.
+  - Local schema bootstrap now knows about 009 and 010.
+  - The chair decision workbench endpoint now uses the bulk read service.
+  - Legacy `AGENT_*` table retirement was completed later in Task 27.
+
+### Task 27: Legacy AGENT Table Retirement
+
+**Status:** Completed as a focused schema retirement slice on 2026-05-06.
+
+**Scope:**
+
+- Retire the old mirrored `AGENT_ANALYSIS_TASK`, `AGENT_ANALYSIS_RESULT`, and `AGENT_FEEDBACK` tables now that analysis intent/projection and execution job tables own the live Agent path.
+- Remove active schema, seed, trigger, procedure, index, verification, and test-cleanup dependencies on those tables.
+- Add one idempotent drop migration for existing local Oracle databases.
+
+**Files:**
+
+- Modify: `database/oracle/001_init.sql`
+- Modify: `database/oracle/003_indexes.sql`
+- Modify: `database/oracle/004_procedures.sql`
+- Modify: `database/oracle/005_triggers.sql`
+- Modify: `database/oracle/007_seed_demo_workflow.sql`
+- Modify: `database/oracle/verify_schema.sql`
+- Create: `database/oracle/011_retire_legacy_agent_tables.sql`
+- Modify: `scripts/oracle-schema-apply.sh`
+- Modify: `scripts/dev-up.sh`
+- Modify: `apps/api/src/test/java/com/example/review/CodeQualityTest.java`
+- Delete: `apps/api/src/test/java/com/example/review/support/LegacyAgentArtifactsCleanup.java`
+- Modify: Oracle-backed API tests that previously imported the legacy cleanup helper
+- Modify: `TODO.md`
+- Modify: `AGENTS.md`
+
+**Execution notes, 2026-05-06:**
+
+- Committed the previous database optimization slice first as `8cf8529 perf(api): optimize database query hotspots`.
+- Audited current references with `rg`; live references were limited to Oracle schema/seed/verification files, migration/bootstrap scripts, and test cleanup code.
+- Red test:
+  - Added `CodeQualityTest.legacyAgentTablesAreRetiredFromActiveSchemaAndTestCleanup`.
+  - The first run failed on `database/oracle/001_init.sql` still containing `AGENT_ANALYSIS_TASK`, proving the guard caught the active-schema dependency.
+- Implemented the green slice:
+  - Removed legacy Agent table definitions, sequences, foreign keys, triggers, indexes, procedure, and demo seed rows from active schema files.
+  - Updated `verify_schema.sql` expected counts to 23 tables, 22 sequences, 25 triggers, 2 procedures, and 34 indexes.
+  - Added `011_retire_legacy_agent_tables.sql` to drop old triggers, procedure, tables, and sequences idempotently for existing databases.
+  - Wired `011` into full schema apply and incremental `dev-up.sh` bootstrap when `AGENT_ANALYSIS_TASK` is still present.
+  - Deleted `LegacyAgentArtifactsCleanup` and removed its imports/calls from Oracle-backed tests so tests no longer hide a dependency on retired tables.
+  - Marked the legacy `AGENT_*` TODO item complete.
+  - Added an `AGENTS.md` rule requiring legacy retirement slices to remove active dependencies and keep only one idempotent drop migration.
+- Verification:
+  - Red run before implementation: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=CodeQualityTest test` failed with the expected active-schema legacy table assertion.
+  - Green run after implementation: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=CodeQualityTest test` passed.
+  - `bash -n scripts/oracle-schema-apply.sh` passed.
+  - `bash -n scripts/dev-up.sh` passed.
+  - `rg` over active schema and API tests found no remaining legacy table/procedure/trigger/helper references outside the intentional guard test and `011` drop migration.
+- Current completion state:
+  - The legacy mirrored Agent tables are retired from active schema and test cleanup paths.
+  - Existing databases have an idempotent migration path to drop the old objects.
+  - Full Oracle execution of the migration is not verified in this sandbox because Oracle connectivity is blocked here.

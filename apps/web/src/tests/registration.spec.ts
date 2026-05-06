@@ -6,6 +6,7 @@ import { createAppRouter } from "../router";
 import { initializeAuth, resetAuthForTests } from "../stores/auth";
 import DashboardView from "../views/DashboardView.vue";
 import RegisterView from "../views/RegisterView.vue";
+import RoleApplicationsView from "../views/admin/RoleApplicationsView.vue";
 
 function token(claims: Record<string, unknown>): string {
   const encode = (value: object) => btoa(JSON.stringify(value)).replaceAll("=", "");
@@ -92,5 +93,42 @@ describe("registration workflow", () => {
     });
 
     expect(wrapper.text()).toContain("Role applications");
+  });
+
+  it("shows role application payload summary for admin decisions", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve([
+        {
+          applicationId: 77,
+          userId: 42,
+          registrationType: "REVIEWER",
+          status: "PENDING_ADMIN_APPROVAL",
+          username: "new_reviewer",
+          realName: "New Reviewer",
+          email: "new_reviewer@example.com",
+          institution: "Nanjing University",
+          homepageUrl: "https://example.edu/new-reviewer",
+          orcid: "0000-0002-1825-0097",
+          representativeWorks: ["Representative Systems Paper"],
+          conflictDomains: ["example.edu"],
+          plannedConferenceTitle: null,
+          researchAreas: [{ areaCode: "NLP", areaName: "Natural Language Processing" }]
+        }
+      ])
+    }));
+
+    const wrapper = mount(RoleApplicationsView, {
+      global: {
+        plugins: [ElementPlus]
+      }
+    });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("New Reviewer");
+    expect(wrapper.text()).toContain("https://example.edu/new-reviewer");
+    expect(wrapper.text()).toContain("Representative Systems Paper");
+    expect(wrapper.text()).toContain("Natural Language Processing");
   });
 });

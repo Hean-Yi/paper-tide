@@ -11,6 +11,7 @@ class RegistrationSchemaTest {
     @Test
     void registrationFoundationSchemaIsWiredIntoOracleVerificationAndBootstrap() throws IOException {
         String migration = Files.readString(Path.of("..", "..", "database", "oracle", "012_registration_foundation.sql"));
+        String tokenIndexMigration = Files.readString(Path.of("..", "..", "database", "oracle", "013_registration_token_indexes.sql"));
         String verification = Files.readString(Path.of("..", "..", "database", "oracle", "verify_schema.sql"));
         String fullApply = Files.readString(Path.of("..", "..", "scripts", "oracle-schema-apply.sh"));
         String devUp = Files.readString(Path.of("..", "..", "scripts", "dev-up.sh"));
@@ -22,6 +23,8 @@ class RegistrationSchemaTest {
         assertTrue(migration.contains("UK_ROLE_APPLICATION_USER_TYPE"));
         assertTrue(migration.contains("IDX_ROLE_APPLICATION_STATUS_TYPE"));
         assertTrue(migration.contains("IDX_EMAIL_VERIFICATION_USER_APP"));
+        assertTrue(tokenIndexMigration.contains("IDX_EMAIL_VERIFICATION_EXPIRES"));
+        assertTrue(tokenIndexMigration.contains("IDX_EMAIL_VERIFICATION_USER_PURPOSE"));
 
         assertTrue(verification.contains("USER_ACADEMIC_PROFILE"));
         assertTrue(verification.contains("ROLE_APPLICATION"));
@@ -29,9 +32,11 @@ class RegistrationSchemaTest {
         assertTrue(verification.contains("Expected 26 tables"));
         assertTrue(verification.contains("Expected 25 sequences"));
         assertTrue(verification.contains("Expected 28 triggers"));
-        assertTrue(verification.contains("Expected 36 indexes"));
+        assertTrue(verification.contains("Expected 38 indexes"));
 
         assertTrue(fullApply.contains("012_registration_foundation.sql"));
+        assertTrue(fullApply.contains("013_registration_token_indexes.sql"));
         assertTrue(devUp.contains("012_registration_foundation.sql"));
+        assertTrue(devUp.contains("013_registration_token_indexes.sql"));
     }
 }

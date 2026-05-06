@@ -18,6 +18,7 @@ const entries = computed(() => {
     items.push({ label: "Decisions", detail: "Round decisions and conflict analysis.", target: "/chair/decisions" });
   }
   if (roles.has("ADMIN")) {
+    items.push({ label: "Role applications", detail: "Review pending reviewer and organizer approvals.", target: "/admin/role-applications" });
     items.push({ label: "Agent monitor", detail: "Analysis intent, projection, and execution checks.", target: "/admin/agents" });
   }
   return items;

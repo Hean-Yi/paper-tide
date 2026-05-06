@@ -22,6 +22,11 @@ export function createAppRouter() {
         component: LoginView
       },
       {
+        path: "/register",
+        name: "register",
+        component: () => import("../views/RegisterView.vue")
+      },
+      {
         path: "/",
         component: AppShell,
         meta: { requiresAuth: true },
@@ -77,6 +82,12 @@ export function createAppRouter() {
             name: "admin-agent-monitor",
             component: () => import("../views/admin/AgentMonitorView.vue"),
             meta: { requiresAuth: true, roles: ["ADMIN"] }
+          },
+          {
+            path: "admin/role-applications",
+            name: "admin-role-applications",
+            component: () => import("../views/admin/RoleApplicationsView.vue"),
+            meta: { requiresAuth: true, roles: ["ADMIN"] }
           }
         ]
       }
@@ -88,7 +99,7 @@ export function createAppRouter() {
     if (to.meta.requiresAuth && !isAuthenticated.value) {
       return "/login";
     }
-    if (to.path === "/login" && isAuthenticated.value) {
+    if ((to.path === "/login" || to.path === "/register") && isAuthenticated.value) {
       return "/dashboard";
     }
     if (!canUseRoute(to)) {

@@ -71,6 +71,7 @@ async function submit() {
         >
           Sign in
         </el-button>
+        <RouterLink to="/register">Create an account</RouterLink>
       </form>
     </section>
   </main>

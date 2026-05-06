@@ -19,7 +19,7 @@
 
 - [x] `[P0]` 补上 analysis 消息链路的真实运行入口：当前 `AnalysisOutboxPublisher` 只落库，`AnalysisEventConsumer` 只有消费逻辑却没有真正 listener/dispatcher；需要把 broker publishing 和 event consuming 从“代码片段”补成“可运行基础设施”。
 - [ ] `[P1]` 收紧 service 边界：`ManuscriptService`、`ReviewWorkflowService`、`DecisionService` 等大量直接抛 `ResponseStatusException`，把 HTTP 语义带入业务层；需要引入应用/领域异常和统一映射层。
-- [ ] `[P1]` 收敛查询层 N+1：`WorkflowQueryService.listDecisionWorkbench(...)` 先查 round，再逐条补 assignment、intent、projection，属于典型聚合读模型 N+1，应改为面向页面的一次性批量查询。
+- [x] `[P1]` 收敛查询层 N+1：`WorkflowQueryService.listDecisionWorkbench(...)` 先查 round，再逐条补 assignment、intent、projection，属于典型聚合读模型 N+1，应改为面向页面的一次性批量查询。
 - [ ] `[P1]` 把 service 中的 JDBC 细节进一步下沉到 repository：当前仍有直接 `JdbcTemplate.update(...)`、`SELECT ... FOR UPDATE` 和临时 row shape 留在 service 层，导致模块职责不够纯。
 - [ ] `[P1]` 收敛聚合查询文件体积和职责：`WorkflowQueryService.java` 已成为 400+ 行页面读模型拼装层，应拆分 reviewer/chair/admin 查询或引入专门 read-model repository。
 - [ ] `[P1]` 提取重复 RowMapper / SQL 片段为常量或小型 mapper，减少 `WorkflowQueryService`、`ReviewerPaperService`、分析仓储中的重复查询样板。

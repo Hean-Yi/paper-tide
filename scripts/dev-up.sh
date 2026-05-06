@@ -65,6 +65,51 @@ apply_oracle_refactor_schema() {
     >/dev/null
 }
 
+apply_oracle_attempt_count_schema() {
+  docker cp "$ROOT_DIR/database/oracle/009_execution_job_attempt_count.sql" "$DEFAULT_ORACLE_CONTAINER:/tmp/009_execution_job_attempt_count.sql" >/dev/null
+  docker exec "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE} @/tmp/009_execution_job_attempt_count.sql" \
+    >/dev/null
+}
+
+apply_oracle_query_optimization_schema() {
+  docker cp "$ROOT_DIR/database/oracle/010_database_query_optimization.sql" "$DEFAULT_ORACLE_CONTAINER:/tmp/010_database_query_optimization.sql" >/dev/null
+  docker exec "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE} @/tmp/010_database_query_optimization.sql" \
+    >/dev/null
+}
+
+oracle_column_exists() {
+  local table_name="$1"
+  local column_name="$2"
+  local column_count
+
+  column_count="$(docker exec -i "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE}" <<SQL | tr -d '[:space:]'
+SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF
+SELECT COUNT(*) FROM USER_TAB_COLUMNS WHERE TABLE_NAME = UPPER('${table_name}') AND COLUMN_NAME = UPPER('${column_name}');
+EXIT;
+SQL
+)"
+
+  [[ "$column_count" == "1" ]]
+}
+
+oracle_index_exists() {
+  local index_name="$1"
+  local index_count
+
+  index_count="$(docker exec -i "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE}" <<SQL | tr -d '[:space:]'
+SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF
+SELECT COUNT(*) FROM USER_INDEXES WHERE INDEX_NAME = UPPER('${index_name}');
+EXIT;
+SQL
+)"
+
+  [[ "$index_count" == "1" ]]
+}
+
 ensure_oracle_schema() {
   if verify_oracle_schema; then
     return 0
@@ -79,6 +124,19 @@ ensure_oracle_schema() {
   if ! oracle_table_exists "ANALYSIS_INTENT"; then
     echo "Oracle base schema detected without 008 refactor objects. Applying incremental schema..." >&2
     apply_oracle_refactor_schema
+  fi
+
+  if ! oracle_column_exists "EXECUTION_JOB" "ATTEMPT_COUNT"; then
+    echo "Oracle analysis schema detected without 009 attempt-count column. Applying incremental schema..." >&2
+    apply_oracle_attempt_count_schema
+  fi
+
+  if ! oracle_index_exists "IDX_REVIEW_ROUND_STATUS_ID"; then
+    echo "Oracle schema detected without 010 query-optimization indexes. Applying incremental schema..." >&2
+    apply_oracle_query_optimization_schema
+  fi
+
+  if verify_oracle_schema; then
     return 0
   fi
 

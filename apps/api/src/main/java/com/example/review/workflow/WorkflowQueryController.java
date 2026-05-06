@@ -12,9 +12,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 public class WorkflowQueryController {
     private final WorkflowQueryService workflowQueryService;
+    private final DecisionWorkbenchQueryService decisionWorkbenchQueryService;
 
-    public WorkflowQueryController(WorkflowQueryService workflowQueryService) {
+    public WorkflowQueryController(
+            WorkflowQueryService workflowQueryService,
+            DecisionWorkbenchQueryService decisionWorkbenchQueryService
+    ) {
         this.workflowQueryService = workflowQueryService;
+        this.decisionWorkbenchQueryService = decisionWorkbenchQueryService;
     }
 
     @GetMapping("/review-assignments")
@@ -39,7 +44,7 @@ public class WorkflowQueryController {
 
     @GetMapping("/chair/decision-workbench")
     public List<DecisionWorkbenchItem> listDecisionWorkbench(@AuthenticationPrincipal CurrentUserPrincipal principal) {
-        return workflowQueryService.listDecisionWorkbench(principal);
+        return decisionWorkbenchQueryService.listDecisionWorkbench(principal);
     }
 
     @GetMapping("/admin/analysis-monitor")

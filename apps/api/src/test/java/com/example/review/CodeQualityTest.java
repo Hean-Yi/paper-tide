@@ -65,6 +65,40 @@ class CodeQualityTest {
         );
     }
 
+    @Test
+    void databaseQueryHotspotsHaveSchemaIndexesAndVerificationCoverage() throws IOException {
+        String indexes = Files.readString(Path.of("..", "..", "database", "oracle", "003_indexes.sql"))
+                + Files.readString(Path.of("..", "..", "database", "oracle", "010_database_query_optimization.sql"));
+        String verification = Files.readString(Path.of("..", "..", "database", "oracle", "verify_schema.sql"));
+        String applyScript = Files.readString(Path.of("..", "..", "scripts", "oracle-schema-apply.sh"));
+
+        assertTrue(indexes.contains("IDX_REVIEW_ROUND_STATUS_ID"));
+        assertTrue(indexes.contains("IDX_REVIEW_ASSIGNMENT_ROUND_ID"));
+        assertTrue(indexes.contains("IDX_REVIEW_ASSIGNMENT_ACCESS"));
+        assertTrue(indexes.contains("IDX_REVIEW_REPORT_ROUND"));
+        assertTrue(indexes.contains("IDX_CONFLICT_CHECK_MANUSCRIPT_REVIEWER"));
+        assertTrue(indexes.contains("IDX_MANUSCRIPT_STATUS_SUBMITTED"));
+        assertTrue(indexes.contains("IDX_ANALYSIS_PROJECTION_UPDATED"));
+
+        assertTrue(verification.contains("IDX_REVIEW_ROUND_STATUS_ID"));
+        assertTrue(verification.contains("IDX_REVIEW_ASSIGNMENT_ROUND_ID"));
+        assertTrue(verification.contains("IDX_REVIEW_REPORT_ROUND"));
+        assertTrue(verification.contains("Expected 38 indexes"));
+
+        assertTrue(applyScript.contains("009_execution_job_attempt_count.sql"));
+        assertTrue(applyScript.contains("010_database_query_optimization.sql"));
+    }
+
+    @Test
+    void decisionWorkbenchEndpointUsesBulkReadModel() throws IOException {
+        String controller = Files.readString(Path.of("src/main/java/com/example/review/workflow/WorkflowQueryController.java"));
+        String workflowService = Files.readString(Path.of("src/main/java/com/example/review/workflow/WorkflowQueryService.java"));
+
+        assertTrue(controller.contains("DecisionWorkbenchQueryService"));
+        assertFalse(workflowService.contains("private DecisionWorkbenchItem toDecisionWorkbenchItem"));
+        assertFalse(workflowService.contains("private List<DecisionAssignmentItem> listAssignmentsForRound"));
+    }
+
     private void assertSourceDoesNotContain(String path, String forbiddenText) throws IOException {
         String source = Files.readString(Path.of(path));
         assertFalse(source.contains(forbiddenText), path + " should not contain " + forbiddenText);

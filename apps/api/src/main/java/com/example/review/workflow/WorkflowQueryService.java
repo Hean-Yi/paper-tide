@@ -1,7 +1,5 @@
 package com.example.review.workflow;
 
-import com.example.review.analysis.domain.AnalysisBusinessAnchor;
-import com.example.review.analysis.domain.AnalysisType;
 import com.example.review.analysis.infrastructure.AnalysisIntentRepository;
 import com.example.review.analysis.infrastructure.AnalysisProjectionRepository;
 import com.example.review.analysis.interfaces.AnalysisDtos.AnalysisIntentResponse;
@@ -149,54 +147,6 @@ public class WorkflowQueryService {
         );
     }
 
-    public List<DecisionWorkbenchItem> listDecisionWorkbench(CurrentUserPrincipal principal) {
-        RoleGuard.requireChairOrAdmin(principal);
-        List<DecisionWorkbenchBase> rounds = jdbcTemplate.query(
-                """
-                SELECT R.ROUND_ID,
-                       R.MANUSCRIPT_ID,
-                       R.VERSION_ID,
-                       R.ROUND_NO,
-                       R.ROUND_STATUS,
-                       R.DEADLINE_AT,
-                       M.CURRENT_STATUS,
-                       M.LAST_DECISION_CODE,
-                       V.TITLE,
-                       V.VERSION_NO,
-                       (SELECT COUNT(*) FROM REVIEW_ASSIGNMENT A WHERE A.ROUND_ID = R.ROUND_ID) AS ASSIGNMENT_COUNT,
-                       (SELECT COUNT(*) FROM REVIEW_REPORT RP WHERE RP.ROUND_ID = R.ROUND_ID) AS SUBMITTED_REVIEW_COUNT,
-                       (SELECT COUNT(*)
-                        FROM CONFLICT_CHECK_RECORD C
-                        WHERE C.ASSIGNMENT_ID IN (
-                          SELECT A.ASSIGNMENT_ID FROM REVIEW_ASSIGNMENT A WHERE A.ROUND_ID = R.ROUND_ID
-                        )) AS CONFLICT_COUNT
-                FROM REVIEW_ROUND R
-                JOIN MANUSCRIPT M ON M.MANUSCRIPT_ID = R.MANUSCRIPT_ID
-                JOIN MANUSCRIPT_VERSION V ON V.VERSION_ID = R.VERSION_ID
-                WHERE R.ROUND_STATUS IN ('PENDING', 'IN_PROGRESS')
-                ORDER BY R.ROUND_ID
-                """,
-                (rs, rowNum) -> new DecisionWorkbenchBase(
-                        rs.getLong("ROUND_ID"),
-                        rs.getLong("MANUSCRIPT_ID"),
-                        rs.getLong("VERSION_ID"),
-                        rs.getInt("ROUND_NO"),
-                        rs.getString("ROUND_STATUS"),
-                        rs.getTimestamp("DEADLINE_AT"),
-                        rs.getString("CURRENT_STATUS"),
-                        rs.getString("LAST_DECISION_CODE"),
-                        rs.getString("TITLE"),
-                        rs.getInt("VERSION_NO"),
-                        rs.getInt("ASSIGNMENT_COUNT"),
-                        rs.getInt("SUBMITTED_REVIEW_COUNT"),
-                        rs.getInt("CONFLICT_COUNT")
-                )
-        );
-        return rounds.stream()
-                .map(this::toDecisionWorkbenchItem)
-                .toList();
-    }
-
     public List<AdminAnalysisMonitorItem> listAdminAnalysisMonitor(CurrentUserPrincipal principal) {
         RoleGuard.requireRole(principal, "ADMIN");
         return jdbcTemplate.query(
@@ -229,60 +179,6 @@ public class WorkflowQueryService {
                         rs.getString("SUMMARY_TEXT"),
                         rs.getTimestamp("PROJECTION_UPDATED_AT")
                 )
-        );
-    }
-
-    private DecisionWorkbenchItem toDecisionWorkbenchItem(DecisionWorkbenchBase round) {
-        AnalysisBusinessAnchor anchor = AnalysisBusinessAnchor.round(round.roundId());
-        AnalysisIntentResponse intent = intentRepository.findLatestIntent(AnalysisType.CONFLICT_ANALYSIS, anchor)
-                .map(summary -> new AnalysisIntentResponse(summary.intentId(), summary.analysisType(), summary.businessStatus()))
-                .orElse(null);
-        return new DecisionWorkbenchItem(
-                round.roundId(),
-                round.manuscriptId(),
-                round.versionId(),
-                round.versionNo(),
-                round.roundNo(),
-                round.title(),
-                round.currentStatus(),
-                round.roundStatus(),
-                round.deadlineAt(),
-                round.assignmentCount(),
-                round.submittedReviewCount(),
-                round.conflictCount(),
-                round.lastDecisionCode(),
-                listAssignmentsForRound(round.roundId()),
-                intent,
-                projectionRepository.listForAnchor(AnalysisType.CONFLICT_ANALYSIS, anchor)
-        );
-    }
-
-    private List<DecisionAssignmentItem> listAssignmentsForRound(long roundId) {
-        return jdbcTemplate.query(
-                """
-                SELECT ASSIGNMENT_ID,
-                       REVIEWER_ID,
-                       TASK_STATUS,
-                       ASSIGNED_AT,
-                       ACCEPTED_AT,
-                       DEADLINE_AT,
-                       SUBMITTED_AT,
-                       REASSIGNED_FROM_ID
-                FROM REVIEW_ASSIGNMENT
-                WHERE ROUND_ID = ?
-                ORDER BY ASSIGNMENT_ID
-                """,
-                (rs, rowNum) -> new DecisionAssignmentItem(
-                        rs.getLong("ASSIGNMENT_ID"),
-                        rs.getLong("REVIEWER_ID"),
-                        rs.getString("TASK_STATUS"),
-                        rs.getTimestamp("ASSIGNED_AT"),
-                        rs.getTimestamp("ACCEPTED_AT"),
-                        rs.getTimestamp("DEADLINE_AT"),
-                        rs.getTimestamp("SUBMITTED_AT"),
-                        rs.getObject("REASSIGNED_FROM_ID", Long.class)
-                ),
-                roundId
         );
     }
 

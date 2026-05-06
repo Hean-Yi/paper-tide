@@ -118,7 +118,7 @@ class CodeQualityTest {
         assertTrue(verification.contains("IDX_REVIEW_ROUND_STATUS_ID"));
         assertTrue(verification.contains("IDX_REVIEW_ASSIGNMENT_ROUND_ID"));
         assertTrue(verification.contains("IDX_REVIEW_REPORT_ROUND"));
-        assertTrue(verification.contains("Expected 38 indexes"));
+        assertTrue(verification.contains("Expected 42 indexes"));
 
         assertTrue(applyScript.contains("009_execution_job_attempt_count.sql"));
         assertTrue(applyScript.contains("010_database_query_optimization.sql"));
@@ -132,6 +132,21 @@ class CodeQualityTest {
         assertTrue(controller.contains("DecisionWorkbenchQueryService"));
         assertFalse(workflowService.contains("private DecisionWorkbenchItem toDecisionWorkbenchItem"));
         assertFalse(workflowService.contains("private List<DecisionAssignmentItem> listAssignmentsForRound"));
+    }
+
+    @Test
+    void conferenceCfpPublicReadsAndMigrationNumberAreExplicitlyWired() throws IOException {
+        String security = Files.readString(Path.of("src/main/java/com/example/review/config/SecurityConfig.java"));
+        String applyScript = Files.readString(Path.of("..", "..", "scripts", "oracle-schema-apply.sh"));
+        String devUp = Files.readString(Path.of("..", "..", "scripts", "dev-up.sh"));
+
+        assertTrue(security.contains("HttpMethod.GET"));
+        assertTrue(security.contains("/api/conferences/cfp"));
+        assertTrue(security.contains("/api/conferences/cfp/**"));
+        assertTrue(applyScript.contains("014_conference_cfp_lifecycle.sql"));
+        assertTrue(devUp.contains("014_conference_cfp_lifecycle.sql"));
+        assertFalse(applyScript.contains("010_conference_onboarding.sql"));
+        assertFalse(devUp.contains("010_conference_onboarding.sql"));
     }
 
     private void assertSourceDoesNotContain(String path, String forbiddenText) throws IOException {

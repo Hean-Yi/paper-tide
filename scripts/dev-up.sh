@@ -100,6 +100,13 @@ apply_oracle_registration_token_indexes_schema() {
     >/dev/null
 }
 
+apply_oracle_conference_cfp_lifecycle_schema() {
+  docker cp "$ROOT_DIR/database/oracle/014_conference_cfp_lifecycle.sql" "$DEFAULT_ORACLE_CONTAINER:/tmp/014_conference_cfp_lifecycle.sql" >/dev/null
+  docker exec "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE} @/tmp/014_conference_cfp_lifecycle.sql" \
+    >/dev/null
+}
+
 oracle_column_exists() {
   local table_name="$1"
   local column_name="$2"
@@ -170,6 +177,11 @@ ensure_oracle_schema() {
   if oracle_table_exists "EMAIL_VERIFICATION_TOKEN" && ! oracle_index_exists "IDX_EMAIL_VERIFICATION_EXPIRES"; then
     echo "Oracle schema detected without 013 registration token indexes. Applying incremental schema..." >&2
     apply_oracle_registration_token_indexes_schema
+  fi
+
+  if ! oracle_table_exists "CONFERENCE"; then
+    echo "Oracle schema detected without 014 conference CFP lifecycle objects. Applying incremental schema..." >&2
+    apply_oracle_conference_cfp_lifecycle_schema
   fi
 
   if verify_oracle_schema; then

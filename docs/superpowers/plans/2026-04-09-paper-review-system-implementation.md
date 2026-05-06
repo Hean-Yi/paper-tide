@@ -1937,7 +1937,7 @@ Expected after implementation: both commands pass.
 
 **Planned implementation slices after spec approval:**
 
-- [ ] **Task 25.1: Registration and approval foundation**
+- [x] **Task 25.1: Registration and approval foundation**
   - Add public registration APIs/UI for Author, Reviewer, and Organizer-to-Chair approval.
   - Include `SYS_USER`, `USER_ACADEMIC_PROFILE`, `ROLE_APPLICATION`, `EMAIL_VERIFICATION_TOKEN`, email verification, token expiry, fake/logging and SMTP email adapters, rate-limit hooks, Admin-only reviewer approval, multi-role users, and Admin provisioning rules.
   - Backend execution slice:
@@ -1998,10 +1998,36 @@ Expected after implementation: both commands pass.
       - `git diff --check` passed.
       - `bash scripts/test-all.sh` was attempted but did not enter test execution because the local Docker engine was unreachable and the Oracle container `review-oracle` was not running.
     - Current completion state:
+      - Task 25.1 is closed in this plan ledger after baseline verification on the Task 25.2 worktree.
       - Admin workbench payload-summary support is implemented at backend DTO/query and frontend rendering levels.
-      - To clear the reported registration 500 locally, run the Oracle bootstrap/apply path so migrations `012` and `013` are present in the database, then retry registration with API logs visible if it still fails.
-- [ ] **Task 25.2: Conference and CFP schema/lifecycle**
-  - Add `010_conference_onboarding.sql`, `CONFERENCE`, `CONFERENCE_PHASE`, lifecycle services, public CFP reads, Admin conference approval, and schema verification.
+      - Focused baseline verification passed with `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=RegistrationServiceTest,RegistrationSchemaTest,CodeQualityTest test`.
+      - Full browser/API e2e verification remains dependent on an Oracle-backed local stack where migrations `012` and `013` are applied.
+- [x] **Task 25.2: Conference and CFP schema/lifecycle**
+  - Add `014_conference_cfp_lifecycle.sql`, `CONFERENCE`, `CONFERENCE_PHASE`, lifecycle services, public CFP reads, Admin conference approval, and schema verification.
+  - Execution notes, 2026-05-06:
+    - Corrected the originally planned migration number from `010_conference_onboarding.sql` to `014_conference_cfp_lifecycle.sql` because migrations `010` through `013` already exist and may have been applied locally.
+    - Added the `conference` API package with DTO/domain records, repository boundary, JDBC repository, service, controller, and service-layer exceptions.
+    - Added Chair/Admin draft creation, organizer/admin approval submission, Admin approval to `OPEN_FOR_SUBMISSION`, ordered idempotent lifecycle advancement, pending Admin approval reads, and public CFP list/detail reads.
+    - Kept public CFP reads open before authentication by adding explicit GET permit rules for `/api/conferences/cfp` and `/api/conferences/cfp/**`; Chair/Admin mutation endpoints remain behind the existing authenticated `/api/**` and admin/chair service guards.
+    - Added `CONFERENCE` and `CONFERENCE_PHASE` Oracle objects, fixed lifecycle/status constraints, blind-mode constraints, phase ordering constraints, public slug uniqueness, non-redundant lookup indexes, sequences, triggers, and foreign keys to `SYS_USER`.
+    - Wired `014_conference_cfp_lifecycle.sql` into `scripts/oracle-schema-apply.sh`, incremental `scripts/dev-up.sh`, and `verify_schema.sql`, raising expected schema counts to 28 tables, 27 sequences, 30 triggers, and 42 custom indexes.
+    - Updated registration/schema and code-quality guards to reflect the new schema totals and prevent migration-number regression to the already-used `010` slot.
+    - Verification:
+      - Red run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=ConferenceServiceTest,ConferenceSchemaTest test` failed with missing conference classes and missing `014_conference_cfp_lifecycle.sql`.
+      - Green run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=ConferenceServiceTest,ConferenceSchemaTest test` passed.
+      - Focused guard run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=ConferenceServiceTest,ConferenceSchemaTest,RegistrationSchemaTest,CodeQualityTest test` passed.
+      - API compile check: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -DskipTests test` passed.
+      - Script checks: `bash -n scripts/oracle-schema-apply.sh` and `bash -n scripts/dev-up.sh` passed.
+      - Whitespace check: `git diff --check` passed.
+    - Current completion state:
+      - 25.2 backend/schema lifecycle slice is implemented and locally verified.
+      - Real Oracle migration verification was completed after user enabled Docker/Oracle access:
+        - `docker exec review-oracle bash -lc "sqlplus -s review_app/ReviewApp12345@localhost/FREEPDB1 @/tmp/014_conference_cfp_lifecycle.sql"` created the conference tables, sequences, constraints, indexes, and triggers.
+        - The first `verify_schema.sql` run failed with `Expected 28 tables, found 25`; investigation showed the local database was missing prior registration objects from `012_registration_foundation.sql`.
+        - Applied missing prior migrations `012_registration_foundation.sql` and `013_registration_token_indexes.sql`.
+        - The next `verify_schema.sql` run failed with `Expected 42 indexes, found 35`; investigation showed the local database was missing the seven hotspot indexes from `010_database_query_optimization.sql`.
+        - Applied missing prior migration `010_database_query_optimization.sql`.
+        - Final real Oracle verification passed with `Schema verification passed.`
 - [ ] **Task 25.3: Conference-scoped submission migration**
   - Add nullable/backfilled `MANUSCRIPT.CONFERENCE_ID`, legacy/default conference support, conference blind-mode snapshot behavior, and author conference selection.
 - [ ] **Task 25.4: Reviewer pool, conflicts, and bidding**

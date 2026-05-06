@@ -54,7 +54,7 @@
 
 ## database/oracle
 
-- [ ] `[P0]` 明确 legacy `AGENT_*` 表与新 `ANALYSIS_*` / `EXECUTION_*` 表的并存策略：当前 schema、seed、trigger、verify 仍同时维护两套 agent 数据模型，容易让后续开发误判真实来源；需要确定淘汰计划或显式标记 legacy only。
+- [x] `[P0]` 明确 legacy `AGENT_*` 表与新 `ANALYSIS_*` / `EXECUTION_*` 表的并存策略：当前 schema、seed、trigger、verify 仍同时维护两套 agent 数据模型，容易让后续开发误判真实来源；需要确定淘汰计划或显式标记 legacy only。
 - [ ] `[P1]` 为新的 message-driven 表继续补治理字段和查询索引，只要运行面需要按状态、重试、失败原因或时间窗口排障，就要同步落到 schema 和 `verify_schema.sql`。
 - [ ] `[P1]` 收敛 demo seed 对 legacy agent 数据的依赖，避免真实页面已经切到新读模型，但 seed 和演示脚本仍把旧表当权威来源。
 - [ ] `[P1]` 为 schema 演进补一份迁移说明，明确从 first-generation agent tables 迁移到 new intent/execution tables 的顺序、兼容边界和清理条件。

@@ -66,6 +66,41 @@ class CodeQualityTest {
     }
 
     @Test
+    void legacyAgentTablesAreRetiredFromActiveSchemaAndTestCleanup() throws IOException {
+        String[] activeSchemaFiles = {
+                "../../database/oracle/001_init.sql",
+                "../../database/oracle/003_indexes.sql",
+                "../../database/oracle/004_procedures.sql",
+                "../../database/oracle/005_triggers.sql",
+                "../../database/oracle/007_seed_demo_workflow.sql",
+                "../../database/oracle/verify_schema.sql"
+        };
+        String[] retiredObjects = {
+                "AGENT_ANALYSIS_TASK",
+                "AGENT_ANALYSIS_RESULT",
+                "AGENT_FEEDBACK",
+                "SEQ_AGENT_ANALYSIS_TASK",
+                "SEQ_AGENT_ANALYSIS_RESULT",
+                "SEQ_AGENT_FEEDBACK",
+                "TRG_AGENT_ANALYSIS_TASK_BI",
+                "TRG_AGENT_ANALYSIS_RESULT_BI",
+                "TRG_AGENT_FEEDBACK_BI",
+                "PRC_AGENT_TASK_STATUS_SUMMARY"
+        };
+
+        for (String path : activeSchemaFiles) {
+            for (String retiredObject : retiredObjects) {
+                assertSourceDoesNotContain(path, retiredObject);
+            }
+        }
+
+        assertFalse(Files.exists(Path.of("src/test/java/com/example/review/support/LegacyAgentArtifactsCleanup.java")));
+
+        String applyScript = Files.readString(Path.of("..", "..", "scripts", "oracle-schema-apply.sh"));
+        assertTrue(applyScript.contains("011_retire_legacy_agent_tables.sql"));
+    }
+
+    @Test
     void databaseQueryHotspotsHaveSchemaIndexesAndVerificationCoverage() throws IOException {
         String indexes = Files.readString(Path.of("..", "..", "database", "oracle", "003_indexes.sql"))
                 + Files.readString(Path.of("..", "..", "database", "oracle", "010_database_query_optimization.sql"));
@@ -83,7 +118,7 @@ class CodeQualityTest {
         assertTrue(verification.contains("IDX_REVIEW_ROUND_STATUS_ID"));
         assertTrue(verification.contains("IDX_REVIEW_ASSIGNMENT_ROUND_ID"));
         assertTrue(verification.contains("IDX_REVIEW_REPORT_ROUND"));
-        assertTrue(verification.contains("Expected 38 indexes"));
+        assertTrue(verification.contains("Expected 34 indexes"));
 
         assertTrue(applyScript.contains("009_execution_job_attempt_count.sql"));
         assertTrue(applyScript.contains("010_database_query_optimization.sql"));

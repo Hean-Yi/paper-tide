@@ -22,7 +22,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import com.example.review.support.LegacyAgentArtifactsCleanup;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -83,7 +82,6 @@ class ReviewFlowE2eTest {
 
     @BeforeEach
     void cleanWorkflowTables() {
-        LegacyAgentArtifactsCleanup.deleteLegacyAgentArtifacts(jdbcTemplate);
         jdbcTemplate.update("DELETE FROM ANALYSIS_OUTBOX");
         jdbcTemplate.update("DELETE FROM ANALYSIS_PROJECTION");
         jdbcTemplate.update("DELETE FROM ANALYSIS_INTENT");

@@ -79,6 +79,13 @@ apply_oracle_query_optimization_schema() {
     >/dev/null
 }
 
+apply_oracle_legacy_agent_retirement_schema() {
+  docker cp "$ROOT_DIR/database/oracle/011_retire_legacy_agent_tables.sql" "$DEFAULT_ORACLE_CONTAINER:/tmp/011_retire_legacy_agent_tables.sql" >/dev/null
+  docker exec "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE} @/tmp/011_retire_legacy_agent_tables.sql" \
+    >/dev/null
+}
+
 oracle_column_exists() {
   local table_name="$1"
   local column_name="$2"
@@ -134,6 +141,11 @@ ensure_oracle_schema() {
   if ! oracle_index_exists "IDX_REVIEW_ROUND_STATUS_ID"; then
     echo "Oracle schema detected without 010 query-optimization indexes. Applying incremental schema..." >&2
     apply_oracle_query_optimization_schema
+  fi
+
+  if oracle_table_exists "AGENT_ANALYSIS_TASK"; then
+    echo "Oracle schema detected with retired legacy AGENT_* tables. Applying retirement schema..." >&2
+    apply_oracle_legacy_agent_retirement_schema
   fi
 
   if verify_oracle_schema; then

@@ -16,7 +16,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import com.example.review.support.LegacyAgentArtifactsCleanup;
 
 @SpringBootTest
 class DecisionWorkbenchReadRepositoryTest {
@@ -29,7 +28,6 @@ class DecisionWorkbenchReadRepositoryTest {
 
     @BeforeEach
     void cleanWorkflowTables() {
-        LegacyAgentArtifactsCleanup.deleteLegacyAgentArtifacts(jdbcTemplate);
         jdbcTemplate.update("DELETE FROM CONFLICT_CHECK_RECORD");
         jdbcTemplate.update("DELETE FROM REVIEW_REPORT");
         jdbcTemplate.update("DELETE FROM REVIEW_ASSIGNMENT");

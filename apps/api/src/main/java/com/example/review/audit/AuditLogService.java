@@ -25,4 +25,31 @@ public class AuditLogService {
                 "{\"manuscriptId\":%d,\"decisionCode\":\"%s\"}".formatted(manuscriptId, decisionCode)
         );
     }
+
+    public void recordRoleApproval(
+            long operatorId,
+            long applicationId,
+            long applicantUserId,
+            String registrationType,
+            String operationType,
+            String rejectionReason
+    ) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO AUDIT_LOG (
+                  LOG_ID, OPERATOR_ID, OPERATION_TYPE, BIZ_TYPE, BIZ_ID, DETAIL_JSON, CREATED_AT
+                ) VALUES (
+                  NULL, ?, ?, 'ROLE_APPLICATION', ?, ?, CURRENT_TIMESTAMP
+                )
+                """,
+                operatorId,
+                operationType,
+                applicationId,
+                rejectionReason == null
+                        ? "{\"applicantUserId\":%d,\"registrationType\":\"%s\"}"
+                                .formatted(applicantUserId, registrationType)
+                        : "{\"applicantUserId\":%d,\"registrationType\":\"%s\",\"rejectionReason\":\"%s\"}"
+                                .formatted(applicantUserId, registrationType, rejectionReason.replace("\"", "\\\""))
+        );
+    }
 }

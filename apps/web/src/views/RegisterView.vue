@@ -29,11 +29,19 @@ async function submit() {
   message.value = "";
   error.value = "";
   if (!form.username.trim() || !form.password || !form.realName.trim() || !form.email.trim()) {
-    error.value = "Username, password, name, and email are required.";
+    error.value = "用户名、密码、真实姓名和邮箱均为必填。";
     return;
   }
   if (requiresAcademicProfile.value && !form.homepageUrl.trim() && !form.orcid.trim()) {
-    error.value = "Reviewer and organizer registration requires an academic profile URL or ORCID.";
+    error.value = "审稿人和组织者注册需要提供学术主页或 ORCID。";
+    return;
+  }
+  if (form.registrationType === "REVIEWER" && !form.representativeWork.trim()) {
+    error.value = "审稿人注册需要至少填写一篇代表作。";
+    return;
+  }
+  if (form.registrationType === "ORGANIZER" && !form.plannedConferenceTitle.trim()) {
+    error.value = "组织者注册需要填写拟举办会议名称。";
     return;
   }
   loading.value = true;
@@ -86,60 +94,60 @@ function registrationPayload() {
 <template>
   <main class="login-page">
     <section class="login-panel registration-panel" aria-labelledby="register-title">
-      <p class="eyebrow">Review System</p>
-      <h1 id="register-title">Create an account</h1>
+      <p class="eyebrow">智能论文评审系统</p>
+      <h1 id="register-title">注册账号</h1>
 
       <el-tabs v-model="form.registrationType" stretch>
-        <el-tab-pane label="Author" name="AUTHOR" />
-        <el-tab-pane label="Reviewer" name="REVIEWER" />
-        <el-tab-pane label="Organizer" name="ORGANIZER" />
+        <el-tab-pane label="作者" name="AUTHOR" />
+        <el-tab-pane label="审稿人" name="REVIEWER" />
+        <el-tab-pane label="会议组织者" name="ORGANIZER" />
       </el-tabs>
 
       <form class="login-form" @submit.prevent="submit">
         <label class="field">
-          <span>Username</span>
+          <span>用户名</span>
           <el-input v-model="form.username" data-test="register-username" autocomplete="username" />
         </label>
         <label class="field">
-          <span>Password</span>
+          <span>密码</span>
           <el-input v-model="form.password" data-test="register-password" type="password" show-password autocomplete="new-password" />
         </label>
         <label class="field">
-          <span>Real name</span>
+          <span>真实姓名</span>
           <el-input v-model="form.realName" data-test="register-real-name" autocomplete="name" />
         </label>
         <label class="field">
-          <span>Email</span>
+          <span>邮箱</span>
           <el-input v-model="form.email" data-test="register-email" autocomplete="email" />
         </label>
         <label class="field">
-          <span>Institution</span>
+          <span>所属机构</span>
           <el-input v-model="form.institution" data-test="register-institution" autocomplete="organization" />
         </label>
 
         <template v-if="requiresAcademicProfile">
           <label class="field">
-            <span>Academic profile URL</span>
-            <el-input v-model="form.homepageUrl" data-test="register-homepage" />
+            <span>学术主页</span>
+            <el-input v-model="form.homepageUrl" data-test="register-homepage" placeholder="https://example.edu/~you" />
           </label>
           <label class="field">
             <span>ORCID</span>
             <el-input v-model="form.orcid" data-test="register-orcid" />
           </label>
-          <label class="field">
-            <span>Representative work</span>
-            <el-input v-model="form.representativeWork" data-test="register-work" />
+          <label v-if="form.registrationType === 'REVIEWER'" class="field">
+            <span>代表作</span>
+            <el-input v-model="form.representativeWork" data-test="register-work" placeholder="填写一篇近 5 年代表作标题" />
           </label>
           <label class="field">
-            <span>Conflict domains</span>
-            <el-input v-model="form.conflictDomains" placeholder="example.edu, lab.org" />
+            <span>利益冲突域</span>
+            <el-input v-model="form.conflictDomains" placeholder="用逗号分隔，例如 example.edu, lab.org" />
           </label>
           <label class="field">
-            <span>Research area</span>
-            <el-input v-model="form.areaCode" placeholder="NLP" />
+            <span>研究领域</span>
+            <el-input v-model="form.areaCode" placeholder="例如 NLP" />
           </label>
           <label v-if="form.registrationType === 'ORGANIZER'" class="field">
-            <span>Planned conference</span>
+            <span>拟举办会议名称</span>
             <el-input v-model="form.plannedConferenceTitle" data-test="register-conference-title" />
           </label>
         </template>
@@ -148,9 +156,9 @@ function registrationPayload() {
         <p v-if="message" class="form-success" role="status">{{ message }}</p>
 
         <el-button data-test="register-submit" native-type="submit" type="primary" :loading="loading">
-          Register
+          注册
         </el-button>
-        <RouterLink to="/login">Back to sign in</RouterLink>
+        <RouterLink to="/login">返回登录</RouterLink>
       </form>
     </section>
   </main>

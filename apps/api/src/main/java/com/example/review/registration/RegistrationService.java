@@ -1,5 +1,6 @@
 package com.example.review.registration;
 
+import com.example.review.audit.AuditLogService;
 import com.example.review.auth.CurrentUserPrincipal;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,6 +25,7 @@ public class RegistrationService {
     private final PasswordEncoder passwordEncoder;
     private final ObjectMapper objectMapper;
     private final InMemoryVerificationEmailGateway emailGateway;
+    private final AuditLogService auditLogService;
     private final Clock clock;
 
     public RegistrationService(
@@ -31,12 +33,14 @@ public class RegistrationService {
             PasswordEncoder passwordEncoder,
             ObjectMapper objectMapper,
             InMemoryVerificationEmailGateway emailGateway,
+            AuditLogService auditLogService,
             Clock clock
     ) {
         this.repository = repository;
         this.passwordEncoder = passwordEncoder;
         this.objectMapper = objectMapper;
         this.emailGateway = emailGateway;
+        this.auditLogService = auditLogService;
         this.clock = clock;
     }
 
@@ -102,9 +106,6 @@ public class RegistrationService {
 
         EmailVerificationTokenRecord token = repository.findVerificationToken(hashToken(rawToken))
                 .orElseThrow(() -> new RegistrationValidationException("Invalid verification token"));
-        if (token.consumed()) {
-            throw new RegistrationValidationException("Verification token has already been used");
-        }
         if (token.expiresAt().isBefore(Instant.now(clock))) {
             throw new RegistrationValidationException("Verification token has expired");
         }
@@ -113,7 +114,9 @@ public class RegistrationService {
                 .orElseThrow(() -> new RegistrationNotFoundException("Role application was not found"));
         RegistrationType type = RegistrationType.from(application.registrationType());
 
-        repository.consumeVerificationToken(token.tokenId());
+        if (!repository.consumeVerificationToken(token.tokenId())) {
+            throw new RegistrationValidationException("Verification token has already been used");
+        }
         repository.activateUser(token.userId());
 
         String nextStatus;
@@ -155,6 +158,14 @@ public class RegistrationService {
         String roleCode = type.grantedRole();
         repository.updateRoleApplicationStatus(applicationId, "APPROVED", principal.userId(), rejectionReason);
         repository.grantRole(application.userId(), roleCode);
+        auditLogService.recordRoleApproval(
+                principal.userId(),
+                applicationId,
+                application.userId(),
+                type.name(),
+                "ROLE_APPROVED",
+                null
+        );
         return new ApplicationReviewResponse(applicationId, application.userId(), type.name(), "APPROVED", roleCode);
     }
 
@@ -174,7 +185,16 @@ public class RegistrationService {
             throw new RegistrationValidationException("Only pending admin applications can be rejected");
         }
 
-        repository.updateRoleApplicationStatus(applicationId, "REJECTED", principal.userId(), rejectionReason.trim());
+        String trimmedReason = rejectionReason.trim();
+        repository.updateRoleApplicationStatus(applicationId, "REJECTED", principal.userId(), trimmedReason);
+        auditLogService.recordRoleApproval(
+                principal.userId(),
+                applicationId,
+                application.userId(),
+                application.registrationType(),
+                "ROLE_REJECTED",
+                trimmedReason
+        );
         return new ApplicationReviewResponse(applicationId, application.userId(), application.registrationType(), "REJECTED", null);
     }
 
@@ -207,9 +227,24 @@ public class RegistrationService {
                 || !isBlank(profile.orcid())
                 || !isBlank(profile.dblpUrl())
                 || !isBlank(profile.googleScholarUrl());
-        boolean hasRepresentativeWork = profile.representativeWorks() != null && !profile.representativeWorks().isEmpty();
-        if (!hasVerifiedProfile || !hasRepresentativeWork) {
-            throw new RegistrationValidationException("Reviewer and organizer applications require academic evidence");
+        if (!hasVerifiedProfile) {
+            throw new RegistrationValidationException(
+                    "Reviewer and organizer applications require an academic profile URL or ORCID"
+            );
+        }
+        if (type == RegistrationType.REVIEWER) {
+            boolean hasRepresentativeWork = profile.representativeWorks() != null
+                    && profile.representativeWorks().stream().anyMatch(work -> !isBlank(work));
+            if (!hasRepresentativeWork) {
+                throw new RegistrationValidationException(
+                        "Reviewer applications require at least one representative work"
+                );
+            }
+        }
+        if (type == RegistrationType.ORGANIZER && isBlank(profile.plannedConferenceTitle())) {
+            throw new RegistrationValidationException(
+                    "Organizer applications require a planned conference title"
+            );
         }
     }
 

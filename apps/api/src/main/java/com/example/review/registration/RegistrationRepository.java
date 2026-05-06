@@ -20,7 +20,7 @@ interface RegistrationRepository {
 
     Optional<EmailVerificationTokenRecord> findVerificationToken(String tokenHash);
 
-    void consumeVerificationToken(long tokenId);
+    boolean consumeVerificationToken(long tokenId);
 
     void activateUser(long userId);
 

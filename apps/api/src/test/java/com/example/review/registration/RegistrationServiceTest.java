@@ -4,7 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
+import com.example.review.audit.AuditLogService;
 import com.example.review.auth.CurrentUserPrincipal;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;
@@ -22,17 +29,20 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 class RegistrationServiceTest {
     private FakeRegistrationRepository repository;
     private InMemoryVerificationEmailGateway emailGateway;
+    private AuditLogService auditLogService;
     private RegistrationService service;
 
     @BeforeEach
     void setUp() {
         repository = new FakeRegistrationRepository();
         emailGateway = new InMemoryVerificationEmailGateway("http://localhost:5173/verify-email");
+        auditLogService = mock(AuditLogService.class);
         service = new RegistrationService(
                 repository,
                 new BCryptPasswordEncoder(),
                 new ObjectMapper(),
                 emailGateway,
+                auditLogService,
                 Clock.fixed(Instant.parse("2026-05-06T00:00:00Z"), ZoneOffset.UTC)
         );
     }
@@ -95,6 +105,36 @@ class RegistrationServiceTest {
         assertEquals("CHAIR", response.grantedRole());
         assertEquals(List.of("CHAIR"), repository.rolesByUser.get(1L));
         assertFalse(repository.rolesByUser.get(1L).contains("ORGANIZER"));
+    }
+
+    @Test
+    void approvalAndRejectionWriteAuditLogEntries() {
+        RegistrationResponse registration = service.register(reviewerRequest("audited_reviewer", "audited@example.com"));
+        service.verifyEmail(emailGateway.messages().getFirst().rawToken());
+
+        service.approveApplication(registration.applicationId(), adminPrincipal(), null);
+        verify(auditLogService).recordRoleApproval(
+                eq(1004L),
+                eq(registration.applicationId()),
+                eq(1L),
+                eq("REVIEWER"),
+                eq("ROLE_APPROVED"),
+                any()
+        );
+
+        RegistrationResponse second = service.register(organizerRequest("audited_org", "audited_org@example.com"));
+        service.verifyEmail(emailGateway.messages().getLast().rawToken());
+        service.rejectApplication(second.applicationId(), adminPrincipal(), "Insufficient organizing experience");
+        verify(auditLogService).recordRoleApproval(
+                eq(1004L),
+                eq(second.applicationId()),
+                eq(second.userId()),
+                eq("ORGANIZER"),
+                eq("ROLE_REJECTED"),
+                eq("Insufficient organizing experience")
+        );
+
+        verify(auditLogService, never()).recordDecision(anyLong(), anyLong(), anyLong(), any());
     }
 
     @Test
@@ -178,11 +218,15 @@ class RegistrationServiceTest {
         return new CurrentUserPrincipal(1003L, "chair_demo", List.of("CHAIR"));
     }
 
+    private record FakeUser(long userId, String username, String passwordHash, String realName,
+                            String email, String institution, String status) {
+    }
+
     private static final class FakeRegistrationRepository implements RegistrationRepository {
         private long nextUserId = 1;
         private long nextApplicationId = 1;
         private long nextTokenId = 1;
-        private final Map<Long, UserRegistrationRecord> users = new HashMap<>();
+        private final Map<Long, FakeUser> users = new HashMap<>();
         private final Map<Long, RoleApplicationRecord> applications = new HashMap<>();
         private final List<EmailVerificationTokenRecord> tokens = new ArrayList<>();
         private final Map<Long, List<String>> rolesByUser = new HashMap<>();
@@ -200,7 +244,7 @@ class RegistrationServiceTest {
         @Override
         public long createUser(UserRegistrationDraft draft) {
             long userId = nextUserId++;
-            users.put(userId, new UserRegistrationRecord(userId, draft.username(), draft.passwordHash(), draft.realName(),
+            users.put(userId, new FakeUser(userId, draft.username(), draft.passwordHash(), draft.realName(),
                     draft.email(), draft.institution(), draft.status()));
             return userId;
         }
@@ -233,19 +277,23 @@ class RegistrationServiceTest {
         }
 
         @Override
-        public void consumeVerificationToken(long tokenId) {
+        public boolean consumeVerificationToken(long tokenId) {
             EmailVerificationTokenRecord token = tokens.stream()
                     .filter(candidate -> candidate.tokenId() == tokenId)
                     .findFirst()
                     .orElseThrow();
+            if (token.consumed()) {
+                return false;
+            }
             tokens.set(tokens.indexOf(token), new EmailVerificationTokenRecord(token.tokenId(), token.userId(),
                     token.roleApplicationId(), token.tokenHash(), token.purpose(), token.expiresAt(), true));
+            return true;
         }
 
         @Override
         public void activateUser(long userId) {
-            UserRegistrationRecord user = users.get(userId);
-            users.put(userId, new UserRegistrationRecord(user.userId(), user.username(), user.passwordHash(),
+            FakeUser user = users.get(userId);
+            users.put(userId, new FakeUser(user.userId(), user.username(), user.passwordHash(),
                     user.realName(), user.email(), user.institution(), "ACTIVE"));
         }
 

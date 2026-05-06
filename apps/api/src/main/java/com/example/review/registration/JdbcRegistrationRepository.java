@@ -62,10 +62,9 @@ class JdbcRegistrationRepository implements RegistrationRepository {
                 """
                 INSERT INTO USER_ACADEMIC_PROFILE (
                   PROFILE_ID, USER_ID, HOMEPAGE_URL, ORCID, DBLP_URL, GOOGLE_SCHOLAR_URL,
-                  REPRESENTATIVE_WORKS_JSON, CONFLICT_DOMAINS_JSON, DEFAULT_MAX_LOAD, PLANNED_CONFERENCE_TITLE,
-                  UPDATED_AT
+                  REPRESENTATIVE_WORKS_JSON, CONFLICT_DOMAINS_JSON, DEFAULT_MAX_LOAD, UPDATED_AT
                 ) VALUES (
-                  SEQ_USER_ACADEMIC_PROFILE.NEXTVAL, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP
+                  SEQ_USER_ACADEMIC_PROFILE.NEXTVAL, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP
                 )
                 """,
                 userId,
@@ -75,8 +74,7 @@ class JdbcRegistrationRepository implements RegistrationRepository {
                 profile.googleScholarUrl(),
                 String.join("\n", profile.representativeWorks() == null ? List.of() : profile.representativeWorks()),
                 String.join("\n", profile.conflictDomains() == null ? List.of() : profile.conflictDomains()),
-                profile.defaultMaxLoad() == null ? 3 : profile.defaultMaxLoad(),
-                profile.plannedConferenceTitle()
+                profile.defaultMaxLoad() == null ? 3 : profile.defaultMaxLoad()
         );
     }
 
@@ -155,11 +153,16 @@ class JdbcRegistrationRepository implements RegistrationRepository {
     }
 
     @Override
-    public void consumeVerificationToken(long tokenId) {
-        jdbcTemplate.update(
-                "UPDATE EMAIL_VERIFICATION_TOKEN SET CONSUMED_AT = CURRENT_TIMESTAMP WHERE TOKEN_ID = ?",
+    public boolean consumeVerificationToken(long tokenId) {
+        int updated = jdbcTemplate.update(
+                """
+                UPDATE EMAIL_VERIFICATION_TOKEN
+                SET CONSUMED_AT = CURRENT_TIMESTAMP
+                WHERE TOKEN_ID = ? AND CONSUMED_AT IS NULL
+                """,
                 tokenId
         );
+        return updated == 1;
     }
 
     @Override

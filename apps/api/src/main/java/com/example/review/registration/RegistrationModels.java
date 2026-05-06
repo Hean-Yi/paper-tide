@@ -84,17 +84,6 @@ record UserRegistrationDraft(
 ) {
 }
 
-record UserRegistrationRecord(
-        long userId,
-        String username,
-        String passwordHash,
-        String realName,
-        String email,
-        String institution,
-        String status
-) {
-}
-
 record RoleApplicationDraft(
         long userId,
         String registrationType,

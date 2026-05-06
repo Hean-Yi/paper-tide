@@ -66,16 +66,19 @@ Public registration types:
 
 Admin accounts remain internal. The initial Admin should be created by a seed script after `002_seed_roles.sql`; later Admins are promoted from existing `ACTIVE` users by an existing Admin in the management console, not through public registration.
 
-Profile fields:
+Physical ownership:
 
-- real name, email, institution
-- registration type
-- approval status
-- homepage, ORCID, DBLP, Google Scholar or equivalent academic identifier
-- research areas
-- conflict domains
-- reviewer capacity defaults
-- reviewed by, reviewed at, rejection reason
+- `SYS_USER` remains the account identity table and stores login-facing identity: username, password hash, real name, email, institution, and account status.
+- `USER_ACADEMIC_PROFILE` is a new 1:1 child table for academic profile data: homepage, ORCID, DBLP, Google Scholar or equivalent academic identifier, representative work metadata, conflict domains, and default reviewer capacity.
+- `USER_RESEARCH_AREA` remains the platform-level research-interest table. Do not create another global research-area table.
+- `ROLE_APPLICATION` stores each role-registration request and approval state: user id, registration type, approval status, submitted payload snapshot, reviewed by, reviewed at, and rejection reason. Its current-row uniqueness is `(USER_ID, REGISTRATION_TYPE)`, not only `USER_ID`, so one account can pursue multiple roles independently.
+- `EMAIL_VERIFICATION_TOKEN` stores hashed verification tokens, user id, purpose, expiry, consumed timestamp, and created metadata. Raw tokens are sent only through the email adapter and are not stored.
+
+Multi-role rule:
+
+- One `SYS_USER` may hold multiple global roles, such as `AUTHOR`, `REVIEWER`, and `CHAIR`.
+- Each public registration path has an independent `ROLE_APPLICATION`.
+- The first version keeps one current application row per `(USER_ID, REGISTRATION_TYPE)`; rejected applications may be updated and resubmitted through that row. Full application history can be added later only if audit requirements demand it.
 
 Reviewer approval baseline:
 
@@ -98,6 +101,14 @@ Abuse controls:
 - Public registration and email-verification endpoints need rate limiting.
 - Optional institution-domain allowlists or blocklists may be configured for reviewer and organizer approval, but they are advisory unless an implementation slice explicitly makes them mandatory.
 
+Email channel:
+
+- Task 25.1 includes the minimal email-delivery foundation required by registration verification and approval results.
+- Add an email service boundary with templates for verification, approval, rejection, and reviewer invitation messages.
+- Production configuration should use SMTP settings from environment variables.
+- Local development and ordinary automated tests use a deterministic fake/logging adapter that records the verification link instead of sending real mail.
+- `SYS_NOTIFICATION` remains the in-app notification table; it does not replace email verification because unverified users cannot rely on in-app delivery.
+
 ## Conference And CFP Model
 
 Add a compact conference layer instead of a configurable venue engine.
@@ -106,7 +117,7 @@ Core entities:
 
 - `CONFERENCE`: name, acronym, year, organizer user id, status, blind mode, CFP text, topic areas, target reviews per paper, default reviewer max load, public visibility fields.
 - `CONFERENCE_PHASE`: fixed phase timestamps for submission open/close, bidding open/close, review deadline, decision release.
-- `CONFERENCE_REVIEWER`: conference reviewer pool with user id, status, research-area snapshot, max load, PC-member flag. Current load is derived from `REVIEW_ASSIGNMENT` counts at read time, not stored as a mutable counter.
+- `CONFERENCE_REVIEWER`: conference reviewer pool with user id, status, research-area snapshot, max load, PC-member flag. The research-area snapshot is copied from `USER_RESEARCH_AREA` into `RESEARCH_AREAS_JSON` or equivalent conference-scoped columns when the reviewer joins the conference. Current load is derived from `REVIEW_ASSIGNMENT` counts at read time, not stored as a mutable counter.
 - `MANUSCRIPT.CONFERENCE_ID`: manuscript belongs to one conference for new submissions.
 
 Migration strategy:
@@ -145,6 +156,13 @@ Rules:
 - Review rounds remain the existing review execution unit, but they become conference-scoped through the manuscript.
 - Conference status transitions are triggered explicitly by Chair/Admin actions and must be idempotent. Phase timestamps are used for display and boundary validation; for example, the API rejects new submissions after `submission_close_at` even if the status has not yet been manually advanced.
 
+Phase boundary checks:
+
+- `submission_close_at`: hard rejection for new initial submissions and PDF replacement on submitted versions after the close time.
+- `bidding_close_at`: hard rejection for new or changed bids after the close time; chairs may still view existing bids.
+- `review_deadline_at`: warning and overdue/progress signal, not a hard rejection. Reviewers may still submit late unless the assignment was cancelled or reassigned.
+- `decision_release_at`: controls when author-facing decision visibility opens. Chairs/Admins may record decisions earlier, but author decision endpoints should hide unreleased decisions until this timestamp or an explicit release action.
+
 ## Reviewer Pool, Conflicts, And Bidding
 
 Add only the data required for guided assignment.
@@ -153,7 +171,7 @@ Reviewer pool:
 
 - Reviewer registration approval creates membership in the platform reviewer pool only.
 - Chair/Admin can invite or approve platform-approved reviewers into a specific conference pool.
-- Reviewer membership stores max load and research-area snapshot for that conference.
+- Reviewer membership stores max load and a conference-scoped research-area snapshot copied from `USER_RESEARCH_AREA`.
 - A reviewer can be globally approved but not yet part of a specific conference.
 
 Conflict model:
@@ -178,7 +196,9 @@ Keep the current formal `REVIEW_ASSIGNMENT` table for confirmed assignments. Add
 
 New concept:
 
-- `ASSIGNMENT_DRAFT`: stores candidate assignment plans for a review round, with source `SYSTEM`, `AGENT`, or `MANUAL`, status `DRAFT`, `CONFIRMED`, or `DISCARDED`, and an explanation payload.
+- `ASSIGNMENT_DRAFT`: one row per proposed `(ROUND_ID, REVIEWER_ID)` pair, similar to an unconfirmed `REVIEW_ASSIGNMENT`.
+- Draft rows include source `SYSTEM`, `AGENT`, or `MANUAL`, status `DRAFT`, `CONFIRMED`, or `DISCARDED`, rank/score fields, and an explanation payload.
+- Agent output may produce a full suggested set, but the API normalizes it into per-reviewer draft rows so chairs can edit, discard, or confirm individual candidates without replacing an opaque JSON bundle.
 
 Flow:
 
@@ -192,7 +212,12 @@ Flow:
 8. API re-validates conflicts, reviewer membership, reviewer status, target count, and max load.
 9. API writes formal `REVIEW_ASSIGNMENT` rows and moves work into `REVIEWING`.
 
-Hard rules stay in API/service code. Scores and Agent explanations are advisory.
+Confirmation transaction:
+
+- Confirmation locks the selected `CONFERENCE_REVIEWER` rows with `SELECT ... FOR UPDATE`.
+- The service recomputes each selected reviewer's current load from confirmed `REVIEW_ASSIGNMENT` rows inside the transaction.
+- If any reviewer would exceed max load, or if a conflict was created after draft generation, confirmation fails without writing partial assignments.
+- Hard rules stay in API/service code. Scores and Agent explanations are advisory.
 
 ## Agent Assignment Assist
 
@@ -251,12 +276,16 @@ Backend:
 
 - Registration tests for each public type and approval outcome.
 - Role-grant tests proving pending reviewer/organizer accounts cannot access privileged endpoints.
+- Multi-role tests proving one user can independently hold `AUTHOR`, `REVIEWER`, and `CHAIR` through separate applications.
+- Profile persistence tests proving account identity, academic profile data, platform research areas, and approval metadata land in the intended tables.
+- Email verification tests using the fake/logging adapter for token expiry and single-use behavior.
 - Conference lifecycle tests for allowed and rejected transitions.
+- Phase-boundary tests for submission close, bidding close, review deadline warning behavior, and decision release visibility.
 - Manuscript submission tests proving authors can submit only to open conferences.
 - Reviewer pool and bidding tests proving conflicted manuscripts are hidden.
 - Multi-conference isolation tests proving a reviewer for conference A cannot see conference B manuscripts in bidding or assignment views.
 - Assignment recommendation tests proving hard constraints are enforced before scoring.
-- Assignment confirmation tests proving Agent output cannot create invalid assignments.
+- Assignment confirmation tests proving Agent output cannot create invalid assignments, including concurrent confirmation attempts that would exceed reviewer max load.
 - Agent intent tests for `REVIEWER_ASSIGNMENT_ASSIST`.
 - Registration abuse-control tests for token expiry, single-use verification, and endpoint rate-limit hooks where implemented.
 
@@ -270,7 +299,7 @@ Frontend:
 
 Schema:
 
-- Add primary/foreign keys and indexes for conference lookup, conference status, reviewer pool lookup, bidding lookup, assignment draft lookup, and conflict checks.
+- Add primary/foreign keys and indexes for `USER_ACADEMIC_PROFILE`, `ROLE_APPLICATION`, `EMAIL_VERIFICATION_TOKEN`, conference lookup, conference status, reviewer pool lookup, bidding lookup, assignment draft lookup, and conflict checks.
 - Extend Oracle verification SQL for every new table, sequence, trigger, and high-value index.
 
 Operational docs:
@@ -280,16 +309,18 @@ Operational docs:
 ## Simplification Decisions
 
 - One profile/application layer, not separate application tables for each registration type.
+- Account identity, academic profile data, platform research areas, approval metadata, and verification tokens have separate physical homes: `SYS_USER`, `USER_ACADEMIC_PROFILE`, `USER_RESEARCH_AREA`, `ROLE_APPLICATION`, and `EMAIL_VERIFICATION_TOKEN`.
 - Organizer is not a separate global role. It is the public registration path that grants the existing `CHAIR` role after Admin approval.
+- A single `SYS_USER` may hold multiple global roles through independent role applications.
 - One conference entity with fixed phase timestamps, not arbitrary workflow configuration.
 - One conference reviewer pool, not a full PC/AC/SAC hierarchy.
 - Reviewer global approval is Admin-owned; conference-specific reviewer membership is Chair/Admin-owned inside that conference.
 - One bidding model with four values, not configurable bid scales.
-- One assignment draft model for system, Agent, and manual proposals.
+- One assignment draft model for system, Agent, and manual proposals, stored as one candidate reviewer row per draft assignment.
 - One Agent type for reviewer assignment assistance, using the existing analysis platform.
 - Chair confirmation remains mandatory before assignments become real.
 
 ## Open Implementation Notes
 
-- The implementation plan should split this into small slices: registration and abuse controls, conference/CFP schema and lifecycle, conference-scoped submission and legacy migration, reviewer pool/conflicts/bidding, guided assignment, Agent assist, frontend integration, docs.
+- The implementation plan should split this into small slices: registration, academic profile, role applications, email foundation and abuse controls, conference/CFP schema and lifecycle, conference-scoped submission and legacy migration, reviewer pool/conflicts/bidding, guided assignment, Agent assist, frontend integration, docs.
 - The existing architecture-refactor stream is still active in the authoritative plan. This design should be planned as a new task group after the current active remediation/commit-separation work is resolved or explicitly paused.

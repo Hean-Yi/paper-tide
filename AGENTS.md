@@ -116,6 +116,7 @@ Current lessons captured from recent review cycles:
 - Before adding lookup indexes in Oracle migrations, check whether a primary key or unique constraint already creates the needed index. Do not add same-column duplicate indexes; use the extra index only when it supports a distinct access pattern such as status polling or child-row cleanup.
 - Once an Oracle migration has been committed or may have been applied locally, do not add new DDL to that same migration as the only delivery path. Put follow-up DDL in the next numbered migration and wire it into both full apply and incremental bootstrap, otherwise existing databases can skip the new objects while verification expects them.
 - Registration resubmission paths must update or upsert durable profile rows that are keyed by user. Do not insert-only into one-to-one profile tables such as `USER_ACADEMIC_PROFILE` when rejected applications can be reopened, or a valid retry can become a server error.
+- When running real Oracle migration verification on an existing local database, do not assume earlier incremental migrations were already applied. Run `verify_schema.sql`, inspect missing object classes, and apply missing prior migrations in numeric order before treating the latest migration as failed.
 
 ## Plan File Discipline
 Execution work must stay anchored to one authoritative implementation plan file.

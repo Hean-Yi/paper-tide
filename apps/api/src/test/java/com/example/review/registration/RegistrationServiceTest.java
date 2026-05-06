@@ -27,7 +27,7 @@ class RegistrationServiceTest {
     @BeforeEach
     void setUp() {
         repository = new FakeRegistrationRepository();
-        emailGateway = new InMemoryVerificationEmailGateway();
+        emailGateway = new InMemoryVerificationEmailGateway("http://localhost:5173/verify-email");
         service = new RegistrationService(
                 repository,
                 new BCryptPasswordEncoder(),

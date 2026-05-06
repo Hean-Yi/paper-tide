@@ -27,6 +27,11 @@ export function createAppRouter() {
         component: () => import("../views/RegisterView.vue")
       },
       {
+        path: "/verify-email",
+        name: "verify-email",
+        component: () => import("../views/VerifyEmailView.vue")
+      },
+      {
         path: "/",
         component: AppShell,
         meta: { requiresAuth: true },

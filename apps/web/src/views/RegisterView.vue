@@ -42,9 +42,9 @@ async function submit() {
       method: "POST",
       json: registrationPayload()
     });
-    message.value = "Check your email to verify the account.";
+    message.value = "注册成功，请前往邮箱点击验证链接完成邮箱验证。";
   } catch (apiError) {
-    error.value = apiError instanceof ApiError ? apiError.message : "Registration failed.";
+    error.value = apiError instanceof ApiError ? apiError.message : "注册失败，请稍后重试。";
   } finally {
     loading.value = false;
   }
@@ -147,7 +147,7 @@ function registrationPayload() {
         <p v-if="error" class="form-error" role="alert">{{ error }}</p>
         <p v-if="message" class="form-success" role="status">{{ message }}</p>
 
-        <el-button data-test="register-submit" native-type="submit" type="primary" :loading="loading" @click="submit">
+        <el-button data-test="register-submit" native-type="submit" type="primary" :loading="loading">
           Register
         </el-button>
         <RouterLink to="/login">Back to sign in</RouterLink>

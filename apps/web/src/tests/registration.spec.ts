@@ -55,7 +55,7 @@ describe("registration workflow", () => {
     await wrapper.get('[data-test="register-real-name"]').setValue("New Author");
     await wrapper.get('[data-test="register-email"]').setValue("new_author@example.com");
     await wrapper.get('[data-test="register-institution"]').setValue("Southeast University");
-    await wrapper.get('[data-test="register-submit"]').trigger("click");
+    await wrapper.get("form").trigger("submit.prevent");
     await flushPromises();
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -68,7 +68,7 @@ describe("registration workflow", () => {
       username: "new_author",
       email: "new_author@example.com"
     }));
-    expect(wrapper.text()).toContain("Check your email to verify the account.");
+    expect(wrapper.text()).toContain("注册成功");
   });
 
   it("keeps registration and admin approval routes in the router", () => {

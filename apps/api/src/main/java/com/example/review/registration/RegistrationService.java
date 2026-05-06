@@ -214,8 +214,18 @@ public class RegistrationService {
     }
 
     private String payloadSnapshot(RegistrationRequest request) {
+        RegistrationRequest scrubbed = new RegistrationRequest(
+                request.registrationType(),
+                request.username(),
+                null,
+                request.realName(),
+                request.email(),
+                request.institution(),
+                request.academicProfile(),
+                request.researchAreas()
+        );
         try {
-            return objectMapper.writeValueAsString(request);
+            return objectMapper.writeValueAsString(scrubbed);
         } catch (JsonProcessingException ex) {
             throw new RegistrationValidationException("Registration payload could not be recorded");
         }

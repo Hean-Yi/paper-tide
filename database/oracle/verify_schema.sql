@@ -12,6 +12,8 @@ DECLARE
   v_invalid_count NUMBER;
   v_error_count NUMBER;
   v_execution_job_attempt_count_column NUMBER;
+  v_manuscript_conference_column NUMBER;
+  v_manuscript_conference_fk NUMBER;
 BEGIN
   SELECT COUNT(*)
     INTO v_table_count
@@ -130,6 +132,7 @@ BEGIN
      'IDX_CONFERENCE_ORGANIZER_STATUS',
      'IDX_CONFERENCE_PHASE_SUBMISSION_CLOSE',
      'IDX_CONFERENCE_PHASE_BIDDING_CLOSE',
+     'IDX_MANUSCRIPT_CONFERENCE_STATUS',
      'IDX_MANUSCRIPT_SUBMITTER',
      'IDX_MANUSCRIPT_STATUS',
      'IDX_MANUSCRIPT_VERSION_SUBMITTED_BY',
@@ -261,6 +264,19 @@ BEGIN
    WHERE TABLE_NAME = 'EXECUTION_JOB'
      AND COLUMN_NAME = 'ATTEMPT_COUNT';
 
+  SELECT COUNT(*)
+    INTO v_manuscript_conference_column
+    FROM USER_TAB_COLUMNS
+   WHERE TABLE_NAME = 'MANUSCRIPT'
+     AND COLUMN_NAME = 'CONFERENCE_ID';
+
+  SELECT COUNT(*)
+    INTO v_manuscript_conference_fk
+    FROM USER_CONSTRAINTS
+   WHERE TABLE_NAME = 'MANUSCRIPT'
+     AND CONSTRAINT_NAME = 'FK_MANUSCRIPT_CONFERENCE'
+     AND CONSTRAINT_TYPE = 'R';
+
   IF v_table_count <> 28 THEN
     RAISE_APPLICATION_ERROR(-20001, 'Expected 28 tables, found ' || v_table_count);
   END IF;
@@ -277,8 +293,8 @@ BEGIN
     RAISE_APPLICATION_ERROR(-20004, 'Expected 2 procedures, found ' || v_procedure_count);
   END IF;
 
-  IF v_index_count <> 42 THEN
-    RAISE_APPLICATION_ERROR(-20005, 'Expected 42 indexes, found ' || v_index_count);
+  IF v_index_count <> 43 THEN
+    RAISE_APPLICATION_ERROR(-20005, 'Expected 43 indexes, found ' || v_index_count);
   END IF;
 
   IF v_role_count <> 4 THEN
@@ -287,6 +303,14 @@ BEGIN
 
   IF v_execution_job_attempt_count_column <> 1 THEN
     RAISE_APPLICATION_ERROR(-20009, 'Expected EXECUTION_JOB.ATTEMPT_COUNT column to exist');
+  END IF;
+
+  IF v_manuscript_conference_column <> 1 THEN
+    RAISE_APPLICATION_ERROR(-20010, 'Expected MANUSCRIPT.CONFERENCE_ID column to exist');
+  END IF;
+
+  IF v_manuscript_conference_fk <> 1 THEN
+    RAISE_APPLICATION_ERROR(-20011, 'Expected FK_MANUSCRIPT_CONFERENCE constraint to exist');
   END IF;
 
   IF v_invalid_count <> 0 THEN

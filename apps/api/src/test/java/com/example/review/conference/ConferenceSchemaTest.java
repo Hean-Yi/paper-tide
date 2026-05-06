@@ -34,7 +34,7 @@ class ConferenceSchemaTest {
         assertTrue(verification.contains("Expected 28 tables"));
         assertTrue(verification.contains("Expected 27 sequences"));
         assertTrue(verification.contains("Expected 30 triggers"));
-        assertTrue(verification.contains("Expected 42 indexes"));
+        assertTrue(verification.contains("Expected 43 indexes"));
 
         assertTrue(fullApply.contains("014_conference_cfp_lifecycle.sql"));
         assertTrue(devUp.contains("014_conference_cfp_lifecycle.sql"));

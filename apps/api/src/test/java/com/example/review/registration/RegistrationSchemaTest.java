@@ -32,7 +32,7 @@ class RegistrationSchemaTest {
         assertTrue(verification.contains("Expected 28 tables"));
         assertTrue(verification.contains("Expected 27 sequences"));
         assertTrue(verification.contains("Expected 30 triggers"));
-        assertTrue(verification.contains("Expected 42 indexes"));
+        assertTrue(verification.contains("Expected 43 indexes"));
 
         assertTrue(fullApply.contains("012_registration_foundation.sql"));
         assertTrue(fullApply.contains("013_registration_token_indexes.sql"));

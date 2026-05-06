@@ -437,13 +437,66 @@ describe("workflow screens", () => {
 
   it("validates author manuscript form before creating a draft", async () => {
     installAuth(["AUTHOR"]);
-    const fetch = vi.fn(() => Promise.resolve(jsonResponse({})));
+    const fetch = vi.fn(() => Promise.resolve(jsonResponse([])));
     vi.stubGlobal("fetch", fetch);
 
     const wrapper = await mountWithRouter(SubmitManuscriptView);
     await clickButton(wrapper, "Create manuscript");
 
-    expect(fetch).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledWith("/api/conferences/cfp", expect.anything());
+    expect(fetch).not.toHaveBeenCalledWith("/api/manuscripts", expect.anything());
+  });
+
+  it("submits author manuscripts to a selected public conference", async () => {
+    installAuth(["AUTHOR"]);
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/conferences/cfp") {
+        return Promise.resolve(jsonResponse([
+          {
+            conferenceId: 501,
+            name: "Review Systems 2026",
+            acronym: "RS",
+            year: 2026,
+            status: "OPEN_FOR_SUBMISSION",
+            blindMode: "SINGLE_BLIND",
+            publicSlug: "review-systems-2026",
+            submissionOpenAt: "2026-06-01T00:00:00Z",
+            submissionCloseAt: "2026-07-01T00:00:00Z"
+          }
+        ]));
+      }
+      if (path === "/manuscripts" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({
+          manuscriptId: 61,
+          conferenceId: 501,
+          currentVersionId: 71,
+          currentStatus: "DRAFT",
+          blindMode: "SINGLE_BLIND"
+        }));
+      }
+      return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(SubmitManuscriptView);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Review Systems 2026");
+    expect(wrapper.text()).toContain("Single blind");
+
+    await wrapper.get('input[placeholder="Title"]').setValue("Conference Paper");
+    await wrapper.get("textarea").setValue("Conference abstract");
+    await wrapper.get('input[placeholder="comma,separated,keywords"]').setValue("conference,review");
+    await clickButton(wrapper, "Create manuscript");
+    await flushPromises();
+
+    const createCall = fetch.mock.calls.find(([input]) => String(input) === "/api/manuscripts");
+    expect(createCall).toBeTruthy();
+    expect(JSON.parse(createCall?.[1]?.body as string)).toEqual(expect.objectContaining({
+      conferenceId: 501,
+      title: "Conference Paper"
+    }));
   });
 
   it("shows the configured PDF upload limit on author upload screens", async () => {

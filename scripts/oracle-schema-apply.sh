@@ -31,5 +31,6 @@ sqlplus -s ${APP_USER}/${APP_USER_PASSWORD}@localhost/FREEPDB1 @/tmp/review-db/0
 sqlplus -s ${APP_USER}/${APP_USER_PASSWORD}@localhost/FREEPDB1 @/tmp/review-db/012_registration_foundation.sql &&
 sqlplus -s ${APP_USER}/${APP_USER_PASSWORD}@localhost/FREEPDB1 @/tmp/review-db/013_registration_token_indexes.sql &&
 sqlplus -s ${APP_USER}/${APP_USER_PASSWORD}@localhost/FREEPDB1 @/tmp/review-db/014_conference_cfp_lifecycle.sql &&
+sqlplus -s ${APP_USER}/${APP_USER_PASSWORD}@localhost/FREEPDB1 @/tmp/review-db/015_conference_scoped_submission.sql &&
 sqlplus -s ${APP_USER}/${APP_USER_PASSWORD}@localhost/FREEPDB1 @/tmp/review-db/verify_schema.sql
 "

@@ -293,7 +293,7 @@
 
 ## Active Task
 
-- Active task: continue Task 19 remediation program. Phase 1 closure, Phase 2 governance recovery, and Phase 3 durable runtime plus Oracle-backed verification are now in place locally on 2026-04-23; the next slice is commit separation.
+- Active task: Task 30 Wave 1 TODO execution is in progress on 2026-05-07. The first shipped slice is the shared API/Web error contract and request trace ID baseline; the next slice should continue Wave 1 with environment docs or real Oracle + RabbitMQ verification wiring.
 
 ## Working Rules For Next Execution Cycle
 
@@ -2260,3 +2260,558 @@ Expected after implementation: both commands pass.
   - The legacy mirrored Agent tables are retired from active schema and test cleanup paths.
   - Existing databases have an idempotent migration path to drop the old objects.
   - Full Oracle execution of the migration is not verified in this sandbox because Oracle connectivity is blocked here.
+
+### Task 28: Schema Verification And Documentation Hardening
+
+**Status:** Completed as a focused Task 26/27 acceptance hardening slice on 2026-05-07.
+
+**Scope:**
+
+- Correct stale design documentation around retired legacy `AGENT_*` tables.
+- Make the query-optimization migration safe to re-run when an existing Oracle database is partially migrated.
+- Ensure local bootstrap checks every 010 query-optimization index before deciding the slice is already applied.
+
+**Files:**
+
+- Modify: `apps/api/src/test/java/com/example/review/CodeQualityTest.java`
+- Modify: `database/oracle/010_database_query_optimization.sql`
+- Modify: `scripts/dev-up.sh`
+- Modify: `docs/DESIGN_STRUCTURE.md`
+- Modify: `AGENTS.md`
+- Modify: `docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md`
+
+**Execution notes, 2026-05-07:**
+
+- Red tests:
+  - Added `CodeQualityTest.retiredAgentTableDocumentationMatchesCurrentRetirementContract`, which failed because `docs/DESIGN_STRUCTURE.md` still said retired `AGENT_*` tables might appear in old migrations or test cleanup paths.
+  - Added `CodeQualityTest.queryOptimizationMigrationIsIdempotentAndDevBootstrapChecksEveryIndex`, which failed because 010 used direct `CREATE INDEX` statements and `dev-up.sh` checked only `IDX_REVIEW_ROUND_STATUS_ID`.
+- Implemented the green slice:
+  - Updated `docs/DESIGN_STRUCTURE.md` to state that retired `AGENT_*` object names are allowed only in `011_retire_legacy_agent_tables.sql` and guard tests, and refreshed the table grouping for registration, conference, bidding, and assignment draft objects.
+  - Changed `010_database_query_optimization.sql` to use `create_index_if_missing` for all seven hotspot indexes.
+  - Added `all_query_optimization_indexes_exist` to `dev-up.sh` so partially applied 010 migrations are detected by checking every index in the group.
+  - Updated `AGENTS.md` with reusable rules for retirement documentation and multi-object incremental migration self-healing.
+  - Verification:
+    - Red run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=CodeQualityTest test` failed with the expected two guard-test failures.
+    - Green run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=CodeQualityTest test` passed.
+    - Real Oracle run: copied `010_database_query_optimization.sql` into `review-oracle` and executed it successfully; `verify_schema.sql` then passed.
+    - Final repository run: `bash scripts/test-all.sh` passed with API 98 tests, Agent 48 tests, and Web 53 tests plus `vue-tsc` and `vite build`.
+- Current completion state:
+  - Task 26/27 acceptance hardening is implemented and verified at guard-test and real Oracle schema levels.
+
+### Task 29: Business Flow Review Against Real Paper Review Platforms
+
+**Status:** Completed as a documentation and backlog review slice on 2026-05-07.
+
+**Scope:**
+
+- Review the current implemented workflow against real paper review platform expectations.
+- Identify business-flow gaps that would matter before real deployment.
+- Update `TODO.md` with prioritized remediation items.
+- Mark stale completed TODO items as complete where current code/docs already closed them.
+
+**Files:**
+
+- Modify: `TODO.md`
+- Modify: `AGENTS.md`
+- Modify: `docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md`
+
+**Execution notes, 2026-05-07:**
+
+- Reviewed current workflow docs, API controllers/services, Vue routes, Oracle schema, Agent runtime structure, and test script behavior.
+- Confirmed the system already covers the demo-level chain: registration, CFP, conference-scoped submission, reviewer pool, bidding, assignment drafts, review submission, chair decision, and asynchronous Agent analysis.
+- Identified real-platform gaps in conference-scoped authorization, phase/deadline enforcement, COI and double-blind governance, author-facing decision packages, reviewer discussion/meta-review, submission package completeness, reviewer-pool operations, compensation workflows, communication, camera-ready publication, multi-track workflows, and governance reporting.
+- Updated `TODO.md` with a new `Business Flow Gaps For Real Deployment` section and P0/P1/P2 priorities.
+- Marked stale TODO items complete for:
+  - current architecture documentation alignment around message-driven analysis;
+  - `scripts/test-all.sh` running the full Agent pytest suite when dependencies are present;
+  - dev/test/docs alignment with the current Oracle/RabbitMQ/analysis-platform path.
+- Added reusable `AGENTS.md` lessons requiring future business-flow reviews to distinguish demo completeness from real-deployment readiness and to update `TODO.md` in the same cycle.
+
+**Verification:**
+
+- Static review of the referenced source and docs.
+- `git diff --check` passed after the documentation updates.
+
+**Current completion state:**
+
+- Business-flow risks are documented in the executable backlog.
+- No application code was changed in this slice.
+
+### Task 30: TODO Landing Plan And Shared Error Contract
+
+**Status:** Partially completed as Wave 1 foundation work on 2026-05-07.
+
+**Scope:**
+
+- Turn the open TODO backlog into an implementation sequence.
+- Start landing the first cross-cutting item that supports every later workflow: stable API/Web error contracts with trace IDs.
+- Keep larger business-flow items split into later, independently verifiable slices.
+
+**Implementation sequence for remaining TODOs:**
+
+1. Wave 1 - shared execution foundations: error contract, trace IDs, environment docs, verification scripts.
+2. Wave 2 - analysis/runtime hardening: real Oracle + RabbitMQ integration verification, one Agent execution stack, provider failure classification, lifecycle governance fields.
+3. Wave 3 - API/Web maintainability: repository boundaries, oversized query/API module splits, frontend async action unification, admin monitor pagination/filtering.
+4. Wave 4 - real-deployment business P0: conference-scoped authorization, phase/deadline enforcement, COI/double-blind governance, author-facing decision packages.
+5. Wave 5 - product operations: discussion/meta-review, camera-ready/publication, communication, deployment, reporting, and data lifecycle.
+
+**Files:**
+
+- Create: `apps/api/src/main/java/com/example/review/config/ApiErrorResponseFactory.java`
+- Create: `apps/api/src/main/java/com/example/review/config/TraceIdFilter.java`
+- Modify: `apps/api/src/main/java/com/example/review/config/GlobalExceptionHandler.java`
+- Modify: `apps/api/src/main/java/com/example/review/config/SecurityConfig.java`
+- Modify: `apps/api/src/test/java/com/example/review/auth/AuthControllerTest.java`
+- Modify: `apps/web/src/lib/api.ts`
+- Modify: `apps/web/src/tests/login.spec.ts`
+- Modify: `TODO.md`
+- Modify: `docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md`
+
+**Execution notes, 2026-05-07:**
+
+- Red tests:
+  - Added API assertions to `AuthControllerTest` requiring `X-Trace-Id` plus JSON fields `status`, `code`, `message`, and `traceId` for wrong-password and anonymous protected-route failures.
+  - Added frontend `login.spec.ts` coverage proving `apiRequest` parses structured API errors with `code` and `traceId` instead of using browser `statusText`.
+  - Frontend red run failed as expected because `ApiError` only carried `status` and `message`.
+  - API red run confirmed the anonymous Security entry point lacked `X-Trace-Id`; the full auth class was also blocked by local Oracle socket restrictions on login-dependent tests.
+- Implemented the green slice:
+  - Added `TraceIdFilter` to assign or preserve `X-Trace-Id`, expose it on the response, and put it into MDC.
+  - Added `ApiErrorResponseFactory` for stable error bodies with `timestamp`, `status`, `code`, `error`, `message`, and `traceId`.
+  - Updated `GlobalExceptionHandler` to use the shared factory.
+  - Replaced the Spring Security bare `HttpStatusEntryPoint` with JSON-writing authentication and access-denied handlers.
+  - Updated frontend `ApiError` to carry optional `code` and `traceId`.
+  - Updated `apiRequest` and `apiBlob` to parse structured JSON error bodies and stop falling back to `response.statusText`.
+  - Added a TODO implementation wave plan and marked the unified error-contract TODO complete while keeping broader observability open for message trace propagation and structured logs.
+- Verification:
+  - `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AuthControllerTest#manuscriptEndpointRejectsAnonymousRequests test` passed.
+  - `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=CodeQualityTest test` passed.
+  - `cd apps/web && npm run test -- --run src/tests/login.spec.ts` passed with 11 tests.
+  - `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts -t "formats common API errors"` passed.
+  - `cd apps/web && npm run typecheck` passed.
+  - `git diff --check` passed.
+  - Full `AuthControllerTest` remains unsuitable in this sandbox unless Oracle socket access is available; login-dependent tests fail with `ORA-17820` / `SocketException: Operation not permitted` before reaching the new error-contract assertions.
+
+**Current completion state:**
+
+- Wave 1 planning is recorded in `TODO.md`.
+- The shared API/Web error contract TODO is complete.
+- The observability TODO remains open for message-level trace propagation, structured logs, and readiness/liveness checks.
+
+### Task 31: Wave 1 And Wave 2 TODO Landing
+
+**Status:** Completed on 2026-05-07.
+
+**Scope:**
+
+- Complete Wave 1 shared execution foundations after the shared error contract: environment governance, message trace propagation, structured async logs, readiness/liveness health checks, repository CI, and real Oracle + RabbitMQ verification script wiring.
+- Complete Wave 2 analysis/runtime hardening: make `agent_platform` the single active Agent execution stack, classify provider/schema/input failures with retry semantics, persist execution job governance timestamps/categories, and add the Oracle migration/verification wiring.
+- Run verification only after the full Wave 1/Wave 2 implementation is in place, per the user instruction for this slice.
+
+**Planned files:**
+
+- Create: `.env.example`
+- Create: `.github/workflows/ci.yml`
+- Create: `docs/ENVIRONMENT.md`
+- Create: `scripts/analysis-e2e-smoke.sh`
+- Create: `database/oracle/019_execution_job_governance.sql`
+- Create: `services/agent/app/agent_platform/schemas.py`
+- Create: `services/agent/app/agent_platform/paper_understanding.py`
+- Modify: `apps/api/src/main/java/com/example/review/analysis/infrastructure/AnalysisOutboxPublisher.java`
+- Modify: `apps/api/src/main/java/com/example/review/analysis/infrastructure/AnalysisCompletionListener.java`
+- Modify: `apps/api/src/main/java/com/example/review/analysis/infrastructure/AnalysisEventConsumer.java`
+- Modify: `apps/api/src/main/java/com/example/review/health/HealthController.java`
+- Modify: `apps/api/src/main/java/com/example/review/config/SecurityConfig.java`
+- Modify: `services/agent/app/main.py`
+- Modify: `services/agent/app/agent_platform/*`
+- Modify: `services/agent/tests/*`
+- Modify: `database/oracle/verify_schema.sql`
+- Modify: `scripts/dev-up.sh`
+- Modify: `scripts/oracle-schema-apply.sh`
+- Modify: `scripts/test-all.sh`
+- Modify: `README.md`
+- Modify: `docs/TESTING.md`
+- Modify: `docs/ARCHITECTURE.md`
+- Modify: `docs/CODE_STRUCTURE.md`
+- Modify: `TODO.md`
+- Modify: `AGENTS.md`
+- Modify: `docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md`
+
+**Execution plan:**
+
+1. Wire trace IDs through API outbox envelopes, Agent request intake, completion events, and API completion consumption logs.
+2. Add health layering and environment documentation without changing existing business endpoints.
+3. Add CI and a real local smoke script that can start Oracle/Rabbit/API/Agent, trigger an analysis request, and poll for projection availability.
+4. Move the remaining active schema and paper-understanding helpers from `app/workflows` into `app/agent_platform`, update imports/tests, and delete the obsolete first-generation workflow modules.
+5. Add provider error categories and retryability decisions, then persist last error category, last attempt time, and completion time in `EXECUTION_JOB`.
+6. Wire the new Oracle migration into full schema apply and incremental dev bootstrap, and update verification/docs/TODO state.
+
+**Execution notes, 2026-05-07:**
+
+- Wave 1 implementation:
+  - Added `.env.example` and `docs/ENVIRONMENT.md` for Oracle, RabbitMQ, JWT, Agent provider, port, and frontend API base variables.
+  - Added API and Agent readiness/liveness endpoints.
+  - Propagated `traceId` from API request MDC into analysis request outbox envelopes, Agent input snapshots, completion events, and API completion-consumer MDC/logs.
+  - Added structured async chain logs on Agent request consumption, job start/failure/success, completion publish, and API completion consumption.
+  - Added `.github/workflows/ci.yml` and `scripts/analysis-e2e-smoke.sh`.
+  - Updated `scripts/test-all.sh` so `RUN_ANALYSIS_E2E_SMOKE=1` runs the real Oracle + RabbitMQ + API + Agent screening-analysis smoke.
+- Wave 2 implementation:
+  - Migrated active Agent schema validation and paper-understanding helpers into `app/agent_platform`.
+  - Removed the obsolete `app/workflows/*` LangGraph execution stack and removed the `langgraph` dependency from Agent package metadata.
+  - Added `ProviderExecutionError` with retryable/non-retryable categories.
+  - Classified provider transport failures as retryable, provider JSON/schema failures as terminal schema failures, unsupported analysis/input errors as terminal business-input failures, and unexpected runtime failures as retryable runtime failures.
+  - Added `ExecutionJob` governance fields: `last_error_category`, `last_attempt_at`, and `completed_at`.
+  - Added `database/oracle/019_execution_job_governance.sql`, wired it into `oracle-schema-apply.sh`, `dev-up.sh`, and `verify_schema.sql`.
+  - Updated TODO, docs, and AGENTS lessons for the completed Wave 1/Wave 2 work.
+- Verification fixes during final full run:
+  - Updated schema wiring guard tests from the old `Expected 50 indexes` baseline to the new `Expected 52 indexes` baseline after adding governance indexes.
+  - Added explicit `RabbitAdmin` and Jackson JSON message converter wiring for the API broker path so Python Agent consumers receive JSON instead of Java-serialized maps.
+  - Changed the real smoke script to use isolated RabbitMQ exchange/queue/routing-key names so stale local broker topology cannot conflict with the current direct-exchange setup.
+  - Made the smoke script install the Agent package dependencies when broker/runtime imports are missing.
+
+**Verification status:**
+
+- Passed:
+  - First full run exposed stale schema guard strings; fixed.
+  - Second full run exposed non-idempotent smoke schema apply; fixed.
+  - Third full run exposed missing Agent broker dependencies and missing API queue declaration; fixed.
+  - Fourth full run exposed stale local RabbitMQ exchange type and Java-serialized API messages; fixed with isolated smoke topology and JSON converter.
+  - Final full run: `RUN_ANALYSIS_E2E_SMOKE=1 bash scripts/test-all.sh` passed with API 100 tests, Agent 54 tests, Web 54 tests plus `vue-tsc`, Vite build, and real Oracle + RabbitMQ analysis smoke (`analysis smoke passed: intentId=182`).
+  - `git diff --check` passed.
+
+**Current completion state:**
+
+- Wave 1 and Wave 2 are implemented and verified end to end against the local Oracle/RabbitMQ stack.
+
+### Task 32: Wave 3 API/Web Maintainability Landing
+
+**Status:** Completed on 2026-05-07.
+
+**Scope:**
+
+- Complete Wave 3 from `TODO.md`: split oversized API/read-model and frontend API surfaces, push remaining workflow page SQL out of `WorkflowQueryService`, standardize reviewer assist async actions, and add admin analysis monitor pagination/filtering.
+- Keep the scope to maintainability and governance UI behavior; defer Wave 4 business-policy changes.
+
+**Files:**
+
+- Create: `apps/api/src/main/java/com/example/review/workflow/ReviewerAssignmentReadRepository.java`
+- Create: `apps/api/src/main/java/com/example/review/workflow/ScreeningQueueReadRepository.java`
+- Create: `apps/api/src/main/java/com/example/review/workflow/AdminAnalysisMonitorReadRepository.java`
+- Modify: `apps/api/src/main/java/com/example/review/workflow/WorkflowQueryService.java`
+- Modify: `apps/api/src/main/java/com/example/review/workflow/WorkflowQueryController.java`
+- Modify: `apps/api/src/main/java/com/example/review/manuscript/ManuscriptRepository.java`
+- Modify: `apps/api/src/main/java/com/example/review/review/ReviewRoundRepository.java`
+- Modify: `apps/api/src/main/java/com/example/review/review/ReviewWorkflowService.java`
+- Modify: `apps/api/src/main/java/com/example/review/decision/DecisionService.java`
+- Modify: `apps/api/src/test/java/com/example/review/workflow/AdminAnalysisMonitorQueryTest.java`
+- Modify: `apps/api/src/test/java/com/example/review/CodeQualityTest.java`
+- Create: `apps/web/src/lib/workflow-types.ts`
+- Create: `apps/web/src/lib/author-workflow-api.ts`
+- Create: `apps/web/src/lib/reviewer-workflow-api.ts`
+- Create: `apps/web/src/lib/chair-workflow-api.ts`
+- Create: `apps/web/src/lib/admin-workflow-api.ts`
+- Modify: `apps/web/src/lib/workflow-api.ts`
+- Modify: `apps/web/src/views/admin/AgentMonitorView.vue`
+- Modify: `apps/web/src/components/reviewer/ReviewerAgentPanel.vue`
+- Modify: `apps/web/src/tests/workflow.spec.ts`
+- Modify: `TODO.md`
+- Modify: `docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md`
+
+**Execution plan:**
+
+1. Add red tests for admin monitor paging/filter query parameters, repository-owned SQL, and reviewer assist scoped async state.
+2. Move reviewer assignment, screening queue, and admin monitor SQL into focused read repositories.
+3. Change the admin monitor endpoint to return a page envelope and accept optional `analysisType` / `businessStatus` filters.
+4. Split frontend workflow API types/functions by actor while keeping `workflow-api.ts` as a compatibility barrel.
+5. Update the admin monitor UI with filters, page state, and paginated table loading.
+6. Replace manual reviewer assist `loading/running/error` state with `useAsyncAction` plus `apiErrorMessage`.
+7. Mark Wave 3 TODOs complete only for the landed scope and run focused API/Web verification.
+
+**Execution notes, 2026-05-07:**
+
+- Red tests added:
+  - `AdminAnalysisMonitorQueryTest.adminListsAnalysisMonitorRows` now expects a page envelope, repository query parameters, and filters.
+  - `CodeQualityTest.workflowQueryServiceKeepsPageQueriesInRepositories` requires `WorkflowQueryService` to stop owning page SQL and fixed 50-row admin monitor queries.
+  - `workflow.spec.ts` now expects the admin monitor to call `/api/admin/analysis-monitor?page=1&size=20`, apply filters, and keep reviewer assist run/refresh loading independent through shared async action state.
+- Implemented API maintainability changes:
+  - Added `ReviewerAssignmentReadRepository`, `ScreeningQueueReadRepository`, and `AdminAnalysisMonitorReadRepository`.
+  - Changed `WorkflowQueryService` into a permission/assembly layer; reviewer assignment, screening queue, and admin monitor SQL now live in focused repositories.
+  - Changed `/api/admin/analysis-monitor` to accept `page`, `size`, `analysisType`, and `businessStatus`, and return `AdminAnalysisMonitorPage`.
+  - Moved remaining core workflow JDBC details out of `ReviewWorkflowService` and `DecisionService` by adding repository methods for manuscript status/round updates and a decision-target round lock row.
+  - Added guard coverage preventing `WorkflowQueryService`, `ReviewWorkflowService`, and `DecisionService` from re-owning those SQL/JDBC responsibilities.
+- Implemented Web maintainability changes:
+  - Split the monolithic `workflow-api.ts` into `workflow-types.ts`, `author-workflow-api.ts`, `reviewer-workflow-api.ts`, `chair-workflow-api.ts`, and `admin-workflow-api.ts`, while preserving `workflow-api.ts` as a compatibility barrel.
+  - Added admin monitor filters, pagination state, page envelope handling, and pagination UI.
+  - Reworked `ReviewerAgentPanel.vue` to use `useAsyncAction` for independent run/refresh pending state.
+  - Wrapped `DecisionWorkbenchView.vue` conflict-analysis action in `useAsyncAction` plus shared API error presentation.
+
+**Verification status:**
+
+- Red runs:
+  - `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AdminAnalysisMonitorQueryTest,CodeQualityTest test` initially failed at test compile because the new admin monitor repository/page types did not exist.
+  - `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts -t "admin analysis monitor|shared async action state"` initially failed because the monitor still called `/api/admin/analysis-monitor` without query params and had no filter controls.
+- Green runs:
+  - `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AdminAnalysisMonitorQueryTest,CodeQualityTest test` passed.
+  - `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -DskipTests compile` passed.
+  - `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts` passed with 32 tests.
+  - `cd apps/web && npm run typecheck` passed.
+  - `cd apps/web && npm run build` passed; Vite emitted the existing large-chunk warning for the main bundle.
+- Oracle-dependent runs:
+  - `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AdminAnalysisMonitorQueryTest,CodeQualityTest,DecisionServiceTest,ReviewWorkflowServiceTest test` compiled but failed in `DecisionServiceTest` and `ReviewWorkflowServiceTest` setup because sandboxed Oracle socket access is blocked with `ORA-17820` / `SocketException: Operation not permitted`.
+
+**Current completion state:**
+
+- Wave 3 API/Web maintainability items are implemented and locally verified where the sandbox permits verification.
+- `TODO.md` now marks the landed Wave 3 API/Web maintainability items complete, with narrower follow-up text where a broader UI decomposition remains future work.
+
+### Task 33: Wave 4 And Wave 5 Minimum Real-Deployment Closure
+
+**Status:** In progress on 2026-05-07.
+
+**Scope:**
+
+- Land the smallest coherent Wave 4/Wave 5 slice that makes the current demo workflow closer to a real conference workflow without pretending the whole OpenReview/CMT feature set is complete.
+- Wave 4 closure: conference organizer/admin authorization on chair actions, review deadline hard reject, direct assignment blocking for non-members/conflicts/decline bids/load, and an author-facing decision package with anonymized reviews.
+- Wave 5 closure: minimal reviewer/chair discussion messages, camera-ready submission for accepted manuscripts, formal communication logging for decisions, and a governance report endpoint.
+- Keep out of scope for this slice: full track/area-chair hierarchy, external email provider, plagiarism/format checking, proceedings/DOI integration, GDPR export/delete automation, and full configurable review forms.
+
+**Planned files:**
+
+- Create: `database/oracle/020_business_operations_closure.sql`
+- Create: `apps/api/src/main/java/com/example/review/operations/BusinessOperationsController.java`
+- Create: `apps/api/src/main/java/com/example/review/operations/BusinessOperationsService.java`
+- Create: `apps/api/src/main/java/com/example/review/operations/BusinessOperationsRepository.java`
+- Modify: `apps/api/src/main/java/com/example/review/manuscript/ManuscriptRepository.java`
+- Modify: `apps/api/src/main/java/com/example/review/review/ReviewAssignmentRepository.java`
+- Modify: `apps/api/src/main/java/com/example/review/review/ReviewWorkflowService.java`
+- Modify: `apps/api/src/main/java/com/example/review/review/ReviewReportService.java`
+- Modify: `apps/api/src/main/java/com/example/review/decision/DecisionRepository.java`
+- Modify: `apps/api/src/main/java/com/example/review/decision/DecisionService.java`
+- Modify: `apps/api/src/main/java/com/example/review/decision/DecisionController.java`
+- Modify: `apps/api/src/main/java/com/example/review/config/SecurityConfig.java`
+- Modify: `database/oracle/verify_schema.sql`
+- Modify: `scripts/oracle-schema-apply.sh`
+- Modify: `scripts/dev-up.sh`
+- Modify: `apps/api/src/test/java/com/example/review/CodeQualityTest.java`
+- Modify: focused API tests under `apps/api/src/test/java/com/example/review/review` and `apps/api/src/test/java/com/example/review/decision`
+- Modify: `TODO.md`
+- Modify: `AGENTS.md` if this slice discovers reusable design/process lessons
+- Modify: `docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md`
+
+**Execution plan:**
+
+1. Add red tests and guard checks for schema wiring, assignment candidate enforcement, review deadline hard reject, decision package privacy, and minimal operations endpoints.
+2. Add migration `020_business_operations_closure.sql` for `REVIEW_DISCUSSION_MESSAGE`, `CAMERA_READY_SUBMISSION`, and `COMMUNICATION_LOG`, with indexes, sequences, triggers, and verification wiring.
+3. Enforce conference-scoped chair/admin ownership using the manuscript conference organizer as the minimum conference-scoped authorization rule.
+4. Reuse the assignment-draft candidate policy for direct assignment/reassignment so direct chair actions cannot bypass membership, load, conflict, author, or decline-bid restrictions.
+5. Enforce review deadlines at submit time from assignment deadline first, then round deadline.
+6. Add author decision package reads that include decision reason plus anonymized author-visible review comments and hide reviewer identity/confidential chair comments.
+7. Add operations endpoints for discussion messages, camera-ready submission/status, communication log listing, and conference governance summary.
+8. Update TODO and plan ledger with landed scope and explicitly leave broader P1/P2 platform capabilities open.
+9. Run focused verification, API compile, frontend verification if touched, and `git diff --check`.
+
+**Execution notes, 2026-05-07:**
+
+- Active task identified from this authoritative plan file before code changes.
+- Design choice: implement a minimum real-deployment closure rather than full platform parity. The durable model uses existing conference organizer/admin as scoped chair authority and adds only the missing operational tables needed for discussion, camera-ready, and communication audit.
+- Red tests:
+  - Added `ReviewWorkflowPolicyTest` requiring organizer/admin conference-scoped chair authorization and direct assignment eligibility blocking.
+  - Added `ReviewReportPolicyTest` requiring review submission to hard-reject after assignment or round deadlines.
+  - Added `DecisionPackagePolicyTest` requiring author-owned decision packages with anonymous reviewer labels and author-visible review content only.
+  - Added `CodeQualityTest.businessOperationsClosureMigrationIsWiredAndVerified` and a security matcher ordering guard for author decision packages.
+  - Added Web workflow tests for loading author decision packages and submitting camera-ready metadata.
+- Backend implementation:
+  - Added `database/oracle/020_business_operations_closure.sql` with idempotent creation of `REVIEW_DISCUSSION_MESSAGE`, `CAMERA_READY_SUBMISSION`, and `COMMUNICATION_LOG`, plus sequences, triggers, constraints, and indexes.
+  - Wired migration 020 into `scripts/oracle-schema-apply.sh`, incremental `scripts/dev-up.sh`, and `database/oracle/verify_schema.sql`; verification counts are now 34 tables, 33 sequences, 36 triggers, and 58 indexes.
+  - Extended `ManuscriptRepository.LockedManuscriptRow` with `conferenceId` and `organizerUserId`.
+  - Kept a legacy/default conference fallback for older direct-seeded manuscripts by joining `COALESCE(M.CONFERENCE_ID, 0)` to the default conference organizer instead of granting every global chair access.
+  - Added `ReviewAssignmentRepository.findEligibilityForAssignment(...)` and enforced it in direct assignment/reassignment paths.
+  - Enforced organizer/admin authorization on review round creation, assignment, reassignment, overdue marking, and conflict-check reads.
+  - Enforced review deadlines in `ReviewReportService.submit(...)`.
+  - Added `DecisionPackageService` and `/api/decisions/manuscripts/{manuscriptId}/package` for author-visible decision packages.
+  - Added `operations` API/repository/service for discussion messages, camera-ready metadata, communication log reads, governance report reads, and decision communication log writes.
+  - Updated Spring Security so author decision package reads are matched before the broader chair/admin decision rule.
+- Frontend implementation:
+  - Added workflow types and author API helpers for decision packages and camera-ready submissions.
+  - Updated `ManuscriptListView.vue` with decision package and camera-ready actions/dialogs.
+  - Added Web tests covering author decision package privacy and camera-ready submission payloads.
+- TODO/AGENTS updates:
+  - Marked Wave4 P0 items complete only for the landed minimum closure and kept the deeper platform capabilities explicit as future work.
+  - Marked Wave5 discussion, communication log, camera-ready, and governance report items complete only for their minimum operational slice.
+  - Added reusable AGENTS lessons for minimum-slice TODO wording, direct action eligibility parity, and security matcher ordering guards.
+- Full Oracle verification follow-up:
+  - Ran `RUN_ANALYSIS_E2E_SMOKE=1 bash scripts/test-all.sh` with local Oracle/RabbitMQ/Docker access. The first run reached the real runtime stack and exposed repository/test-data issues rather than sandbox socket failures: missing incremental migration 020 on an existing database, incomplete `ANALYSIS_INTENT` cleanup with `ANALYSIS_INBOX`/`EXECUTION_JOB` children, direct seeds assuming legacy conference `CONFERENCE_ID = 0`, and positive-path tests using now-expired 2026-05 deadlines.
+  - Updated `scripts/test-all.sh` to apply `020_business_operations_closure.sql` incrementally when the business-operations tables are absent on an existing local Oracle schema.
+  - Removed `@Transactional` from `BusinessOperationsService.recordDecisionCommunication(...)` so best-effort communication logging failures do not mark the primary decision transaction rollback-only after being caught.
+  - Updated Oracle-backed test cleanup for the analysis/execution FK graph by nulling `ANALYSIS_INTENT.EXECUTION_JOB_ID` and deleting `EXECUTION_*` children before `ANALYSIS_*` parents.
+  - Updated legacy direct-seed tests to merge the default conference and phase before inserting manuscripts with `CONFERENCE_ID = 0`.
+  - Replaced expired positive-path deadline fixtures with far-future values while leaving deadline rejection covered by dedicated policy tests.
+- Real-system gap review:
+  - Rechecked TODO against OpenReview/HotCRP/CMT-style platform capabilities and added missing backlog items for chair bulk import/export and preview-confirm flows, paper administrator/shepherd-style roles, search/tag/formula-like workbench filtering, external reviewer delegation, and production backup/HA/disaster-recovery baselines.
+  - Kept existing TODO items for configurable review forms, rebuttal, richer COI, camera-ready/proceedings, communication, multi-track, reporting, and data lifecycle rather than duplicating them.
+- AGENTS updates:
+  - Added reusable lessons for analysis/execution cleanup order, legacy backfill row setup, best-effort communication transaction boundaries, and avoiding near-term absolute deadlines in positive-path tests.
+
+**Verification status:**
+
+- Red run:
+  - `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=CodeQualityTest,ReviewWorkflowPolicyTest,ReviewReportPolicyTest,DecisionPackagePolicyTest test` initially failed at test compile because decision package services/DTOs, assignment eligibility query, and conference-scoped lock fields did not exist.
+- Green runs:
+  - `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=CodeQualityTest,ReviewWorkflowPolicyTest,ReviewReportPolicyTest,DecisionPackagePolicyTest test` passed.
+  - `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -DskipTests compile` passed.
+  - `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test-compile` passed.
+  - `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts` passed with 34 tests.
+  - `cd apps/web && npm run typecheck` passed.
+  - `cd apps/web && npm run build` passed; Vite emitted the existing large chunk warning.
+- Oracle-dependent run:
+  - `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test -DskipTests=false -DskipITs` failed because sandboxed Oracle socket access is blocked with `ORA-17820` / `SocketException: Operation not permitted`. This is the same environment limitation seen in earlier waves.
+- Local Oracle/RabbitMQ follow-up after permission was available:
+  - `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=DecisionServiceTest,ReviewWorkflowServiceTest,AnalysisIntentFlowTest,AgentIntegrationServiceTest,DecisionWorkbenchReadRepositoryTest,ReviewFlowE2eTest test` initially failed on an expired E2E deadline fixture, then passed after replacing positive-path deadlines with far-future values.
+  - `RUN_ANALYSIS_E2E_SMOKE=1 bash scripts/test-all.sh` then exposed two remaining script/test-discipline gaps: manuscript-focused cleanup did not delete new operations children before `MANUSCRIPT`, and `scripts/analysis-e2e-smoke.sh` still assumed the admin monitor endpoint returned a bare array after Wave3 changed it to a page envelope.
+  - Added operations-table cleanup to manuscript, assignment draft, bidding, and workflow-query tests; updated `scripts/analysis-e2e-smoke.sh` to read either `items` or a legacy bare array.
+  - Final `RUN_ANALYSIS_E2E_SMOKE=1 bash scripts/test-all.sh` passed on 2026-05-07 with API 111 tests, Agent 54 tests, Web 58 Vitest tests plus typecheck/build, and the real Oracle/RabbitMQ analysis smoke (`analysis smoke passed: intentId=220`).
+
+**Current completion state after full verification:**
+
+- Wave 4/Wave 5 minimum closure remains implemented and is now verified through the repository-level Oracle/RabbitMQ path.
+- `TODO.md` has been rechecked against real paper-review system capabilities and expanded for the remaining platform gaps instead of marking the product as deployment-complete.
+- Remaining work is product depth and production hardening, not a known failing verification gate in this slice.
+
+**Current completion state:**
+
+- Wave 4 minimum real-deployment business P0 closure is implemented for scoped chair authorization, review deadlines, direct assignment eligibility/COI blocking, and author decision packages.
+- Wave 5 minimum product-operations closure is implemented for discussion messages, camera-ready metadata, decision communication audit, and governance report counts.
+- Full real-platform depth remains explicitly deferred in `TODO.md`.
+
+### Task 34: Wave 6 To Wave 10 Real-Platform Gap Closure Plan
+
+**Status:** Planned on 2026-05-07 after full Oracle/RabbitMQ verification.
+
+**Scope:**
+
+- Turn the remaining OpenReview/HotCRP/CMT-style product gaps into a sequenced execution roadmap without expanding Task 33's minimum closure scope.
+- Use the existing verified baseline as the foundation: full `RUN_ANALYSIS_E2E_SMOKE=1 bash scripts/test-all.sh` currently passes, so every later wave must keep that repository-level gate green.
+- Keep this as the only authoritative implementation ledger. Do not create a parallel plan file for these waves unless the repository rule is explicitly changed.
+
+**External platform reference points used for planning:**
+
+- CMT-style capabilities: supplementary files, configurable submission/review forms, domain and individual conflicts, bidding/preferences, TPMS and optimal assignment support, external reviewers, offline reviewing, rebuttal files, mail templates/previews, reports, and proceedings/editor workflows.
+- HotCRP-style capabilities: bulk assignment, tags, search/formulas, review rounds, configurable paper/review options, and chair-scale filtering.
+- OpenReview-style capabilities: stage-based review, rebuttal, author feedback, and review revision workflows.
+
+**Wave sequence:**
+
+1. Wave 6 - configurable conference workflow: submission/review/meta-review/author-feedback/camera-ready form definitions, submission package policy, review drafts/revisions, and rebuttal windows.
+2. Wave 7 - chair-scale operations: CSV import/export with preview-confirm semantics, tags/search/formula filters, bulk assignment/decision operations, and paper administrator/shepherd/lead/metareviewer roles.
+3. Wave 8 - assignment and COI maturity: reviewer invitations, external reviewer delegation, subject-area/profile matching, richer conflict graph, TPMS-style score import, automatic assignment proposals, and override audit.
+4. Wave 9 - publication and communication maturity: real email template/preview/send history, offline review upload/download, revision/camera-ready file lifecycle, proceedings export, DOI/index metadata, and publication status.
+5. Wave 10 - production readiness and governance: operator compensation actions, queue/dead-letter management, backups/restore drills, HA/disaster-recovery documentation, retention/anonymization/export/delete workflows, and capacity baselines.
+
+**Execution order and rationale:**
+
+- Start with Wave 6 because configurable forms and stage windows become shared primitives for rebuttal, review revision, camera-ready policy, and later bulk operations.
+- Follow with Wave 7 because chair-scale operations need stable form/status/role vocabulary before import/export and bulk actions can be safe.
+- Land Wave 8 after Wave 7 because assignment optimization depends on reviewer pool, role, tag/filter, and conflict data being modeled explicitly.
+- Land Wave 9 after Wave 6 and Wave 7 because communication and publication workflows need form policy, decision states, file lifecycle, and bulk notification primitives.
+- Land Wave 10 continuously but verify it as its own wave, because production reliability should not be mixed with business-flow semantics.
+
+**Wave 6 planned delivery units:**
+
+- Schema:
+  - Add configurable form definition tables, form field tables, form response tables, review draft/revision tables, and author feedback/rebuttal tables in a new numbered Oracle migration.
+  - Add indexes for conference/track/stage lookup, response ownership, review assignment lookup, and rebuttal visibility windows.
+- API:
+  - Add conference-scoped form configuration endpoints for chairs/admins.
+  - Add reviewer draft save, reviewer submit revision, author rebuttal submit/read, and chair visibility endpoints.
+  - Keep existing fixed review submit endpoint compatible by translating the current rubric into a default form definition.
+- Web:
+  - Add dynamic form rendering for reviewer report fields and author feedback/rebuttal.
+  - Preserve current review editor as the default view until dynamic forms are fully wired.
+- Tests:
+  - Add API tests for form required-field validation, draft save without submit, submit-time validation, rebuttal visibility, and review revision history.
+  - Add frontend tests proving invalid dynamic forms do not issue fetch requests.
+
+**Wave 7 planned delivery units:**
+
+- Schema:
+  - Add paper tag tables, saved search/filter tables, import batch tables, import row result tables, and paper-role assignment tables.
+  - Add unique constraints for conference-scoped tag names and paper-role uniqueness.
+- API:
+  - Add CSV preview endpoints that validate rows without mutation.
+  - Add confirm endpoints for assignments, decisions, users, conflicts, preferences, tags, and paper roles.
+  - Add workbench query filters for tag/status/round/review completion/score/conflict/load and formula-like saved filters with a deliberately small expression grammar.
+- Web:
+  - Add chair import preview UI with row-level errors and explicit confirm.
+  - Add tag/filter controls to decision and assignment workbenches.
+- Tests:
+  - Add tests proving malformed CSV rows do not partially mutate state.
+  - Add tests proving bulk confirm enforces the same authorization, phase, COI, and load checks as single-row actions.
+
+**Wave 8 planned delivery units:**
+
+- Schema:
+  - Add reviewer invitation state, external reviewer delegation, conflict relationship sources, subject-area hierarchy, imported matching scores, assignment proposal bundles, and assignment override audit.
+- API:
+  - Add invitation accept/decline, external reviewer delegation approval, conflict import/manual override, TPMS-style score import, and assignment proposal generation.
+  - Keep final assignment confirmation in the API transaction that locks conference-reviewer rows and recomputes load.
+- Agent:
+  - Treat assignment assist output as advisory ranking only; do not let Agent directly mutate assignments.
+  - Add input budgeting for large reviewer pools and long rationale lists.
+- Tests:
+  - Add tests proving COI hard constraints cannot be overridden without explicit audited chair/admin override.
+  - Add tests proving repeated forced assignment-assist runs allocate distinct durable request identities.
+
+**Wave 9 planned delivery units:**
+
+- Schema:
+  - Add email template/version tables, outbound email outbox/history, offline review import batches, proceedings export batches, publication metadata, and camera-ready file storage metadata.
+- API:
+  - Add template preview/test-send, reminder scheduling, email history, offline review template download/upload, camera-ready file upload, proceedings export preview, DOI/index metadata validation, and publication status transitions.
+- Web:
+  - Add chair communication console, author camera-ready upload/checklist, reviewer offline review import/export, and proceedings export screens.
+- Tests:
+  - Keep ordinary tests deterministic with fake email/file adapters.
+  - Add focused smoke or integration tests for outbox persistence and retry without sending real email.
+
+**Wave 10 planned delivery units:**
+
+- Operations:
+  - Add queue/dead-letter management endpoints for analysis and email flows.
+  - Add admin/operator compensation actions with immutable audit.
+  - Document backup/restore, broker recovery, migration rollback, secrets rotation, capacity assumptions, and HA/disaster-recovery topology.
+- Data lifecycle:
+  - Add export/anonymize/delete workflows for conference data, user data, and review artifacts.
+  - Define retention policies for manuscripts, reviews, logs, email history, and agent artifacts.
+- Verification:
+  - Add repository-level smoke checks for backup metadata, queue inspection, and restore/runbook syntax where automation is feasible.
+  - Keep `RUN_ANALYSIS_E2E_SMOKE=1 bash scripts/test-all.sh` green after each operations slice.
+
+**Planning updates executed in this cycle:**
+
+- Updated `TODO.md` with Wave 6 through Wave 10 as the implementation landing sequence.
+- Expanded business-flow TODOs for configurable forms, rebuttal/author feedback/review revisions, reviewer pool operations, bulk import/export, paper administration/shepherd roles, tag/search/formula filters, assignment matching governance, offline reviewing, email template/history, proceedings metadata, review quality/activity logs, and production reliability.
+- No code/schema implementation was started for Wave 6 through Wave 10 in this planning cycle.
+
+**Verification status for this planning cycle:**
+
+- Documentation-only change; no product code was modified for Task 34.
+- Required lightweight verification after edits: `git diff --check`.
+
+**Current completion state:**
+
+- Wave 6 through Wave 10 are planned and mapped to concrete delivery units.
+- The next implementation task should start with Wave 6 form/stage/rebuttal foundations, not chair-scale bulk operations, because later waves depend on configurable workflow primitives.
+
+**Wave 6/Wave 7 execution update on 2026-05-08:**
+
+- Execution mode: continued in the current dirty workspace instead of creating a fresh worktree because the verified Wave1-Wave5 baseline exists only in the uncommitted working tree. This intentionally deviates from the isolated-worktree preference to avoid rebuilding from stale `HEAD`.
+- TDD RED: added `RealPlatformWorkflowServiceTest` and a `CodeQualityTest` guard for `021_real_platform_wave6_wave7.sql`. Initial target run failed as expected because the new tables/endpoints were absent; after migration creation, a sandboxed run also confirmed Oracle JDBC needs escalated execution outside the sandbox.
+- Schema/API implemented: added `database/oracle/021_real_platform_wave6_wave7.sql` with configurable form definitions/fields, review form responses, author feedback, paper tags, import batches, and paper role assignments. Wired the migration into `oracle-schema-apply.sh`, `dev-up.sh`, `test-all.sh`, and `verify_schema.sql`.
+- Backend Wave 6 scope landed: chair/admin form configuration, reviewer assignment-scoped dynamic review form draft/save, submit-time required-field validation, and author feedback/rebuttal submit/read for author/chair/admin visibility.
+- Backend Wave 7 scope landed: chair/admin paper tag upsert, paper role assignment, tag CSV preview that records a non-mutating `IMPORT_BATCH`, and confirm that applies only valid preview rows.
+- Test isolation follow-up: updated Oracle integration-test cleanup helpers for the new FK children and changed historical schema guard tests to verify object wiring rather than stale global object totals.
+- Verification run: `mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=CodeQualityTest,RealPlatformWorkflowServiceTest test` passed after applying 021 to local Oracle.
+- Verification run: `mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test` passed for API full suite after cleanup/guard fixes.
+- Verification run: `docker cp database/oracle/verify_schema.sql review-oracle:/tmp/verify_schema.sql && docker exec review-oracle bash -lc "sqlplus -s review_app/ReviewApp12345@localhost/FREEPDB1 @/tmp/verify_schema.sql"` passed with `Schema verification passed.`
+- Verification run: `git diff --check` passed.
+- Verification run: `RUN_ANALYSIS_E2E_SMOKE=1 bash scripts/test-all.sh` passed: API 115 tests, Agent 54 tests, Web Vitest 58 tests plus `vue-tsc`, Vite production build, and analysis Oracle/RabbitMQ e2e smoke.
+- Current completion state: Wave 6 and Wave 7 are backend-foundation complete only. Dynamic web rendering, full configurable submission/meta-review/camera-ready forms, review revision history, saved search/formula filters, import/export UI, bulk confirms, and workbench filter integration remain tracked in `TODO.md`.

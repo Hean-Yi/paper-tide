@@ -8,43 +8,56 @@
 
 ## 2. 领域模型
 
-核心领域对象（Oracle 表）当前更适合按六组理解：
+核心领域对象（Oracle 表）当前更适合按八组理解：
 
 1. 身份与权限
    - `SYS_USER`
    - `SYS_ROLE`
    - `SYS_USER_ROLE`
 
-2. 稿件与版本
+2. 注册与学术档案
+   - `USER_ACADEMIC_PROFILE`
+   - `USER_RESEARCH_AREA`
+   - `ROLE_APPLICATION`
+   - `EMAIL_VERIFICATION_TOKEN`
+
+3. 会议与征稿
+   - `CONFERENCE`
+   - `CONFERENCE_PHASE`
+   - `CONFERENCE_REVIEWER`
+   - `REVIEWER_BID`
+
+4. 稿件与版本
    - `MANUSCRIPT`
    - `MANUSCRIPT_VERSION`
    - `MANUSCRIPT_AUTHOR`
 
-3. 评审流程
+5. 评审流程
    - `REVIEW_ROUND`
+   - `ASSIGNMENT_DRAFT`
    - `REVIEW_ASSIGNMENT`
    - `CONFLICT_CHECK_RECORD`
    - `REVIEW_REPORT`
    - `DECISION_RECORD`
 
-4. API 侧分析意图与投影
+6. API 侧分析意图与投影
    - `ANALYSIS_INTENT`
    - `ANALYSIS_PROJECTION`
    - `ANALYSIS_OUTBOX`
    - `ANALYSIS_INBOX`
 
-5. Agent 侧执行平台
+7. Agent 侧执行平台
    - `EXECUTION_JOB`
    - `EXECUTION_ATTEMPT`
    - `EXECUTION_ARTIFACT`
    - `EXECUTION_OUTBOX`
    - `EXECUTION_INBOX`
 
-6. 横切能力
+8. 横切能力
    - `SYS_NOTIFICATION`
    - `AUDIT_LOG`
 
-说明：历史 `AGENT_ANALYSIS_TASK` / `AGENT_ANALYSIS_RESULT` / `AGENT_FEEDBACK` 仍可能出现在旧迁移或测试清理路径中，但当前设计主轴已经转到 analysis intent / projection 与 execution job 模型。
+说明：历史 `AGENT_ANALYSIS_TASK` / `AGENT_ANALYSIS_RESULT` / `AGENT_FEEDBACK` 已退役。当前 active schema、seed、业务代码、测试清理路径都不应依赖这些旧表；旧对象名称只允许出现在 `011_retire_legacy_agent_tables.sql` 的幂等 drop 迁移和防回归的 guard test 中。
 
 ## 3. 状态机设计（当前实现）
 

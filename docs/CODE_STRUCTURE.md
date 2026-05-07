@@ -90,11 +90,12 @@ docs/
 - `app/agent_platform/repositories.py`：内存 / Oracle 执行仓储
 - `app/agent_platform/consumer.py` / `publisher.py` / `outbox.py`：消息消费与发布
 - `app/agent_platform/runtime.py`：平台运行时主流程
+- `app/agent_platform/schemas.py`：当前唯一执行栈使用的严格输出 schema
+- `app/agent_platform/paper_understanding.py`：当前唯一执行栈使用的论文理解 payload 规整
 
 ### 4.2 处理器与工作流层
 
 - `app/agent_platform/handlers/`：`reviewer_assist`、`reviewer_assignment_assist`、`conflict_analysis`、`screening` 处理器
-- `app/workflows/`：分析工作流与 schema
 - `app/pdf_tools.py`：PDF 解析与页面处理
 - `app/redaction.py`：双盲脱敏
 - `app/models.py`：共享模型定义
@@ -103,6 +104,7 @@ docs/
 
 - 旧的任务缓存模块已移除
 - 旧的任务路由模块已移除
+- 旧的 `app/workflows/*` LangGraph 双轨执行栈已移除；Agent 当前只通过 `agent_platform` handler/runtime 执行
 - 当前公开 HTTP 入口以应用健康检查和运行时装配为主，不再使用通用任务 REST 端点作为主路径
 
 ## 5. 数据库结构（database/oracle）
@@ -116,7 +118,7 @@ docs/
 - `007_seed_demo_workflow.sql`：演示流程数据
 - `008_agent_platform_refactor.sql`：分析意图 / 投影、执行作业、outbox / inbox 结构
 - `009_execution_job_attempt_count.sql`：执行作业尝试计数补充迁移
-- `010_database_query_optimization.sql` 到 `018_reviewer_assignment_assist_analysis.sql`：查询优化、注册审批、会议/CFP、会议投稿、reviewer pool/bidding、assignment draft、assignment assist analysis type
+- `010_database_query_optimization.sql` 到 `019_execution_job_governance.sql`：查询优化、注册审批、会议/CFP、会议投稿、reviewer pool/bidding、assignment draft、assignment assist analysis type、execution job 治理字段
 - `verify_schema.sql`：对象校验
 
 ## 6. 工具脚本（scripts）

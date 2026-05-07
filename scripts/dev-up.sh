@@ -135,6 +135,27 @@ apply_oracle_reviewer_assignment_assist_schema() {
     >/dev/null
 }
 
+apply_oracle_execution_job_governance_schema() {
+  docker cp "$ROOT_DIR/database/oracle/019_execution_job_governance.sql" "$DEFAULT_ORACLE_CONTAINER:/tmp/019_execution_job_governance.sql" >/dev/null
+  docker exec "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE} @/tmp/019_execution_job_governance.sql" \
+    >/dev/null
+}
+
+apply_oracle_business_operations_closure_schema() {
+  docker cp "$ROOT_DIR/database/oracle/020_business_operations_closure.sql" "$DEFAULT_ORACLE_CONTAINER:/tmp/020_business_operations_closure.sql" >/dev/null
+  docker exec "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE} @/tmp/020_business_operations_closure.sql" \
+    >/dev/null
+}
+
+apply_oracle_real_platform_wave6_wave7_schema() {
+  docker cp "$ROOT_DIR/database/oracle/021_real_platform_wave6_wave7.sql" "$DEFAULT_ORACLE_CONTAINER:/tmp/021_real_platform_wave6_wave7.sql" >/dev/null
+  docker exec "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE} @/tmp/021_real_platform_wave6_wave7.sql" \
+    >/dev/null
+}
+
 oracle_column_exists() {
   local table_name="$1"
   local column_name="$2"
@@ -164,6 +185,26 @@ SQL
 )"
 
   [[ "$index_count" == "1" ]]
+}
+
+all_query_optimization_indexes_exist() {
+  oracle_index_exists "IDX_REVIEW_ROUND_STATUS_ID" &&
+    oracle_index_exists "IDX_REVIEW_ASSIGNMENT_ROUND_ID" &&
+    oracle_index_exists "IDX_REVIEW_ASSIGNMENT_ACCESS" &&
+    oracle_index_exists "IDX_REVIEW_REPORT_ROUND" &&
+    oracle_index_exists "IDX_CONFLICT_CHECK_MANUSCRIPT_REVIEWER" &&
+    oracle_index_exists "IDX_MANUSCRIPT_STATUS_SUBMITTED" &&
+    oracle_index_exists "IDX_ANALYSIS_PROJECTION_UPDATED"
+}
+
+all_real_platform_wave6_wave7_tables_exist() {
+  oracle_table_exists "CONFERENCE_FORM_DEFINITION" &&
+    oracle_table_exists "CONFERENCE_FORM_FIELD" &&
+    oracle_table_exists "REVIEW_FORM_RESPONSE" &&
+    oracle_table_exists "AUTHOR_FEEDBACK" &&
+    oracle_table_exists "PAPER_TAG" &&
+    oracle_table_exists "IMPORT_BATCH" &&
+    oracle_table_exists "PAPER_ROLE_ASSIGNMENT"
 }
 
 oracle_constraint_mentions() {
@@ -206,7 +247,7 @@ ensure_oracle_schema() {
     apply_oracle_attempt_count_schema
   fi
 
-  if ! oracle_index_exists "IDX_REVIEW_ROUND_STATUS_ID"; then
+  if ! all_query_optimization_indexes_exist; then
     echo "Oracle schema detected without 010 query-optimization indexes. Applying incremental schema..." >&2
     apply_oracle_query_optimization_schema
   fi
@@ -249,6 +290,27 @@ ensure_oracle_schema() {
   if ! oracle_constraint_mentions "CK_ANALYSIS_INTENT_TYPE" "REVIEWER_ASSIGNMENT_ASSIST"; then
     echo "Oracle schema detected without 018 reviewer assignment assist analysis type. Applying incremental schema..." >&2
     apply_oracle_reviewer_assignment_assist_schema
+  fi
+
+  if ! oracle_column_exists "EXECUTION_JOB" "LAST_ERROR_CATEGORY" ||
+    ! oracle_column_exists "EXECUTION_JOB" "LAST_ATTEMPT_AT" ||
+    ! oracle_column_exists "EXECUTION_JOB" "COMPLETED_AT" ||
+    ! oracle_index_exists "IDX_EXECUTION_JOB_ERROR_UPDATED" ||
+    ! oracle_index_exists "IDX_EXECUTION_JOB_ATTEMPT_AT"; then
+    echo "Oracle schema detected without 019 execution job governance fields. Applying incremental schema..." >&2
+    apply_oracle_execution_job_governance_schema
+  fi
+
+  if ! oracle_table_exists "REVIEW_DISCUSSION_MESSAGE" ||
+    ! oracle_table_exists "CAMERA_READY_SUBMISSION" ||
+    ! oracle_table_exists "COMMUNICATION_LOG"; then
+    echo "Oracle schema detected without 020 business operations closure objects. Applying incremental schema..." >&2
+    apply_oracle_business_operations_closure_schema
+  fi
+
+  if ! all_real_platform_wave6_wave7_tables_exist; then
+    echo "Oracle schema detected without 021 real-platform Wave6/Wave7 objects. Applying incremental schema..." >&2
+    apply_oracle_real_platform_wave6_wave7_schema
   fi
 
   if verify_oracle_schema; then

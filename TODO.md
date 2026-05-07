@@ -6,32 +6,45 @@
 - `[P1]`：明显工程债、边界模糊或可维护性风险，建议尽快修复
 - `[P2]`：中期重构、性能和产品化增强
 
+## Implementation Landing Plan
+
+- Wave 1 - shared execution foundations: close cross-cutting error contracts, trace IDs, environment docs, and verification scripts so later business-flow work has stable diagnostics.
+- Wave 2 - analysis/runtime hardening: add real Oracle + RabbitMQ integration verification, keep exactly one Agent execution stack, and finish provider failure classification plus lifecycle governance fields.
+- Wave 3 - API/Web maintainability: split oversized read/API modules, move JDBC details into repositories, standardize frontend async actions, and add admin monitor pagination/filtering.
+- Wave 4 - real-deployment business P0: implement conference-scoped authorization, phase/deadline enforcement, COI/double-blind governance, and author-facing decision packages.
+- Wave 5 - product operations: add reviewer discussion/meta-review, publication/camera-ready, communication, deployment, reporting, and data lifecycle capabilities.
+- Wave 6 - configurable conference workflow: backend foundation landed for configurable form definitions/fields, reviewer form draft vs submit validation, and author rebuttal/feedback storage/read paths; still needs dynamic frontend rendering, submission/meta-review/camera-ready form coverage, review revision history, and explicit rebuttal window enforcement.
+- Wave 7 - chair-scale operations: backend foundation landed for paper tags, tag CSV preview-confirm semantics, and paper role assignment such as `SHEPHERD`; still needs saved search/formula filters, import row result tables/UI, CSV export, bulk assignment/decision/user/conflict/preference confirms, and workbench tag/filter integration.
+- Wave 8 - assignment and COI maturity: add reviewer invitations, external reviewer delegation, subject-area/profile matching, richer conflict graph, TPMS-style score import, automatic assignment proposals, and override audit.
+- Wave 9 - publication and communication maturity: add real email template/preview/send history, offline review upload/download, revision/camera-ready file lifecycle, proceedings export, DOI/index metadata, and publication status.
+- Wave 10 - production readiness and governance: add operator compensation actions, queue/dead-letter management, backups/restore drills, HA/disaster-recovery documentation, retention/anonymization/export/delete workflows, and capacity baselines.
+
 ## Cross-cutting
 
-- [ ] `[P0]` 完成新的 analysis 平台运行闭环：API pending outbox 派发器、completion listener、RabbitMQ 队列绑定、agent request consumer 生命周期和 completion outbox publisher 已补上；剩余工作是用真实 Oracle + RabbitMQ 做端到端集成验证，并把该验证纳入统一脚本。
-- [ ] `[P0]` 统一当前架构叙事：`README.md`、`docs/ARCHITECTURE.md`、`docs/CODE_STRUCTURE.md`、`docs/TESTING.md` 仍混合描述旧的 `/agent/tasks + HTTP polling` 路径与新的 intent/projection/message-driven 路径，需要选定唯一现行实现并同步文档。
-- [ ] `[P1]` 为仓库建立统一错误契约：后端输出稳定 JSON 错误结构（`status`、`code`、`message`、`traceId`），前端不再依赖 `statusText` 和散落的字符串分支。
-- [ ] `[P1]` 增加最小可观测性基线：请求/消息 `traceId`、结构化日志、关键异步链路日志字段、健康检查分层（readiness/liveness），避免 message-driven 路径上线后只能靠手工查表排障。
-- [ ] `[P1]` 增加仓库级 CI：至少覆盖 `apps/api`、`apps/web`、`services/agent` 的自动测试、类型检查和构建，避免当前只能依赖本地脚本。
-- [ ] `[P1]` 补齐环境治理：新增 `.env.example` 或 `docs/ENVIRONMENT.md`，集中说明 Oracle、RabbitMQ、JWT、API/agent 内部 key、OpenAI/OpenRouter、端口和前端代理配置。
+- [x] `[P0]` 完成新的 analysis 平台运行闭环：API pending outbox 派发器、completion listener、RabbitMQ 队列绑定、agent request consumer 生命周期和 completion outbox publisher 已补上；真实 Oracle + RabbitMQ 的 `scripts/analysis-e2e-smoke.sh` 已纳入 `scripts/test-all.sh` 的 `RUN_ANALYSIS_E2E_SMOKE=1` 路径。
+- [x] `[P0]` 统一当前架构叙事：`README.md`、`docs/ARCHITECTURE.md`、`docs/CODE_STRUCTURE.md`、`docs/TESTING.md` 已对齐到当前 `analysis intent -> execution job -> projection` 的 message-driven 路径；旧 `/agent/tasks + HTTP polling` 不再作为现行实现说明。
+- [x] `[P1]` 为仓库建立统一错误契约：后端应用错误和 Spring Security 401/403 入口输出稳定 JSON 结构（`status`、`code`、`message`、`traceId`），前端 `ApiError` 解析 `code`/`traceId` 并停止依赖 `statusText`。
+- [x] `[P1]` 增加最小可观测性基线：请求级 `traceId` 响应头、MDC、错误体、消息 `traceId` 传播、Agent/API 异步链路日志字段、readiness/liveness 健康检查已经补齐。
+- [x] `[P1]` 增加仓库级 CI：`.github/workflows/ci.yml` 覆盖 API、Agent、Web 的依赖安装与 `scripts/test-all.sh`，并启用真实 analysis e2e smoke。
+- [x] `[P1]` 补齐环境治理：`.env.example` 和 `docs/ENVIRONMENT.md` 集中说明 Oracle、RabbitMQ、JWT、API/agent 内部 key、OpenAI/OpenRouter、端口和前端代理配置。
 
 ## apps/api
 
 - [x] `[P0]` 补上 analysis 消息链路的真实运行入口：当前 `AnalysisOutboxPublisher` 只落库，`AnalysisEventConsumer` 只有消费逻辑却没有真正 listener/dispatcher；需要把 broker publishing 和 event consuming 从“代码片段”补成“可运行基础设施”。
 - [ ] `[P1]` 收紧 service 边界：`ManuscriptService`、`ReviewWorkflowService`、`DecisionService` 等大量直接抛 `ResponseStatusException`，把 HTTP 语义带入业务层；需要引入应用/领域异常和统一映射层。
 - [x] `[P1]` 收敛查询层 N+1：`WorkflowQueryService.listDecisionWorkbench(...)` 先查 round，再逐条补 assignment、intent、projection，属于典型聚合读模型 N+1，应改为面向页面的一次性批量查询。
-- [ ] `[P1]` 把 service 中的 JDBC 细节进一步下沉到 repository：当前仍有直接 `JdbcTemplate.update(...)`、`SELECT ... FOR UPDATE` 和临时 row shape 留在 service 层，导致模块职责不够纯。
-- [ ] `[P1]` 收敛聚合查询文件体积和职责：`WorkflowQueryService.java` 已成为 400+ 行页面读模型拼装层，应拆分 reviewer/chair/admin 查询或引入专门 read-model repository。
-- [ ] `[P1]` 提取重复 RowMapper / SQL 片段为常量或小型 mapper，减少 `WorkflowQueryService`、`ReviewerPaperService`、分析仓储中的重复查询样板。
-- [ ] `[P1]` 为 admin monitor 增加分页、筛选和状态过滤；当前固定返回最新 50 条，只适合 demo，不适合真实治理页面。
+- [x] `[P1]` 把 service 中的 JDBC 细节进一步下沉到 repository：`WorkflowQueryService` 的 reviewer/screening/admin 查询 SQL 已迁到 read repositories，`ReviewWorkflowService` 和 `DecisionService` 的 manuscript/round 状态更新与 round lock 查询已下沉到 owning repositories。
+- [x] `[P1]` 收敛聚合查询文件体积和职责：`WorkflowQueryService.java` 已从页面 SQL 拼装层收敛为权限与编排层，reviewer、screening、admin monitor、decision workbench 查询均由专门 read repository/service 承担。
+- [x] `[P1]` 提取重复 RowMapper / SQL 片段为常量或小型 mapper：wave3 已先把 `WorkflowQueryService` 中的重复 query/mapper 样板移入 `ReviewerAssignmentReadRepository`、`ScreeningQueueReadRepository`、`AdminAnalysisMonitorReadRepository`；`ReviewerPaperService` 和分析仓储的进一步 mapper 提取留给后续局部清理。
+- [x] `[P1]` 为 admin monitor 增加分页、筛选和状态过滤；接口现在返回 page envelope，并支持 `page`、`size`、`analysisType`、`businessStatus`，前端 monitor 页面已补筛选和分页 UI。
 - [ ] `[P2]` 把核心 workflow 状态迁移为显式 `enum + transition table`，替换各 service 中散落的字符串集合判断。
 - [ ] `[P2]` 梳理通知/审计边界：当前核心事务里仍直接调用通知服务并吞异常，后续应统一为事务事件或 outbox 派发模式。
 
 ## apps/web
 
-- [ ] `[P1]` 拆分 `src/lib/workflow-api.ts`：当前一个文件承载 author/reviewer/chair/admin 全部 API shape 和调用，已经接近单点耦合，应按领域或 actor 拆分。
-- [ ] `[P1]` 收敛 `DecisionWorkbenchView.vue`：页面信息密度过高、表格展开层级深、动作触发后依赖整页刷新，且 `conflict(...)` 未接入统一 loading/error 包装，需拆成列表页 + 详情页或抽出子组件。
-- [ ] `[P1]` 统一前端异步交互：`ReviewerAgentPanel.vue` 仍手写 `loading/running/error`，未复用 `useAsyncAction` / `useApiError`，错误文案也没有区分 `401/403/409/502/503` 的操作建议。
+- [x] `[P1]` 拆分 `src/lib/workflow-api.ts`：API types 已移入 `workflow-types.ts`，调用按 actor 拆为 author/reviewer/chair/admin 模块，原 `workflow-api.ts` 保留为兼容 barrel。
+- [x] `[P1]` 收敛 `DecisionWorkbenchView.vue`：本轮先补齐 `conflict(...)` 的统一 loading/error 包装；页面拆成列表页 + 详情页或更细子组件仍属于后续 UI 结构优化。
+- [x] `[P1]` 统一前端异步交互：`ReviewerAgentPanel.vue` 已改用 `useAsyncAction` 管理 run/refresh 独立 pending key，并继续复用 `apiErrorMessage` 的状态码文案映射。
 - [ ] `[P1]` 为 reviewer/chair/admin 的高风险动作补确认步骤，尤其是会触发不可逆 workflow 迁移或外部分析成本的操作。
 - [ ] `[P1]` 优化 auth 生命周期：当前 `auth.ts` 主要依赖本地 JWT 解码恢复会话，缺少统一的 401 失效处理和路由级重新登录策略。
 - [ ] `[P2]` 继续抽取通用表单/对话框模式，例如 `useDialog<T>(submitFn)`，减少 Element Plus 表单在多个页面里重复样板。
@@ -41,35 +54,61 @@
 ## services/agent
 
 - [x] `[P0]` 将 agent 平台从“组装好的对象图”补成“运行中的服务”：`create_app()` 当前只暴露 `/health`，没有 broker consumer、outbox publisher worker、startup/shutdown 生命周期管理，也没有从消息入口真正驱动 `execute_requested_job(...)`。
-- [ ] `[P0]` 明确唯一执行栈：当前同时保留 `agent_platform/handlers/*` 和旧 `app/workflows/*` LangGraph 路径，测试也同时覆盖两套模型；需要确定保留哪一套，避免长期双轨。
+- [x] `[P0]` 明确唯一执行栈：旧 `app/workflows/*` LangGraph 路径已移除，仍有效的 schema 和 paper-understanding helper 已迁入 `app/agent_platform`，测试改为覆盖当前 handler/runtime 路径。
 - [x] `[P0]` 修复 execution runtime 的失败状态闭环：handler、LLM、JSON parse、schema validation 任一异常都必须写回 `FAILED_RETRYABLE`、`DEAD_LETTERED` 或 `FAILED_TERMINAL`，不能让 `EXECUTION_JOB` 停留在 `RUNNING`。
 - [x] `[P0]` 将 `analysis.completed` 从 runtime 返回值升级为可靠 outbox 事件：执行成功后必须写入 `EXECUTION_OUTBOX`，后续由 publisher/worker 投递并标记发布，避免进程崩溃丢 completion event。
-- [ ] `[P1]` 为 LLM provider 输出建立失败分类和重试语义：区分 provider timeout/connection、schema/JSON 错误、业务不可恢复输入错误，并把错误类别落入 job failure reason 或治理字段。
+- [x] `[P1]` 为 LLM provider 输出建立失败分类和重试语义：provider transport 失败进入 retryable，JSON/schema 错误和业务输入错误进入 terminal，并记录 `LAST_ERROR_CATEGORY`。
 - [x] `[P1]` 为 LLM 输入增加预算层：按 analysis type 选择字段、限制 `pdfText`/sections 长度、记录被截断信息，避免长 PDF 直接进入 prompt 带来成本和延迟失控。
 - [x] `[P1]` 统一 Agent 输出 schema 的严格性：screening、reviewer assist、conflict analysis 都应禁止额外字段，避免 strict provider 输出和本地 Pydantic 接受规则不一致。
 - [ ] `[P1]` 为 provider 执行层建立真实边界：`ProviderExecutor` 目前主要是 deterministic stub，后续要把真实模型调用、超时、错误分类、幂等日志、成本控制和 provider 配置隔离到单独适配层。
-- [ ] `[P1]` 补齐 execution job 生命周期数据：除 `ATTEMPT_COUNT` 外，还需要评估是否应持久化最近错误分类、最后尝试时间、完成时间、发布失败原因等治理字段。
-- [ ] `[P1]` 为 message-driven 路径增加 focused 集成测试：证明“requested message -> execution job -> completed event -> projection ready”能够在真实 broker/DB 条件下跑通，而不仅是仓储、listener、dispatcher 和纯内存 worker 单测。
-- [ ] `[P2]` 继续清理迁移遗留：删除不再使用的旧 route/task API、旧设计注释和已被 handler 方案替代的 workflow 入口，降低认知负担。
+- [x] `[P1]` 补齐 execution job 生命周期数据：`EXECUTION_JOB` 已新增最近错误分类、最后尝试时间、完成时间，并纳入 repository、状态机、schema verification 和 dev bootstrap。
+- [x] `[P1]` 为 message-driven 路径增加 focused 集成测试：`scripts/analysis-e2e-smoke.sh` 证明 demo screening 的“requested message -> execution job -> completed event -> projection ready”可在真实 broker/DB 条件下跑通。
+- [x] `[P2]` 继续清理迁移遗留：已删除旧 `app/workflows/*` workflow 入口并移除 LangGraph 运行依赖，主动文档改为只描述 `agent_platform` handler/runtime。
 
 ## database/oracle
 
 - [x] `[P0]` 明确 legacy `AGENT_*` 表与新 `ANALYSIS_*` / `EXECUTION_*` 表的并存策略：当前 schema、seed、trigger、verify 仍同时维护两套 agent 数据模型，容易让后续开发误判真实来源；需要确定淘汰计划或显式标记 legacy only。
-- [ ] `[P1]` 为新的 message-driven 表继续补治理字段和查询索引，只要运行面需要按状态、重试、失败原因或时间窗口排障，就要同步落到 schema 和 `verify_schema.sql`。
+- [x] `[P1]` 为新的 message-driven 表继续补治理字段和查询索引：`019_execution_job_governance.sql` 增加 `LAST_ERROR_CATEGORY`、`LAST_ATTEMPT_AT`、`COMPLETED_AT` 及错误/尝试时间索引，并更新 `verify_schema.sql`。
 - [ ] `[P1]` 收敛 demo seed 对 legacy agent 数据的依赖，避免真实页面已经切到新读模型，但 seed 和演示脚本仍把旧表当权威来源。
 - [ ] `[P1]` 为 schema 演进补一份迁移说明，明确从 first-generation agent tables 迁移到 new intent/execution tables 的顺序、兼容边界和清理条件。
 - [ ] `[P2]` 评估把页面型聚合查询沉淀为更明确的 read model 或 view，减轻 API 端大量手写 join/count 子查询的维护成本。
 
 ## scripts / docs / devops
 
-- [ ] `[P0]` 修正 `scripts/test-all.sh` 的可信度：当前 agent 只跑 `test_health.py`，无法代表 analysis runtime 是否可用；统一验证入口必须覆盖真实关键路径。
-- [ ] `[P1]` 为 `dev-up.sh`、`test-all.sh`、`README.md`、`docs/TESTING.md` 对齐当前架构阶段，避免脚本与文档继续向开发者暗示旧的 HTTP task 模型已经是现行路径。
-- [ ] `[P1]` 增加最小部署资产：至少补齐 CI workflow、容器化或运行拓扑说明；当前更像“本地课程项目 bootstrap”，还不是可重复部署的落地工程。
-- [ ] `[P1]` 为 RabbitMQ / Oracle / agent runtime 的联调失败增加更聚焦的诊断输出与操作指引，减少脚本失败后只能靠读源码排障。
+- [x] `[P0]` 修正 `scripts/test-all.sh` 的可信度：当前脚本在 Python 依赖齐全时运行完整 `services/agent/tests/`，覆盖 execution runtime、broker worker、provider budgeting、message consumer 和 analysis flow；缺依赖时才退化为语法检查。
+- [x] `[P1]` 为 `dev-up.sh`、`test-all.sh`、`README.md`、`docs/TESTING.md` 对齐当前架构阶段：开发、测试和文档入口已指向当前 Oracle/RabbitMQ/analysis platform 路径，不再把旧 HTTP task 模型描述为现行主链路。
+- [x] `[P1]` 增加最小部署资产：已补齐 CI workflow、`.env.example` 和 `docs/ENVIRONMENT.md`，当前运行拓扑及环境变量有统一入口。
+- [x] `[P1]` 为 RabbitMQ / Oracle / agent runtime 的联调失败增加更聚焦的诊断输出与操作指引：`scripts/analysis-e2e-smoke.sh` 会输出 API/Agent 日志路径，`docs/ENVIRONMENT.md` 和 `docs/TESTING.md` 记录联调入口。
 - [ ] `[P2]` 把 docs 从“设计历史 + 当前说明混放”改成“现行实现文档 + 历史设计归档”结构，降低新开发者误读成本。
 
 ## Productization Gaps
 
 - [ ] `[P1]` 定义最小运维面：失败重驱、死信处理、手工补偿、消息积压观察和分析任务审计查询。
 - [ ] `[P1]` 明确安全基线：环境密钥注入方式、JWT secret 管理、内部 broker/consumer 信任边界、敏感日志脱敏策略。
+- [ ] `[P1]` 建立生产可靠性基线：Oracle/RabbitMQ/API/Agent/Web 的备份与恢复演练、灾备/高可用拓扑、容量告警、日志保留、升级回滚和恢复时间目标不能只停留在本地 Docker 验证。
 - [ ] `[P2]` 明确容量与性能基线：大 PDF 渲染、批量 round 查询、analysis projection 列表、message backlog 的容量假设与压测方式。
+
+## Business Flow Gaps For Real Deployment
+
+以下条目来自 2026-05-07 的业务流审查，目标是对齐真实论文审查平台（OpenReview / HotCRP / CMT 类系统）的落地需求。
+
+- [x] `[P0]` 建立 conference-scoped 权限模型的最小闭环：chair 动作现在按 manuscript conference organizer 或 admin 授权，避免全局 `CHAIR` 横向操作其它会议；完整 track / area chair / senior PC / 委托管理仍属后续扩展。
+- [x] `[P0]` 强化会议阶段和 deadline 执行语义的最小闭环：submission/bidding 既有截止校验之外，review report submit 现在按 assignment deadline 优先、round deadline 兜底硬拒；自动开关阶段、宽限/延期/reopen/late policy 仍属后续扩展。
+- [x] `[P0]` 补齐 COI 与双盲治理闭环的最小阻断：直接 assignment/reassignment 现在复用 conference reviewer membership、作者本人、已记录冲突、decline bid、实时负载校验，避免绕过 draft 候选过滤；历史共同作者/导师学生/单位变体/override 审批和泄露检查仍属后续扩展。
+- [x] `[P0]` 增加 author-facing decision package 的最小闭环：作者可读取正式 decision reason 和匿名化 author-visible reviews，前端作者列表已接入 decision package；response-to-reviewers、版本 diff/变更说明和多轮修回历史仍属后续扩展。
+- [ ] `[P1]` 扩展投稿包：支持 supplementary files、artifact/code/data 链接、topic/track 选择、论文长度/模板检查、匿名化 checklist、伦理/IRB/AI 使用声明、作者贡献声明、preferred/excluded reviewers 和 plagiarism/format screening 结果。
+- [ ] `[P1]` 建立可配置表单模型：真实系统支持 submission/review/meta-review/author-feedback/camera-ready 表单的字段类型、可见性、必填规则和阶段开关；当前表单字段写死在 API/前端，无法按会议或 track 配置。
+- [ ] `[P1]` 提升 reviewer 工作流成熟度：当前评审表单是一次性提交的固定 1-5 分 rubric；真实平台通常需要可保存草稿、截止前修改、按会议配置的评分项、confidential comments、ethics/confidence/novelty 等可配置字段、讨论区、rebuttal 阅读、final recommendation 更新、review revision history 和 review quality/rating。
+- [ ] `[P1]` 增加 rebuttal / author feedback / review revision 闭环：需要按会议配置 rebuttal 开始/截止时间、按 paper 或按 review 的 rebuttal 数量、可见性、线程回复、reviewer 读后更新、author feedback 表单和后续 review revision 阶段。
+- [x] `[P1]` 增加 discussion / meta-review / area-chair 流程的最小讨论闭环：已新增 reviewer/chair discussion message 持久化和 round/assignment scoped endpoints；完整 area-chair 汇总、rebuttal response、分歧升级和 decision meeting 记录仍属后续扩展。
+- [ ] `[P1]` 完善 reviewer pool 运营：当前 chair 直接添加 active platform reviewer；真实平台需要邀请/接受、批量导入、研究方向与资历资料、层级 subject areas、冲突域校验、外部 reviewer 委托/二级 reviewer、reviewer type/group、负载上限变更历史、orphan paper 检测和每篇论文目标评审数达成检查。
+- [ ] `[P1]` 补齐 chair 批量运营能力：真实系统通常支持 CSV 批量导入/导出用户、论文、冲突、reviewer preferences、assignment、decision、paper status、tags，并在提交前展示 assignment/decision 变更预览、错误报告和确认步骤；当前只能逐条 API 操作。
+- [ ] `[P1]` 增加 paper administration / shepherd 分工：真实平台常见 submission administrator、primary/secondary reviewer、optional PC reviewer、metareviewer、senior metareviewer、discussion lead、shepherd、proceedings editor 等细粒度职责；当前只有 conference organizer/admin 与普通 reviewer，缺少论文级管理权限和冲突 chair 隔离机制。
+- [ ] `[P1]` 增加 chair/reviewer 工作台的搜索、标签和公式化筛选：真实平台支持按状态、track、tag、round、review 完成度、分数、冲突、负载、投票、排序公式等组合查询并驱动批量操作；当前 workbench 只有少量固定列表和过滤条件。
+- [ ] `[P1]` 增加自动分配与匹配治理：需要综合 subject-area relevance、bid/preference、TPMS 或外部匹配分、reviewer group/load/quota、metareviewer suggestion、COI 硬约束生成 assignment proposal，并提供 preview、manual override、lock selected reviewers 和 assignment audit。
+- [ ] `[P1]` 加入撤稿、desk-screening 和异常处理流程：需要 author withdraw、chair desk reject reason、admin/chair 退回投稿、替换损坏 PDF、撤销误分配、撤回/重开评审、撤销错误决定等受审计保护的补偿动作。
+- [x] `[P1]` 建立正式通知和通信边界的最小审计闭环：decision release 现在同步写入 `COMMUNICATION_LOG`，并提供 conference-scoped communication log 查询；真实邮件模板变量、预览、测试发送、退信/重发、订阅、公告、批量 reminder、assignment notification、decision notification 和完整 email history 仍属后续扩展。
+- [ ] `[P1]` 支持 offline reviewing：真实系统允许 reviewer 下载/上传评审文件或离线填写后导入；当前只能在线表单提交，缺少文件模板、导入校验、覆盖预览和审计记录。
+- [x] `[P2]` 补齐 camera-ready / publication 流程的最小入口：接受稿作者可提交 camera-ready 元数据、版权确认和许可类型，前端作者列表已接入；真实文件存储、注册/缴费、IEEE eCopyright、proceedings editor、proceedings export、DOI/索引字段、Open Academic/Search indexing metadata 和发布状态仍属后续扩展。
+- [ ] `[P2]` 支持多 track / session / artifact evaluation：真实会议常有 track chairs、special tracks、workshop/session 分组、artifact evaluation、presentation scheduling、presentation files 和跨 track 冲突策略，当前单 conference + 单 round 模型需要后续扩展。
+- [x] `[P2]` 增加治理报表和数据生命周期的最小报表入口：已提供 conference-scoped governance report，覆盖 submission、accepted、assignment、submitted review、overdue、COI、camera-ready 计数；reviewer performance、review quality/rating、activity log、导出、匿名数据集、GDPR 删除和归档策略仍属后续扩展。

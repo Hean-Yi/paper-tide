@@ -5,6 +5,40 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="python3"
 MAVEN_ARGS=(-Dmaven.repo.local="$ROOT_DIR/.m2/repository")
 
+oracle_table_exists() {
+  local table_name="$1"
+  local container_name="${ORACLE_CONTAINER_NAME:-review-oracle}"
+  local app_user="${APP_USER:-review_app}"
+  local app_password="${APP_USER_PASSWORD:-ReviewApp12345}"
+  local oracle_service="${ORACLE_SERVICE:-FREEPDB1}"
+  local table_count
+
+  if ! docker ps --format '{{.Names}}' | grep -qx "$container_name"; then
+    return 1
+  fi
+  table_count="$(docker exec -i "$container_name" bash -lc \
+    "sqlplus -s ${app_user}/${app_password}@localhost/${oracle_service}" <<SQL | tr -d '[:space:]'
+SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF
+SELECT COUNT(*) FROM USER_TABLES WHERE TABLE_NAME = UPPER('${table_name}');
+EXIT;
+SQL
+)"
+  [[ "$table_count" == "1" ]]
+}
+
+apply_single_oracle_migration() {
+  local migration_file="$1"
+  local container_name="${ORACLE_CONTAINER_NAME:-review-oracle}"
+  local app_user="${APP_USER:-review_app}"
+  local app_password="${APP_USER_PASSWORD:-ReviewApp12345}"
+  local oracle_service="${ORACLE_SERVICE:-FREEPDB1}"
+
+  docker cp "$ROOT_DIR/database/oracle/${migration_file}" "$container_name:/tmp/${migration_file}" >/dev/null
+  docker exec "$container_name" bash -lc \
+    "sqlplus -s ${app_user}/${app_password}@localhost/${oracle_service} @/tmp/${migration_file}" \
+    >/dev/null
+}
+
 if [ -d "/opt/homebrew/opt/openjdk/bin" ]; then
   export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
 fi
@@ -15,6 +49,26 @@ fi
 
 if command -v mvn >/dev/null 2>&1 && command -v java >/dev/null 2>&1; then
   bash "$ROOT_DIR/scripts/rabbitmq-up.sh" --optional
+  if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    CONTAINER_NAME="${ORACLE_CONTAINER_NAME:-review-oracle}" bash "$ROOT_DIR/scripts/oracle-up.sh"
+    if ! oracle_table_exists "SYS_USER"; then
+      CONTAINER_NAME="${ORACLE_CONTAINER_NAME:-review-oracle}" bash "$ROOT_DIR/scripts/oracle-schema-apply.sh"
+    fi
+    if ! oracle_table_exists "COMMUNICATION_LOG" ||
+      ! oracle_table_exists "CAMERA_READY_SUBMISSION" ||
+      ! oracle_table_exists "REVIEW_DISCUSSION_MESSAGE"; then
+      apply_single_oracle_migration "020_business_operations_closure.sql"
+    fi
+    if ! oracle_table_exists "CONFERENCE_FORM_DEFINITION" ||
+      ! oracle_table_exists "CONFERENCE_FORM_FIELD" ||
+      ! oracle_table_exists "REVIEW_FORM_RESPONSE" ||
+      ! oracle_table_exists "AUTHOR_FEEDBACK" ||
+      ! oracle_table_exists "PAPER_TAG" ||
+      ! oracle_table_exists "IMPORT_BATCH" ||
+      ! oracle_table_exists "PAPER_ROLE_ASSIGNMENT"; then
+      apply_single_oracle_migration "021_real_platform_wave6_wave7.sql"
+    fi
+  fi
   if [ -x "$ROOT_DIR/scripts/demo-seed.sh" ] && command -v docker >/dev/null 2>&1; then
     bash "$ROOT_DIR/scripts/demo-seed.sh"
   elif [ -x "$ROOT_DIR/scripts/oracle-demo-seed.sh" ] && command -v docker >/dev/null 2>&1; then
@@ -66,4 +120,11 @@ if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
   fi
 else
   echo "[skip] web verification: node/npm missing"
+fi
+
+if [ "${RUN_ANALYSIS_E2E_SMOKE:-0}" = "1" ]; then
+  bash "$ROOT_DIR/scripts/analysis-e2e-smoke.sh"
+  echo "[full] analysis Oracle/RabbitMQ e2e smoke"
+else
+  echo "[skip] analysis Oracle/RabbitMQ e2e smoke: set RUN_ANALYSIS_E2E_SMOKE=1"
 fi

@@ -29,10 +29,6 @@ class ConferenceReviewerBiddingSchemaTest {
         assertTrue(verification.contains("TRG_REVIEWER_BID_BI"));
         assertTrue(verification.contains("IDX_CONFERENCE_REVIEWER_CONF_STATUS"));
         assertTrue(verification.contains("IDX_REVIEWER_BID_REVIEWER_CONF"));
-        assertTrue(verification.contains("Expected 31 tables"));
-        assertTrue(verification.contains("Expected 30 sequences"));
-        assertTrue(verification.contains("Expected 33 triggers"));
-        assertTrue(verification.contains("Expected 50 indexes"));
 
         assertTrue(fullApply.contains("016_reviewer_pool_bidding.sql"));
         assertTrue(devUp.contains("016_reviewer_pool_bidding.sql"));

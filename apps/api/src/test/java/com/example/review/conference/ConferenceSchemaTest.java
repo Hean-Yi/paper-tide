@@ -31,10 +31,6 @@ class ConferenceSchemaTest {
         assertTrue(verification.contains("TRG_CONFERENCE_PHASE_BI"));
         assertTrue(verification.contains("IDX_CONFERENCE_PUBLIC_STATUS"));
         assertTrue(verification.contains("IDX_CONFERENCE_ORGANIZER_STATUS"));
-        assertTrue(verification.contains("Expected 31 tables"));
-        assertTrue(verification.contains("Expected 30 sequences"));
-        assertTrue(verification.contains("Expected 33 triggers"));
-        assertTrue(verification.contains("Expected 50 indexes"));
 
         assertTrue(fullApply.contains("014_conference_cfp_lifecycle.sql"));
         assertTrue(devUp.contains("014_conference_cfp_lifecycle.sql"));

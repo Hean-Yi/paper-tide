@@ -12,9 +12,12 @@ DECLARE
   v_invalid_count NUMBER;
   v_error_count NUMBER;
   v_execution_job_attempt_count_column NUMBER;
+  v_execution_job_governance_columns NUMBER;
   v_manuscript_conference_column NUMBER;
   v_manuscript_conference_fk NUMBER;
   v_assignment_assist_type_constraints NUMBER;
+  v_business_operations_tables NUMBER;
+  v_real_platform_wave6_wave7_tables NUMBER;
 BEGIN
   SELECT COUNT(*)
     INTO v_table_count
@@ -31,6 +34,9 @@ BEGIN
      'CONFERENCE_PHASE',
      'CONFERENCE_REVIEWER',
      'REVIEWER_BID',
+     'REVIEW_DISCUSSION_MESSAGE',
+     'CAMERA_READY_SUBMISSION',
+     'COMMUNICATION_LOG',
      'MANUSCRIPT',
      'MANUSCRIPT_VERSION',
      'MANUSCRIPT_AUTHOR',
@@ -50,7 +56,14 @@ BEGIN
      'EXECUTION_OUTBOX',
      'EXECUTION_INBOX',
      'SYS_NOTIFICATION',
-     'AUDIT_LOG'
+     'AUDIT_LOG',
+     'CONFERENCE_FORM_DEFINITION',
+     'CONFERENCE_FORM_FIELD',
+     'REVIEW_FORM_RESPONSE',
+     'AUTHOR_FEEDBACK',
+     'PAPER_TAG',
+     'IMPORT_BATCH',
+     'PAPER_ROLE_ASSIGNMENT'
    );
 
   SELECT COUNT(*)
@@ -68,6 +81,9 @@ BEGIN
      'SEQ_CONFERENCE_PHASE',
      'SEQ_CONFERENCE_REVIEWER',
      'SEQ_REVIEWER_BID',
+     'SEQ_REVIEW_DISCUSSION_MESSAGE',
+     'SEQ_CAMERA_READY_SUBMISSION',
+     'SEQ_COMMUNICATION_LOG',
      'SEQ_MANUSCRIPT',
      'SEQ_MANUSCRIPT_VERSION',
      'SEQ_MANUSCRIPT_AUTHOR',
@@ -86,7 +102,14 @@ BEGIN
      'SEQ_EXECUTION_OUTBOX',
      'SEQ_EXECUTION_INBOX',
      'SEQ_SYS_NOTIFICATION',
-     'SEQ_AUDIT_LOG'
+     'SEQ_AUDIT_LOG',
+     'SEQ_CONFERENCE_FORM_DEFINITION',
+     'SEQ_CONFERENCE_FORM_FIELD',
+     'SEQ_REVIEW_FORM_RESPONSE',
+     'SEQ_AUTHOR_FEEDBACK',
+     'SEQ_PAPER_TAG',
+     'SEQ_IMPORT_BATCH',
+     'SEQ_PAPER_ROLE_ASSIGNMENT'
    );
 
   SELECT COUNT(*)
@@ -104,6 +127,9 @@ BEGIN
      'TRG_CONFERENCE_PHASE_BI',
      'TRG_CONFERENCE_REVIEWER_BI',
      'TRG_REVIEWER_BID_BI',
+     'TRG_REVIEW_DISCUSSION_MESSAGE_BI',
+     'TRG_CAMERA_READY_SUBMISSION_BIU',
+     'TRG_COMMUNICATION_LOG_BI',
      'TRG_MANUSCRIPT_BI',
      'TRG_MANUSCRIPT_VERSION_BI',
      'TRG_MANUSCRIPT_AUTHOR_BI',
@@ -125,7 +151,14 @@ BEGIN
      'TRG_EXECUTION_JOB_BU',
      'TRG_SYS_NOTIFICATION_BI',
      'TRG_AUDIT_LOG_BIU',
-     'TRG_MANUSCRIPT_AUDIT_TRACE_AU'
+     'TRG_MANUSCRIPT_AUDIT_TRACE_AU',
+     'TRG_CONFERENCE_FORM_DEFINITION_BIU',
+     'TRG_CONFERENCE_FORM_FIELD_BI',
+     'TRG_REVIEW_FORM_RESPONSE_BIU',
+     'TRG_AUTHOR_FEEDBACK_BIU',
+     'TRG_PAPER_TAG_BIU',
+     'TRG_IMPORT_BATCH_BI',
+     'TRG_PAPER_ROLE_ASSIGNMENT_BI'
    );
 
   SELECT COUNT(*)
@@ -146,6 +179,12 @@ BEGIN
      'IDX_CONFERENCE_REVIEWER_REVIEWER',
      'IDX_REVIEWER_BID_REVIEWER_CONF',
      'IDX_REVIEWER_BID_MANUSCRIPT',
+     'IDX_REVIEW_DISCUSSION_ROUND',
+     'IDX_REVIEW_DISCUSSION_ASSIGNMENT',
+     'IDX_CAMERA_READY_MANUSCRIPT',
+     'IDX_CAMERA_READY_STATUS',
+     'IDX_COMMUNICATION_LOG_CONFERENCE',
+     'IDX_COMMUNICATION_LOG_RECIPIENT',
      'IDX_MANUSCRIPT_CONFERENCE_STATUS',
      'IDX_MANUSCRIPT_SUBMITTER',
      'IDX_MANUSCRIPT_STATUS',
@@ -169,6 +208,8 @@ BEGIN
      'IDX_ANALYSIS_INBOX_INTENT',
      'IDX_ANALYSIS_INBOX_STATUS_RECEIVED',
      'IDX_EXECUTION_JOB_STATE_UPDATED',
+     'IDX_EXECUTION_JOB_ERROR_UPDATED',
+     'IDX_EXECUTION_JOB_ATTEMPT_AT',
      'IDX_EXECUTION_ATTEMPT_JOB',
      'IDX_EXECUTION_ARTIFACT_JOB',
      'IDX_EXECUTION_OUTBOX_JOB',
@@ -181,7 +222,16 @@ BEGIN
      'IDX_REVIEW_REPORT_ROUND',
      'IDX_CONFLICT_CHECK_MANUSCRIPT_REVIEWER',
      'IDX_MANUSCRIPT_STATUS_SUBMITTED',
-     'IDX_ANALYSIS_PROJECTION_UPDATED'
+     'IDX_ANALYSIS_PROJECTION_UPDATED',
+     'IDX_CONF_FORM_DEFINITION',
+     'IDX_CONF_FORM_FIELD',
+     'IDX_REVIEW_FORM_RESPONSE_ASSIGN',
+     'IDX_AUTHOR_FEEDBACK_MANUSCRIPT',
+     'IDX_PAPER_TAG_LOOKUP',
+     'IDX_IMPORT_BATCH_CONFERENCE',
+     'IDX_PAPER_ROLE_ASSIGNMENT_USER',
+     'IDX_PAPER_ROLE_ASSIGNMENT_MANUSCRIPT',
+     'IDX_PAPER_TAG_VALUE'
    );
 
   SELECT COUNT(*)
@@ -209,6 +259,9 @@ BEGIN
        'TRG_CONFERENCE_PHASE_BI',
        'TRG_CONFERENCE_REVIEWER_BI',
        'TRG_REVIEWER_BID_BI',
+       'TRG_REVIEW_DISCUSSION_MESSAGE_BI',
+       'TRG_CAMERA_READY_SUBMISSION_BIU',
+       'TRG_COMMUNICATION_LOG_BI',
        'TRG_MANUSCRIPT_BI',
        'TRG_MANUSCRIPT_VERSION_BI',
        'TRG_MANUSCRIPT_AUTHOR_BI',
@@ -231,6 +284,13 @@ BEGIN
        'TRG_SYS_NOTIFICATION_BI',
        'TRG_AUDIT_LOG_BIU',
        'TRG_MANUSCRIPT_AUDIT_TRACE_AU',
+       'TRG_CONFERENCE_FORM_DEFINITION_BIU',
+       'TRG_CONFERENCE_FORM_FIELD_BI',
+       'TRG_REVIEW_FORM_RESPONSE_BIU',
+       'TRG_AUTHOR_FEEDBACK_BIU',
+       'TRG_PAPER_TAG_BIU',
+       'TRG_IMPORT_BATCH_BI',
+       'TRG_PAPER_ROLE_ASSIGNMENT_BI',
        'PRC_REVIEW_COMPLETION_STATS',
        'PRC_REVIEW_WORKLOAD_SUMMARY'
      )
@@ -251,6 +311,9 @@ BEGIN
      'TRG_CONFERENCE_PHASE_BI',
      'TRG_CONFERENCE_REVIEWER_BI',
      'TRG_REVIEWER_BID_BI',
+     'TRG_REVIEW_DISCUSSION_MESSAGE_BI',
+     'TRG_CAMERA_READY_SUBMISSION_BIU',
+     'TRG_COMMUNICATION_LOG_BI',
      'TRG_MANUSCRIPT_BI',
      'TRG_MANUSCRIPT_VERSION_BI',
      'TRG_MANUSCRIPT_AUTHOR_BI',
@@ -273,6 +336,13 @@ BEGIN
      'TRG_SYS_NOTIFICATION_BI',
      'TRG_AUDIT_LOG_BIU',
      'TRG_MANUSCRIPT_AUDIT_TRACE_AU',
+     'TRG_CONFERENCE_FORM_DEFINITION_BIU',
+     'TRG_CONFERENCE_FORM_FIELD_BI',
+     'TRG_REVIEW_FORM_RESPONSE_BIU',
+     'TRG_AUTHOR_FEEDBACK_BIU',
+     'TRG_PAPER_TAG_BIU',
+     'TRG_IMPORT_BATCH_BI',
+     'TRG_PAPER_ROLE_ASSIGNMENT_BI',
      'PRC_REVIEW_COMPLETION_STATS',
      'PRC_REVIEW_WORKLOAD_SUMMARY'
    );
@@ -286,6 +356,16 @@ BEGIN
     FROM USER_TAB_COLUMNS
    WHERE TABLE_NAME = 'EXECUTION_JOB'
      AND COLUMN_NAME = 'ATTEMPT_COUNT';
+
+  SELECT COUNT(*)
+    INTO v_execution_job_governance_columns
+    FROM USER_TAB_COLUMNS
+   WHERE TABLE_NAME = 'EXECUTION_JOB'
+     AND COLUMN_NAME IN (
+       'LAST_ERROR_CATEGORY',
+       'LAST_ATTEMPT_AT',
+       'COMPLETED_AT'
+     );
 
   SELECT COUNT(*)
     INTO v_manuscript_conference_column
@@ -310,24 +390,46 @@ BEGIN
      )
      AND SEARCH_CONDITION_VC LIKE '%REVIEWER_ASSIGNMENT_ASSIST%';
 
-  IF v_table_count <> 31 THEN
-    RAISE_APPLICATION_ERROR(-20001, 'Expected 31 tables, found ' || v_table_count);
+  SELECT COUNT(*)
+    INTO v_business_operations_tables
+    FROM USER_TABLES
+   WHERE TABLE_NAME IN (
+     'REVIEW_DISCUSSION_MESSAGE',
+     'CAMERA_READY_SUBMISSION',
+     'COMMUNICATION_LOG'
+   );
+
+  SELECT COUNT(*)
+    INTO v_real_platform_wave6_wave7_tables
+    FROM USER_TABLES
+   WHERE TABLE_NAME IN (
+     'CONFERENCE_FORM_DEFINITION',
+     'CONFERENCE_FORM_FIELD',
+     'REVIEW_FORM_RESPONSE',
+     'AUTHOR_FEEDBACK',
+     'PAPER_TAG',
+     'IMPORT_BATCH',
+     'PAPER_ROLE_ASSIGNMENT'
+   );
+
+  IF v_table_count <> 41 THEN
+    RAISE_APPLICATION_ERROR(-20001, 'Expected 41 tables, found ' || v_table_count);
   END IF;
 
-  IF v_sequence_count <> 30 THEN
-    RAISE_APPLICATION_ERROR(-20002, 'Expected 30 sequences, found ' || v_sequence_count);
+  IF v_sequence_count <> 40 THEN
+    RAISE_APPLICATION_ERROR(-20002, 'Expected 40 sequences, found ' || v_sequence_count);
   END IF;
 
-  IF v_trigger_count <> 33 THEN
-    RAISE_APPLICATION_ERROR(-20003, 'Expected 33 triggers, found ' || v_trigger_count);
+  IF v_trigger_count <> 43 THEN
+    RAISE_APPLICATION_ERROR(-20003, 'Expected 43 triggers, found ' || v_trigger_count);
   END IF;
 
   IF v_procedure_count <> 2 THEN
     RAISE_APPLICATION_ERROR(-20004, 'Expected 2 procedures, found ' || v_procedure_count);
   END IF;
 
-  IF v_index_count <> 50 THEN
-    RAISE_APPLICATION_ERROR(-20005, 'Expected 50 indexes, found ' || v_index_count);
+  IF v_index_count <> 67 THEN
+    RAISE_APPLICATION_ERROR(-20005, 'Expected 67 indexes, found ' || v_index_count);
   END IF;
 
   IF v_role_count <> 4 THEN
@@ -336,6 +438,10 @@ BEGIN
 
   IF v_execution_job_attempt_count_column <> 1 THEN
     RAISE_APPLICATION_ERROR(-20009, 'Expected EXECUTION_JOB.ATTEMPT_COUNT column to exist');
+  END IF;
+
+  IF v_execution_job_governance_columns <> 3 THEN
+    RAISE_APPLICATION_ERROR(-20013, 'Expected EXECUTION_JOB governance columns to exist');
   END IF;
 
   IF v_manuscript_conference_column <> 1 THEN
@@ -348,6 +454,14 @@ BEGIN
 
   IF v_assignment_assist_type_constraints <> 3 THEN
     RAISE_APPLICATION_ERROR(-20012, 'Expected reviewer assignment assist analysis type constraints to exist');
+  END IF;
+
+  IF v_business_operations_tables <> 3 THEN
+    RAISE_APPLICATION_ERROR(-20014, 'Expected business operations closure tables to exist');
+  END IF;
+
+  IF v_real_platform_wave6_wave7_tables <> 7 THEN
+    RAISE_APPLICATION_ERROR(-20015, 'Expected real-platform Wave6/Wave7 tables to exist');
   END IF;
 
   IF v_invalid_count <> 0 THEN

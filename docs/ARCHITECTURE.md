@@ -63,7 +63,7 @@ PaperTide Review 当前采用三应用服务 + Oracle + 本地可选 RabbitMQ �
 - 在 `app/main.py` 中组装 `AgentPlatformRuntime`
 - 用 `ExecutionStateMachine` 管理 `QUEUED`、`RUNNING`、`SUCCEEDED`、`FAILED_*` 等执行状态
 - 通过 `AnalysisHandlerRegistry` 选择 `reviewer_assist`、`reviewer_assignment_assist`、`conflict_analysis`、`screening` 处理器
-- 使用 `ProviderExecutor`、`workflows/*`、`pdf_tools.py`、`redaction.py` 产出结构化分析结果
+- 使用 `ProviderExecutor`、`agent_platform/schemas.py`、`agent_platform/paper_understanding.py`、`pdf_tools.py`、`redaction.py` 产出结构化分析结果
 
 ## 4. 数据流与一致性
 
@@ -103,7 +103,7 @@ PaperTide Review 当前采用三应用服务 + Oracle + 本地可选 RabbitMQ �
 
 ## 7. 当前约束
 
-- 仓库中仍保留一部分旧工作流代码和历史测试结果文档，阅读时应以 `analysis/*`、`agent_platform/*` 与最新计划文件为准
+- 旧 `app/workflows/*` 执行栈已移除；阅读时应以 `analysis/*`、`agent_platform/*` 与最新计划文件为准
 - `scripts/test-all.sh` 在 Python 依赖齐全时会运行完整 Agent pytest 套件；缺依赖时才退化为语法检查
 - 运行消息驱动全链路时，需要本地 Oracle 与 RabbitMQ 都可用
 

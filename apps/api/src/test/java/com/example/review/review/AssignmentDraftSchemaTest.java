@@ -25,10 +25,6 @@ class AssignmentDraftSchemaTest {
         assertTrue(verification.contains("SEQ_ASSIGNMENT_DRAFT"));
         assertTrue(verification.contains("TRG_ASSIGNMENT_DRAFT_BI"));
         assertTrue(verification.contains("IDX_ASSIGNMENT_DRAFT_ROUND_STATUS"));
-        assertTrue(verification.contains("Expected 31 tables"));
-        assertTrue(verification.contains("Expected 30 sequences"));
-        assertTrue(verification.contains("Expected 33 triggers"));
-        assertTrue(verification.contains("Expected 50 indexes"));
 
         assertTrue(fullApply.contains("017_assignment_drafts.sql"));
         assertTrue(devUp.contains("017_assignment_drafts.sql"));

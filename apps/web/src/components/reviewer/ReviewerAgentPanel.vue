@@ -7,6 +7,7 @@ import {
   type ReviewerAssistState
 } from "../../lib/workflow-api";
 import { apiErrorMessage } from "../../composables/useApiError";
+import { useAsyncAction } from "../../composables/useAsyncAction";
 import { printableTrace, statusTagType, workflowLabel } from "../../lib/workflow-format";
 
 const props = defineProps<{
@@ -17,17 +18,16 @@ const POLL_INTERVAL_MS = 3000;
 const PENDING_STATUSES = new Set(["REQUESTED", "PENDING", "PROCESSING", "IN_PROGRESS"]);
 
 const assist = ref<ReviewerAssistState>({ intent: null, projections: [] });
-const loading = ref(false);
-const running = ref(false);
 const error = ref("");
+const actions = useAsyncAction();
 let pollTimer: number | undefined;
 
 const latestStatus = computed(() => assist.value.intent?.businessStatus ?? null);
 const hasProjection = computed(() => assist.value.projections.length > 0);
 const assistFailed = computed(() => isFailedStatus(latestStatus.value));
-const assistPending = computed(() => running.value || isPendingStatus(latestStatus.value));
+const assistPending = computed(() => actions.isPending("run") || isPendingStatus(latestStatus.value));
 const showProgress = computed(() => assistPending.value && !hasProjection.value && !assistFailed.value);
-const showEmpty = computed(() => !loading.value && !showProgress.value && !assistFailed.value && !hasProjection.value);
+const showEmpty = computed(() => !actions.isPending("refresh") && !showProgress.value && !assistFailed.value && !hasProjection.value);
 const visibleError = computed(() => error.value || (assistFailed.value ? "Review assistant failed. Try again." : ""));
 
 onMounted(loadAssist);
@@ -40,40 +40,39 @@ watch(() => props.assignmentId, () => {
 });
 
 async function loadAssist(options: { preserveIntent?: boolean } = {}) {
-  loading.value = true;
-  try {
-    const state = await getReviewerAssist(props.assignmentId);
-    assist.value = {
-      intent: state.intent ?? (options.preserveIntent ? assist.value.intent : null),
-      projections: state.projections ?? []
-    };
-    error.value = "";
-    syncPolling();
-  } catch (err) {
-    error.value = apiErrorMessage(err, "Reviewer assistance is unavailable.");
-    assist.value = { intent: null, projections: [] };
-    stopPolling();
-  } finally {
-    loading.value = false;
-  }
+  await actions.run("refresh", async () => {
+    try {
+      const state = await getReviewerAssist(props.assignmentId);
+      assist.value = {
+        intent: state.intent ?? (options.preserveIntent ? assist.value.intent : null),
+        projections: state.projections ?? []
+      };
+      error.value = "";
+      syncPolling();
+    } catch (err) {
+      error.value = apiErrorMessage(err, "Reviewer assistance is unavailable.");
+      assist.value = { intent: null, projections: [] };
+      stopPolling();
+    }
+  });
 }
 
 async function runAssist(force = false) {
   stopPolling();
-  running.value = true;
-  error.value = "";
-  try {
-    const intent = await runReviewerAssist(props.assignmentId, force);
-    assist.value = { ...assist.value, intent };
-    syncPolling();
-    await loadAssist({ preserveIntent: true });
-  } catch (err) {
-    error.value = apiErrorMessage(err, "Reviewer assistance could not be started.");
-    stopPolling();
-  } finally {
-    running.value = false;
-    syncPolling();
-  }
+  await actions.run("run", async () => {
+    error.value = "";
+    try {
+      const intent = await runReviewerAssist(props.assignmentId, force);
+      assist.value = { ...assist.value, intent };
+      syncPolling();
+      await loadAssist({ preserveIntent: true });
+    } catch (err) {
+      error.value = apiErrorMessage(err, "Reviewer assistance could not be started.");
+      stopPolling();
+    } finally {
+      syncPolling();
+    }
+  });
 }
 
 function syncPolling() {
@@ -126,9 +125,9 @@ function isFailedStatus(status: string | null) {
     <el-alert v-if="visibleError" :title="visibleError" type="warning" :closable="false" />
 
     <div class="action-row">
-      <el-button type="primary" :loading="running" @click="runAssist(false)">Run review assistant</el-button>
-      <el-button v-if="assist.intent?.businessStatus === 'FAILED_VISIBLE'" :loading="running" @click="runAssist(true)">Retry</el-button>
-      <el-button :loading="loading" @click="loadAssist">Refresh</el-button>
+      <el-button type="primary" :loading="actions.isPending('run')" @click="runAssist(false)">Run review assistant</el-button>
+      <el-button v-if="assist.intent?.businessStatus === 'FAILED_VISIBLE'" :loading="actions.isPending('run')" @click="runAssist(true)">Retry</el-button>
+      <el-button :loading="actions.isPending('refresh')" @click="loadAssist">Refresh</el-button>
       <el-tag v-if="assist.intent" :type="statusTagType(assist.intent.businessStatus)">
         {{ workflowLabel(assist.intent.businessStatus) }}
       </el-tag>

@@ -436,6 +436,113 @@ describe("workflow screens", () => {
     expect(messageError).toHaveBeenCalledWith("A PDF is required before submission");
   });
 
+  it("loads author decision packages without exposing reviewer identity", async () => {
+    installAuth(["AUTHOR"]);
+    const fetch = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/manuscripts") {
+        return Promise.resolve(jsonResponse([
+          {
+            manuscriptId: 11,
+            currentVersionId: 21,
+            currentStatus: "ACCEPTED",
+            currentRoundNo: 1,
+            blindMode: "DOUBLE_BLIND",
+            submittedAt: "2026-04-13T05:00:00Z",
+            lastDecisionCode: "ACCEPT",
+            currentVersionTitle: "Workflow Seed",
+            currentVersionNo: 1
+          }
+        ]));
+      }
+      if (path === "/decisions/manuscripts/11/package") {
+        return Promise.resolve(jsonResponse({
+          manuscriptId: 11,
+          roundId: 31,
+          versionId: 21,
+          versionNo: 1,
+          title: "Workflow Seed",
+          decisionCode: "ACCEPT",
+          decisionReason: "Accepted with minor edits.",
+          decidedAt: "2026-09-01T00:00:00Z",
+          reviews: [
+            {
+              reviewId: 91,
+              reviewerLabel: "Reviewer 1",
+              overallScore: 4,
+              confidenceLevel: "HIGH",
+              strengths: "Strong method",
+              weaknesses: "Small dataset",
+              commentsToAuthor: "Clarify the dataset.",
+              recommendation: "ACCEPT"
+            }
+          ]
+        }));
+      }
+      return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(ManuscriptListView);
+    await clickButton(wrapper, "Decision package");
+
+    expect(fetch).toHaveBeenCalledWith("/api/decisions/manuscripts/11/package", expect.anything());
+    expect(document.body.textContent).toContain("Accepted with minor edits.");
+    expect(document.body.textContent).toContain("Reviewer 1");
+    expect(document.body.textContent).not.toContain("1002");
+  });
+
+  it("submits camera-ready metadata only for accepted author manuscripts", async () => {
+    installAuth(["AUTHOR"]);
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/manuscripts") {
+        return Promise.resolve(jsonResponse([
+          {
+            manuscriptId: 11,
+            currentVersionId: 21,
+            currentStatus: "ACCEPTED",
+            currentRoundNo: 1,
+            blindMode: "DOUBLE_BLIND",
+            submittedAt: "2026-04-13T05:00:00Z",
+            lastDecisionCode: "ACCEPT",
+            currentVersionTitle: "Workflow Seed",
+            currentVersionNo: 1
+          }
+        ]));
+      }
+      if (path === "/manuscripts/11/camera-ready" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({
+          cameraReadyId: 41,
+          manuscriptId: 11,
+          versionId: 21,
+          fileName: "Workflow Seed-camera-ready.pdf",
+          fileSize: 0,
+          copyrightConfirmed: true,
+          licenseType: "CC-BY",
+          status: "SUBMITTED"
+        }));
+      }
+      return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(ManuscriptListView);
+    await clickButton(wrapper, "Camera-ready");
+    const checkbox = document.body.querySelector(".el-checkbox") as HTMLElement;
+    checkbox.click();
+    await flushPromises();
+    await clickBodyButton("Submit camera-ready");
+
+    const submitCall = fetch.mock.calls.find(([input]) => String(input) === "/api/manuscripts/11/camera-ready");
+    expect(submitCall).toBeTruthy();
+    expect(JSON.parse(submitCall?.[1]?.body as string)).toEqual(expect.objectContaining({
+      fileName: "Workflow Seed-camera-ready.pdf",
+      copyrightConfirmed: true,
+      licenseType: "CC-BY"
+    }));
+  });
+
   it("validates author manuscript form before creating a draft", async () => {
     installAuth(["AUTHOR"]);
     const fetch = vi.fn(() => Promise.resolve(jsonResponse([])));
@@ -1021,19 +1128,24 @@ describe("workflow screens", () => {
     installAuth(["ADMIN"]);
     const fetch = vi.fn((input: RequestInfo | URL) => {
       const path = String(input).replace(/^\/api/, "");
-      if (path === "/admin/analysis-monitor") {
-        return Promise.resolve(jsonResponse([
-          {
-            intentId: 101,
-            analysisType: "REVIEWER_ASSIST",
-            businessStatus: "AVAILABLE",
-            jobId: "job-1",
-            anchorType: "ASSIGNMENT",
-            anchorLabel: "Assignment #77",
-            projectionUpdatedAt: "2026-04-23T08:00:00Z",
-            summaryText: "Checklist ready."
-          }
-        ]));
+      if (path === "/admin/analysis-monitor?page=1&size=20") {
+        return Promise.resolve(jsonResponse({
+          items: [
+            {
+              intentId: 101,
+              analysisType: "REVIEWER_ASSIST",
+              businessStatus: "AVAILABLE",
+              jobId: "job-1",
+              anchorType: "ASSIGNMENT",
+              anchorLabel: "Assignment #77",
+              projectionUpdatedAt: "2026-04-23T08:00:00Z",
+              summaryText: "Checklist ready."
+            }
+          ],
+          page: 1,
+          size: 20,
+          total: 1
+        }));
       }
       return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
     });
@@ -1041,10 +1153,94 @@ describe("workflow screens", () => {
 
     const wrapper = await mountWithRouter(AgentMonitorView);
 
-    expect(fetch).toHaveBeenCalledWith("/api/admin/analysis-monitor", expect.anything());
+    expect(fetch).toHaveBeenCalledWith("/api/admin/analysis-monitor?page=1&size=20", expect.anything());
     expect(wrapper.text()).toContain("Checklist ready.");
     expect(wrapper.text()).toContain("Assignment #77");
     expect(wrapper.text()).toContain("job-1");
+  });
+
+  it("filters admin analysis monitor rows by analysis type and status", async () => {
+    installAuth(["ADMIN"]);
+    const fetch = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path.startsWith("/admin/analysis-monitor")) {
+        return Promise.resolve(jsonResponse({ items: [], page: 1, size: 20, total: 0 }));
+      }
+      return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(AgentMonitorView);
+    await wrapper.find('[data-test="analysis-type-filter"]').setValue("REVIEWER_ASSIST");
+    await wrapper.find('[data-test="business-status-filter"]').setValue("AVAILABLE");
+    await clickButton(wrapper, "Apply filters");
+
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/admin/analysis-monitor?page=1&size=20&analysisType=REVIEWER_ASSIST&businessStatus=AVAILABLE",
+      expect.anything()
+    );
+  });
+
+  it("uses shared async action state for reviewer assist run and refresh controls", async () => {
+    installAuth(["REVIEWER"]);
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:reader-page-1"),
+      revokeObjectURL: vi.fn()
+    });
+    let resolveRun: ((value: ReturnType<typeof jsonResponse>) => void) | undefined;
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/review-assignments/9") {
+        return Promise.resolve(jsonResponse({
+          assignmentId: 9,
+          manuscriptId: 11,
+          versionId: 21,
+          versionNo: 1,
+          title: "Workflow Seed",
+          abstractText: "workflow abstract",
+          keywords: "workflow,pdf",
+          pdfFileName: "workflow.pdf",
+          taskStatus: "ACCEPTED"
+        }));
+      }
+      if (path === "/review-assignments/9/paper") {
+        return Promise.resolve(jsonResponse({
+          assignmentId: 9,
+          manuscriptId: 11,
+          versionId: 21,
+          title: "Workflow Seed",
+          pageCount: 1,
+          pdfFileName: "workflow.pdf",
+          downloadAllowed: false
+        }));
+      }
+      if (path === "/review-assignments/9/paper/pages/1") {
+        return Promise.resolve(blobResponse(new Blob(["page"], { type: "image/png" })));
+      }
+      if (path === "/review-assignments/9/agent-assist" && init?.method === "POST") {
+        return new Promise((resolve) => {
+          resolveRun = resolve;
+        });
+      }
+      if (path === "/review-assignments/9/agent-assist") {
+        return Promise.resolve(jsonResponse({ intent: null, projections: [] }));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(ReviewEditorView, "/reviewer/reviews/9");
+    await buttonByText(wrapper, "Run review assistant").trigger("click");
+    await flushPromises();
+
+    expect(buttonByText(wrapper, "Run review assistant").classes()).toContain("is-loading");
+    expect(buttonByText(wrapper, "Refresh").classes()).not.toContain("is-loading");
+
+    resolveRun?.(jsonResponse({
+      intentId: 88,
+      analysisType: "REVIEWER_ASSIST",
+      businessStatus: "REQUESTED"
+    }));
   });
 
   it("posts conflict analysis requests as analysis intents", async () => {

@@ -102,9 +102,15 @@ async function overdue(assignmentId: number) {
 }
 
 async function conflict(row: DecisionWorkbenchItem) {
-  await triggerConflictAnalysis(row.roundId);
-  ElMessage.success("Conflict analysis requested.");
-  await loadWorkbench();
+  await actions.run(`conflict:${row.roundId}`, async () => {
+    try {
+      await triggerConflictAnalysis(row.roundId);
+      ElMessage.success("Conflict analysis requested.");
+      await loadWorkbench();
+    } catch (error) {
+      showApiError(error, "Conflict analysis could not be requested.");
+    }
+  });
 }
 
 async function generateDrafts(row: DecisionWorkbenchItem) {
@@ -343,7 +349,13 @@ async function submitDecision() {
         <template #default="{ row }">
           <div class="action-row">
             <el-button size="small" @click="openAssign(row)">Assign reviewer</el-button>
-            <el-button size="small" @click="conflict(row)">Conflict analysis</el-button>
+            <el-button
+              size="small"
+              :loading="actions.isPending(`conflict:${row.roundId}`)"
+              @click="conflict(row)"
+            >
+              Conflict analysis
+            </el-button>
             <el-button size="small" type="primary" @click="openDecision(row)">Submit decision</el-button>
           </div>
         </template>

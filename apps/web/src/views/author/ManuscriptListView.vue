@@ -9,10 +9,13 @@ import { useAsyncAction } from "../../composables/useAsyncAction";
 import {
   createRevision,
   downloadPdf,
+  getDecisionPackage,
   listManuscripts,
+  submitCameraReady,
   submitVersion,
   uploadPdf,
   type AuthorInput,
+  type DecisionPackage,
   type ManuscriptSummary
 } from "../../lib/workflow-api";
 import { formatDateTime, statusTagType, workflowLabel } from "../../lib/workflow-format";
@@ -25,6 +28,10 @@ const loading = ref(false);
 const manuscripts = ref<ManuscriptSummary[]>([]);
 const revisionDialogOpen = ref(false);
 const revisionManuscriptId = ref<number | null>(null);
+const decisionDialogOpen = ref(false);
+const decisionPackage = ref<DecisionPackage | null>(null);
+const cameraReadyDialogOpen = ref(false);
+const cameraReadyManuscript = ref<ManuscriptSummary | null>(null);
 const revisionFormRef = ref<FormInstance>();
 const revisionForm = reactive({
   title: "",
@@ -47,6 +54,12 @@ const revisionRules: FormRules = {
   abstract: [{ required: true, message: "Abstract is required", trigger: "blur" }],
   keywords: [{ required: true, message: "Keywords are required", trigger: "blur" }]
 };
+const cameraReadyForm = reactive({
+  fileName: "",
+  fileSize: 0,
+  copyrightConfirmed: false,
+  licenseType: "CC-BY"
+});
 
 onMounted(loadManuscripts);
 
@@ -60,6 +73,14 @@ function downloadKey(manuscriptId: number) {
 
 function submitKey(manuscriptId: number) {
   return `author-submit-version:${manuscriptId}`;
+}
+
+function decisionPackageKey(manuscriptId: number) {
+  return `author-decision-package:${manuscriptId}`;
+}
+
+function cameraReadyKey(manuscriptId: number) {
+  return `author-camera-ready:${manuscriptId}`;
 }
 
 async function loadManuscripts() {
@@ -117,6 +138,53 @@ async function download(row: ManuscriptSummary) {
       URL.revokeObjectURL(url);
     } catch (error) {
       showApiError(error, "PDF could not be downloaded.");
+    }
+  });
+}
+
+async function openDecisionPackage(row: ManuscriptSummary) {
+  await actions.run(decisionPackageKey(row.manuscriptId), async () => {
+    try {
+      decisionPackage.value = await getDecisionPackage(row.manuscriptId);
+      decisionDialogOpen.value = true;
+    } catch (error) {
+      showApiError(error, "Decision package could not be loaded.");
+    }
+  });
+}
+
+function openCameraReady(row: ManuscriptSummary) {
+  cameraReadyManuscript.value = row;
+  Object.assign(cameraReadyForm, {
+    fileName: `${row.currentVersionTitle || "paper"}-camera-ready.pdf`,
+    fileSize: 0,
+    copyrightConfirmed: false,
+    licenseType: "CC-BY"
+  });
+  cameraReadyDialogOpen.value = true;
+}
+
+async function submitCameraReadyForm() {
+  if (!cameraReadyManuscript.value) {
+    return;
+  }
+  if (!cameraReadyForm.fileName.trim() || !cameraReadyForm.copyrightConfirmed) {
+    ElMessage.error("Camera-ready file name and copyright confirmation are required.");
+    return;
+  }
+  const manuscriptId = cameraReadyManuscript.value.manuscriptId;
+  await actions.run(cameraReadyKey(manuscriptId), async () => {
+    try {
+      await submitCameraReady(manuscriptId, {
+        fileName: cameraReadyForm.fileName.trim(),
+        fileSize: cameraReadyForm.fileSize,
+        copyrightConfirmed: cameraReadyForm.copyrightConfirmed,
+        licenseType: cameraReadyForm.licenseType
+      });
+      cameraReadyDialogOpen.value = false;
+      ElMessage.success("Camera-ready package submitted.");
+    } catch (error) {
+      showApiError(error, "Camera-ready package could not be submitted.");
     }
   });
 }
@@ -185,7 +253,7 @@ async function submitRevision() {
       <el-table-column prop="lastDecisionCode" label="Last decision" width="160">
         <template #default="{ row }">{{ workflowLabel(row.lastDecisionCode) }}</template>
       </el-table-column>
-      <el-table-column label="Actions" width="410">
+      <el-table-column label="Actions" width="620">
         <template #default="{ row }">
           <div class="action-row">
             <el-upload :auto-upload="false" :show-file-list="false" :on-change="selectPdfForRow(row)">
@@ -200,6 +268,22 @@ async function submitRevision() {
               @click="openRevision(row)"
             >
               Create revision
+            </el-button>
+            <el-button
+              size="small"
+              :disabled="!row.lastDecisionCode"
+              :loading="actions.isPending(decisionPackageKey(row.manuscriptId))"
+              @click="openDecisionPackage(row)"
+            >
+              Decision package
+            </el-button>
+            <el-button
+              size="small"
+              :disabled="row.currentStatus !== 'ACCEPTED'"
+              :loading="actions.isPending(cameraReadyKey(row.manuscriptId))"
+              @click="openCameraReady(row)"
+            >
+              Camera-ready
             </el-button>
           </div>
         </template>
@@ -224,6 +308,52 @@ async function submitRevision() {
       <template #footer>
         <el-button @click="revisionDialogOpen = false">Cancel</el-button>
         <el-button type="primary" @click="submitRevision">Create revision</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="decisionDialogOpen" title="Decision package" width="720px">
+      <template v-if="decisionPackage">
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="Decision">{{ workflowLabel(decisionPackage.decisionCode) }}</el-descriptions-item>
+          <el-descriptions-item label="Reason">{{ decisionPackage.decisionReason || "No decision letter provided." }}</el-descriptions-item>
+          <el-descriptions-item label="Decided at">{{ formatDateTime(decisionPackage.decidedAt) }}</el-descriptions-item>
+        </el-descriptions>
+        <div class="stacked-list">
+          <el-card v-for="review in decisionPackage.reviews" :key="review.reviewId" shadow="never">
+            <template #header>{{ review.reviewerLabel }} · {{ workflowLabel(review.recommendation) }}</template>
+            <p><strong>Overall:</strong> {{ review.overallScore }} / 5 · {{ review.confidenceLevel }}</p>
+            <p><strong>Strengths:</strong> {{ review.strengths || "Not provided." }}</p>
+            <p><strong>Weaknesses:</strong> {{ review.weaknesses || "Not provided." }}</p>
+            <p><strong>Comments:</strong> {{ review.commentsToAuthor || "Not provided." }}</p>
+          </el-card>
+        </div>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="cameraReadyDialogOpen" title="Submit camera-ready package" width="520px">
+      <el-form label-position="top">
+        <el-form-item label="Final PDF file name" required>
+          <el-input v-model="cameraReadyForm.fileName" />
+        </el-form-item>
+        <el-form-item label="File size in bytes">
+          <el-input-number v-model="cameraReadyForm.fileSize" :min="0" />
+        </el-form-item>
+        <el-form-item label="License">
+          <el-input v-model="cameraReadyForm.licenseType" />
+        </el-form-item>
+        <el-checkbox v-model="cameraReadyForm.copyrightConfirmed">
+          I confirm the camera-ready package is final and publication rights are cleared.
+        </el-checkbox>
+      </el-form>
+      <template #footer>
+        <el-button @click="cameraReadyDialogOpen = false">Cancel</el-button>
+        <el-button
+          type="primary"
+          :loading="cameraReadyManuscript ? actions.isPending(cameraReadyKey(cameraReadyManuscript.manuscriptId)) : false"
+          @click="submitCameraReadyForm"
+        >
+          Submit camera-ready
+        </el-button>
       </template>
     </el-dialog>
   </section>

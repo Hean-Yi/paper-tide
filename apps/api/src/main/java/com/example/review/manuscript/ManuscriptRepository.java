@@ -65,6 +65,24 @@ public class ManuscriptRepository {
         );
     }
 
+    public void updateStatusAndRoundNo(long manuscriptId, String currentStatus, int currentRoundNo) {
+        jdbcTemplate.update(
+                "UPDATE MANUSCRIPT SET CURRENT_STATUS = ?, CURRENT_ROUND_NO = ? WHERE MANUSCRIPT_ID = ?",
+                currentStatus,
+                currentRoundNo,
+                manuscriptId
+        );
+    }
+
+    public void updateStatusAndDecision(long manuscriptId, String currentStatus, String lastDecisionCode) {
+        jdbcTemplate.update(
+                "UPDATE MANUSCRIPT SET CURRENT_STATUS = ?, LAST_DECISION_CODE = ? WHERE MANUSCRIPT_ID = ?",
+                currentStatus,
+                lastDecisionCode,
+                manuscriptId
+        );
+    }
+
     public Optional<ManuscriptRow> findById(long manuscriptId) {
         List<ManuscriptRow> rows = jdbcTemplate.query(
                 """
@@ -145,9 +163,16 @@ public class ManuscriptRepository {
     public Optional<LockedManuscriptRow> findLockedById(long manuscriptId) {
         List<LockedManuscriptRow> rows = jdbcTemplate.query(
                 """
-                SELECT MANUSCRIPT_ID, SUBMITTER_ID, CURRENT_VERSION_ID, CURRENT_STATUS, CURRENT_ROUND_NO
-                FROM MANUSCRIPT
-                WHERE MANUSCRIPT_ID = ?
+                SELECT M.MANUSCRIPT_ID,
+                       M.SUBMITTER_ID,
+                       M.CURRENT_VERSION_ID,
+                       M.CURRENT_STATUS,
+                       M.CURRENT_ROUND_NO,
+                       COALESCE(M.CONFERENCE_ID, 0) AS CONFERENCE_ID,
+                       C.ORGANIZER_USER_ID
+                FROM MANUSCRIPT M
+                LEFT JOIN CONFERENCE C ON C.CONFERENCE_ID = COALESCE(M.CONFERENCE_ID, 0)
+                WHERE M.MANUSCRIPT_ID = ?
                 FOR UPDATE
                 """,
                 (rs, rowNum) -> new LockedManuscriptRow(
@@ -155,7 +180,9 @@ public class ManuscriptRepository {
                         rs.getLong("SUBMITTER_ID"),
                         rs.getObject("CURRENT_VERSION_ID", Long.class),
                         rs.getString("CURRENT_STATUS"),
-                        rs.getInt("CURRENT_ROUND_NO")
+                        rs.getInt("CURRENT_ROUND_NO"),
+                        rs.getObject("CONFERENCE_ID", Long.class),
+                        rs.getObject("ORGANIZER_USER_ID", Long.class)
                 ),
                 manuscriptId
         );
@@ -218,7 +245,9 @@ public class ManuscriptRepository {
             long submitterId,
             Long currentVersionId,
             String currentStatus,
-            int currentRoundNo
+            int currentRoundNo,
+            Long conferenceId,
+            Long organizerUserId
     ) {
     }
 }

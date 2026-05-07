@@ -28,6 +28,16 @@ class DecisionWorkbenchReadRepositoryTest {
 
     @BeforeEach
     void cleanWorkflowTables() {
+        jdbcTemplate.update("DELETE FROM REVIEW_FORM_RESPONSE");
+        jdbcTemplate.update("DELETE FROM AUTHOR_FEEDBACK");
+        jdbcTemplate.update("DELETE FROM PAPER_TAG");
+        jdbcTemplate.update("DELETE FROM IMPORT_BATCH");
+        jdbcTemplate.update("DELETE FROM PAPER_ROLE_ASSIGNMENT");
+        jdbcTemplate.update("DELETE FROM CONFERENCE_FORM_FIELD");
+        jdbcTemplate.update("DELETE FROM CONFERENCE_FORM_DEFINITION");
+        jdbcTemplate.update("DELETE FROM REVIEW_DISCUSSION_MESSAGE");
+        jdbcTemplate.update("DELETE FROM CAMERA_READY_SUBMISSION");
+        jdbcTemplate.update("DELETE FROM COMMUNICATION_LOG");
         jdbcTemplate.update("DELETE FROM CONFLICT_CHECK_RECORD");
         jdbcTemplate.update("DELETE FROM REVIEW_REPORT");
         jdbcTemplate.update("DELETE FROM REVIEWER_BID");
@@ -43,8 +53,15 @@ class DecisionWorkbenchReadRepositoryTest {
         jdbcTemplate.update("DELETE FROM MANUSCRIPT_VERSION");
         jdbcTemplate.update("DELETE FROM MANUSCRIPT");
         
-        // Clean up analysis tables
+        // Clean up analysis and execution tables. ANALYSIS_INTENT and EXECUTION_JOB have a deferred bidirectional FK.
+        jdbcTemplate.update("UPDATE ANALYSIS_INTENT SET EXECUTION_JOB_ID = NULL WHERE EXECUTION_JOB_ID IS NOT NULL");
+        jdbcTemplate.update("DELETE FROM EXECUTION_INBOX");
+        jdbcTemplate.update("DELETE FROM EXECUTION_OUTBOX");
+        jdbcTemplate.update("DELETE FROM EXECUTION_ARTIFACT");
+        jdbcTemplate.update("DELETE FROM EXECUTION_ATTEMPT");
+        jdbcTemplate.update("DELETE FROM EXECUTION_JOB");
         jdbcTemplate.update("DELETE FROM ANALYSIS_OUTBOX");
+        jdbcTemplate.update("DELETE FROM ANALYSIS_INBOX");
         jdbcTemplate.update("DELETE FROM ANALYSIS_PROJECTION");
         jdbcTemplate.update("DELETE FROM ANALYSIS_INTENT");
     }

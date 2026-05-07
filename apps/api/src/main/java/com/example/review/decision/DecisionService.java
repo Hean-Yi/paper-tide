@@ -6,14 +6,16 @@ import com.example.review.auth.RoleGuard;
 import com.example.review.manuscript.ManuscriptRepository;
 import com.example.review.manuscript.ManuscriptRepository.LockedManuscriptRow;
 import com.example.review.notification.NotificationService;
+import com.example.review.operations.BusinessOperationsService;
 import com.example.review.review.ReviewAssignmentRepository;
+import com.example.review.review.ReviewRoundRepository;
+import com.example.review.review.ReviewRoundRepository.LockedReviewRoundRow;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -25,27 +27,30 @@ public class DecisionService {
     private static final Set<String> REVIEW_DECISIONS = Set.of("ACCEPT", "REJECT", "MINOR_REVISION", "MAJOR_REVISION");
     private static final Set<String> SCREENING_STATUSES = Set.of("UNDER_SCREENING");
 
-    private final JdbcTemplate jdbcTemplate;
     private final ManuscriptRepository manuscriptRepository;
+    private final ReviewRoundRepository reviewRoundRepository;
     private final ReviewAssignmentRepository reviewAssignmentRepository;
     private final DecisionRepository decisionRepository;
     private final NotificationService notificationService;
     private final AuditLogService auditLogService;
+    private final BusinessOperationsService businessOperationsService;
 
     public DecisionService(
-            JdbcTemplate jdbcTemplate,
             ManuscriptRepository manuscriptRepository,
+            ReviewRoundRepository reviewRoundRepository,
             ReviewAssignmentRepository reviewAssignmentRepository,
             DecisionRepository decisionRepository,
             NotificationService notificationService,
-            AuditLogService auditLogService
+            AuditLogService auditLogService,
+            BusinessOperationsService businessOperationsService
     ) {
-        this.jdbcTemplate = jdbcTemplate;
         this.manuscriptRepository = manuscriptRepository;
+        this.reviewRoundRepository = reviewRoundRepository;
         this.reviewAssignmentRepository = reviewAssignmentRepository;
         this.decisionRepository = decisionRepository;
         this.notificationService = notificationService;
         this.auditLogService = auditLogService;
+        this.businessOperationsService = businessOperationsService;
     }
 
     @Transactional
@@ -55,7 +60,8 @@ public class DecisionService {
 
         LockedManuscriptRow manuscript = manuscriptRepository.findLockedById(request.manuscriptId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
-        ReviewRoundDecisionRow round = findRoundForUpdate(request.roundId());
+        LockedReviewRoundRow round = reviewRoundRepository.findLockedDecisionTarget(request.roundId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Review round not found"));
         if (round.manuscriptId() != manuscript.manuscriptId()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Round does not belong to manuscript");
         }
@@ -68,14 +74,9 @@ public class DecisionService {
 
         String nextStatus = resolveNextStatus(manuscript.currentStatus(), request.decisionCode());
         Timestamp decidedAt = Timestamp.from(Instant.now());
-        jdbcTemplate.update("UPDATE REVIEW_ROUND SET ROUND_STATUS = 'COMPLETED' WHERE ROUND_ID = ?", round.roundId());
+        reviewRoundRepository.updateStatus(round.roundId(), "COMPLETED");
         reviewAssignmentRepository.cancelOpenAssignmentsForRound(round.roundId());
-        jdbcTemplate.update(
-                "UPDATE MANUSCRIPT SET CURRENT_STATUS = ?, LAST_DECISION_CODE = ? WHERE MANUSCRIPT_ID = ?",
-                nextStatus,
-                request.decisionCode(),
-                manuscript.manuscriptId()
-        );
+        manuscriptRepository.updateStatusAndDecision(manuscript.manuscriptId(), nextStatus, request.decisionCode());
 
         long decisionId = decisionRepository.nextDecisionId();
         decisionRepository.insert(
@@ -92,6 +93,17 @@ public class DecisionService {
             notificationService.notifyDecision(manuscript.submitterId(), manuscript.manuscriptId(), request.decisionCode());
         } catch (Exception ex) {
             LOGGER.warn("Decision notification failed for manuscript {}", manuscript.manuscriptId(), ex);
+        }
+        try {
+            businessOperationsService.recordDecisionCommunication(
+                    manuscript.conferenceId(),
+                    manuscript.manuscriptId(),
+                    manuscript.submitterId(),
+                    decisionId,
+                    request.decisionCode()
+            );
+        } catch (Exception ex) {
+            LOGGER.warn("Decision communication log failed for manuscript {}", manuscript.manuscriptId(), ex);
         }
         auditLogService.recordDecision(principal.userId(), round.roundId(), manuscript.manuscriptId(), request.decisionCode());
 
@@ -124,26 +136,6 @@ public class DecisionService {
         }
     }
 
-    private ReviewRoundDecisionRow findRoundForUpdate(long roundId) {
-        return jdbcTemplate.query(
-                """
-                SELECT ROUND_ID, MANUSCRIPT_ID, ROUND_NO, VERSION_ID, ROUND_STATUS, CREATED_BY
-                FROM REVIEW_ROUND
-                WHERE ROUND_ID = ?
-                FOR UPDATE
-                """,
-                (rs, rowNum) -> new ReviewRoundDecisionRow(
-                        rs.getLong("ROUND_ID"),
-                        rs.getLong("MANUSCRIPT_ID"),
-                        rs.getInt("ROUND_NO"),
-                        rs.getLong("VERSION_ID"),
-                        rs.getString("ROUND_STATUS"),
-                        rs.getLong("CREATED_BY")
-                ),
-                roundId
-        ).stream().findFirst().orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Review round not found"));
-    }
-
 }
 
 record DecisionRequest(
@@ -156,14 +148,4 @@ record DecisionRequest(
 }
 
 record DecisionResponse(long decisionId, String decisionCode, String currentStatus, String roundStatus) {
-}
-
-record ReviewRoundDecisionRow(
-        long roundId,
-        long manuscriptId,
-        int roundNo,
-        long versionId,
-        String roundStatus,
-        long createdBy
-) {
 }

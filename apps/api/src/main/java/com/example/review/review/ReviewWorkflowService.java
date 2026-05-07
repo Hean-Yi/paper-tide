@@ -8,7 +8,6 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -22,20 +21,17 @@ public class ReviewWorkflowService {
     );
     private static final Set<String> ROUND_STRATEGIES = Set.of("REUSE_REVIEWERS", "REALLOCATE_REVIEWERS");
 
-    private final JdbcTemplate jdbcTemplate;
     private final ManuscriptRepository manuscriptRepository;
     private final ReviewRoundRepository reviewRoundRepository;
     private final ReviewAssignmentRepository reviewAssignmentRepository;
     private final ConflictCheckService conflictCheckService;
 
     public ReviewWorkflowService(
-            JdbcTemplate jdbcTemplate,
             ManuscriptRepository manuscriptRepository,
             ReviewRoundRepository reviewRoundRepository,
             ReviewAssignmentRepository reviewAssignmentRepository,
             ConflictCheckService conflictCheckService
     ) {
-        this.jdbcTemplate = jdbcTemplate;
         this.manuscriptRepository = manuscriptRepository;
         this.reviewRoundRepository = reviewRoundRepository;
         this.reviewAssignmentRepository = reviewAssignmentRepository;
@@ -49,6 +45,7 @@ public class ReviewWorkflowService {
 
         LockedManuscriptRow manuscript = manuscriptRepository.findLockedById(request.manuscriptId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
+        ensureConferenceChairOrAdmin(principal, manuscript);
         if (!ROUND_CREATION_ALLOWED_MANUSCRIPT_STATUSES.contains(manuscript.currentStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Manuscript state does not allow round creation");
         }
@@ -70,11 +67,7 @@ public class ReviewWorkflowService {
                 deadlineAt,
                 principal.userId()
         );
-        jdbcTemplate.update(
-                "UPDATE MANUSCRIPT SET CURRENT_STATUS = 'UNDER_REVIEW', CURRENT_ROUND_NO = ? WHERE MANUSCRIPT_ID = ?",
-                roundNo,
-                request.manuscriptId()
-        );
+        manuscriptRepository.updateStatusAndRoundNo(request.manuscriptId(), "UNDER_REVIEW", roundNo);
 
         return toRoundResponse(reviewRoundRepository.findById(roundId).orElseThrow());
     }
@@ -85,6 +78,10 @@ public class ReviewWorkflowService {
 
         ReviewRoundRow round = reviewRoundRepository.findByIdForUpdate(roundId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Review round not found"));
+        LockedManuscriptRow manuscript = manuscriptRepository.findLockedById(round.manuscriptId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
+        ensureConferenceChairOrAdmin(principal, manuscript);
+        ensureReviewerCanBeAssigned(round.manuscriptId(), request.reviewerId());
 
         long assignmentId = reviewAssignmentRepository.nextAssignmentId();
         reviewAssignmentRepository.insert(
@@ -139,6 +136,9 @@ public class ReviewWorkflowService {
         RoleGuard.requireChairOrAdmin(principal);
         ReviewAssignmentRow assignment = reviewAssignmentRepository.findByIdForUpdate(assignmentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found"));
+        LockedManuscriptRow manuscript = manuscriptRepository.findLockedById(assignment.manuscriptId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
+        ensureConferenceChairOrAdmin(principal, manuscript);
         if (!Set.of("ASSIGNED", "ACCEPTED").contains(assignment.taskStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Assignment cannot be marked overdue from its current state");
         }
@@ -151,9 +151,13 @@ public class ReviewWorkflowService {
         RoleGuard.requireChairOrAdmin(principal);
         ReviewAssignmentRow assignment = reviewAssignmentRepository.findByIdForUpdate(assignmentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found"));
+        LockedManuscriptRow manuscript = manuscriptRepository.findLockedById(assignment.manuscriptId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
+        ensureConferenceChairOrAdmin(principal, manuscript);
         if (!"OVERDUE".equals(assignment.taskStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only OVERDUE assignments can be reassigned");
         }
+        ensureReviewerCanBeAssigned(assignment.manuscriptId(), request.reviewerId());
         reviewAssignmentRepository.updateStatus(assignmentId, "REASSIGNED");
         long newAssignmentId = reviewAssignmentRepository.nextAssignmentId();
         reviewAssignmentRepository.insert(
@@ -172,8 +176,11 @@ public class ReviewWorkflowService {
 
     public java.util.List<ConflictCheckResponse> listConflictChecks(CurrentUserPrincipal principal, long roundId) {
         RoleGuard.requireChairOrAdmin(principal);
-        reviewRoundRepository.findById(roundId)
+        ReviewRoundRow round = reviewRoundRepository.findById(roundId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Review round not found"));
+        LockedManuscriptRow manuscript = manuscriptRepository.findLockedById(round.manuscriptId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
+        ensureConferenceChairOrAdmin(principal, manuscript);
         return conflictCheckService.listByRound(roundId);
     }
 
@@ -202,6 +209,23 @@ public class ReviewWorkflowService {
     private void validateRoundRequest(CreateReviewRoundRequest request) {
         if (!ROUND_STRATEGIES.contains(request.assignmentStrategy())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid assignment strategy");
+        }
+    }
+
+    private void ensureConferenceChairOrAdmin(CurrentUserPrincipal principal, LockedManuscriptRow manuscript) {
+        if (RoleGuard.hasRole(principal, "ADMIN")) {
+            return;
+        }
+        if (manuscript.organizerUserId() == null || !manuscript.organizerUserId().equals(principal.userId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chair is not assigned to this manuscript conference");
+        }
+    }
+
+    private void ensureReviewerCanBeAssigned(long manuscriptId, long reviewerId) {
+        AssignmentEligibilityRow eligibility = reviewAssignmentRepository.findEligibilityForAssignment(manuscriptId, reviewerId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
+        if (!eligibility.eligible()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Reviewer is not eligible for this manuscript assignment");
         }
     }
 

@@ -112,12 +112,33 @@ public class ReviewRoundRepository {
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
     }
 
+    public Optional<LockedReviewRoundRow> findLockedDecisionTarget(long roundId) {
+        List<LockedReviewRoundRow> rows = jdbcTemplate.query(
+                """
+                SELECT ROUND_ID, MANUSCRIPT_ID, VERSION_ID
+                FROM REVIEW_ROUND
+                WHERE ROUND_ID = ?
+                FOR UPDATE
+                """,
+                (rs, rowNum) -> new LockedReviewRoundRow(
+                        rs.getLong("ROUND_ID"),
+                        rs.getLong("MANUSCRIPT_ID"),
+                        rs.getLong("VERSION_ID")
+                ),
+                roundId
+        );
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
+    }
+
     public void updateStatus(long roundId, String roundStatus) {
         jdbcTemplate.update(
                 "UPDATE REVIEW_ROUND SET ROUND_STATUS = ? WHERE ROUND_ID = ?",
                 roundStatus,
                 roundId
         );
+    }
+
+    public record LockedReviewRoundRow(long roundId, long manuscriptId, long versionId) {
     }
 }
 

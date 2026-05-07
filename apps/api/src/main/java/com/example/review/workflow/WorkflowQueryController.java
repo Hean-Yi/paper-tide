@@ -6,6 +6,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -48,9 +49,16 @@ public class WorkflowQueryController {
     }
 
     @GetMapping("/admin/analysis-monitor")
-    public List<AdminAnalysisMonitorItem> listAdminAnalysisMonitor(
-            @AuthenticationPrincipal CurrentUserPrincipal principal
+    public AdminAnalysisMonitorPage listAdminAnalysisMonitor(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String analysisType,
+            @RequestParam(required = false) String businessStatus
     ) {
-        return workflowQueryService.listAdminAnalysisMonitor(principal);
+        return workflowQueryService.listAdminAnalysisMonitor(
+                principal,
+                new AdminAnalysisMonitorRequest(page, size, analysisType, businessStatus)
+        );
     }
 }

@@ -84,9 +84,26 @@ class ReviewFlowE2eTest {
 
     @BeforeEach
     void cleanWorkflowTables() {
+        jdbcTemplate.update("UPDATE ANALYSIS_INTENT SET EXECUTION_JOB_ID = NULL WHERE EXECUTION_JOB_ID IS NOT NULL");
+        jdbcTemplate.update("DELETE FROM EXECUTION_INBOX");
+        jdbcTemplate.update("DELETE FROM EXECUTION_OUTBOX");
+        jdbcTemplate.update("DELETE FROM EXECUTION_ARTIFACT");
+        jdbcTemplate.update("DELETE FROM EXECUTION_ATTEMPT");
+        jdbcTemplate.update("DELETE FROM EXECUTION_JOB");
         jdbcTemplate.update("DELETE FROM ANALYSIS_OUTBOX");
+        jdbcTemplate.update("DELETE FROM ANALYSIS_INBOX");
         jdbcTemplate.update("DELETE FROM ANALYSIS_PROJECTION");
         jdbcTemplate.update("DELETE FROM ANALYSIS_INTENT");
+        jdbcTemplate.update("DELETE FROM REVIEW_FORM_RESPONSE");
+        jdbcTemplate.update("DELETE FROM AUTHOR_FEEDBACK");
+        jdbcTemplate.update("DELETE FROM PAPER_TAG");
+        jdbcTemplate.update("DELETE FROM IMPORT_BATCH");
+        jdbcTemplate.update("DELETE FROM PAPER_ROLE_ASSIGNMENT");
+        jdbcTemplate.update("DELETE FROM CONFERENCE_FORM_FIELD");
+        jdbcTemplate.update("DELETE FROM CONFERENCE_FORM_DEFINITION");
+        jdbcTemplate.update("DELETE FROM REVIEW_DISCUSSION_MESSAGE");
+        jdbcTemplate.update("DELETE FROM CAMERA_READY_SUBMISSION");
+        jdbcTemplate.update("DELETE FROM COMMUNICATION_LOG");
         jdbcTemplate.update("DELETE FROM CONFLICT_CHECK_RECORD");
         jdbcTemplate.update("DELETE FROM REVIEWER_BID");
         jdbcTemplate.update("DELETE FROM REVIEW_REPORT");
@@ -262,7 +279,7 @@ class ReviewFlowE2eTest {
                                   "versionId": %d,
                                   "assignmentStrategy": "REALLOCATE_REVIEWERS",
                                   "screeningRequired": true,
-                                  "deadlineAt": "2026-05-01T12:00:00Z"
+                                  "deadlineAt": "2099-05-01T12:00:00Z"
                                 }
                                 """.formatted(manuscript.manuscriptId(), manuscript.versionId())))
                 .andExpect(status().isOk())
@@ -297,7 +314,7 @@ class ReviewFlowE2eTest {
                         .content("""
                                 {
                                   "draftIds": [%d],
-                                  "deadlineAt": "2026-05-01T12:00:00Z"
+                                  "deadlineAt": "2099-05-01T12:00:00Z"
                                 }
                                 """.formatted(draftId)))
                 .andExpect(status().isOk())

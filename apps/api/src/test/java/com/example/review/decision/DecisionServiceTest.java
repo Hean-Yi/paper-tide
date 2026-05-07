@@ -36,6 +36,16 @@ class DecisionServiceTest {
 
     @BeforeEach
     void cleanDecisionTables() {
+        jdbcTemplate.update("DELETE FROM REVIEW_FORM_RESPONSE");
+        jdbcTemplate.update("DELETE FROM AUTHOR_FEEDBACK");
+        jdbcTemplate.update("DELETE FROM PAPER_TAG");
+        jdbcTemplate.update("DELETE FROM IMPORT_BATCH");
+        jdbcTemplate.update("DELETE FROM PAPER_ROLE_ASSIGNMENT");
+        jdbcTemplate.update("DELETE FROM CONFERENCE_FORM_FIELD");
+        jdbcTemplate.update("DELETE FROM CONFERENCE_FORM_DEFINITION");
+        jdbcTemplate.update("DELETE FROM REVIEW_DISCUSSION_MESSAGE");
+        jdbcTemplate.update("DELETE FROM CAMERA_READY_SUBMISSION");
+        jdbcTemplate.update("DELETE FROM COMMUNICATION_LOG");
         jdbcTemplate.update("DELETE FROM SYS_NOTIFICATION");
         jdbcTemplate.update("UPDATE MANUSCRIPT_VERSION SET SOURCE_DECISION_ID = NULL");
         jdbcTemplate.update("DELETE FROM DECISION_RECORD");
@@ -50,6 +60,7 @@ class DecisionServiceTest {
         jdbcTemplate.update("UPDATE MANUSCRIPT SET CURRENT_VERSION_ID = NULL");
         jdbcTemplate.update("DELETE FROM MANUSCRIPT_VERSION");
         jdbcTemplate.update("DELETE FROM MANUSCRIPT");
+        seedLegacyConference();
     }
 
     @Test
@@ -211,8 +222,8 @@ class DecisionServiceTest {
 
         jdbcTemplate.update(
                 """
-                INSERT INTO MANUSCRIPT (MANUSCRIPT_ID, SUBMITTER_ID, CURRENT_VERSION_ID, CURRENT_STATUS, CURRENT_ROUND_NO, BLIND_MODE, SUBMITTED_AT, LAST_DECISION_CODE)
-                VALUES (?, 1001, NULL, 'UNDER_REVIEW', 1, 'DOUBLE_BLIND', ?, NULL)
+                INSERT INTO MANUSCRIPT (MANUSCRIPT_ID, SUBMITTER_ID, CONFERENCE_ID, CURRENT_VERSION_ID, CURRENT_STATUS, CURRENT_ROUND_NO, BLIND_MODE, SUBMITTED_AT, LAST_DECISION_CODE)
+                VALUES (?, 1001, 0, NULL, 'UNDER_REVIEW', 1, 'DOUBLE_BLIND', ?, NULL)
                 """,
                 manuscriptId,
                 Timestamp.from(Instant.now())
@@ -278,8 +289,8 @@ class DecisionServiceTest {
 
         jdbcTemplate.update(
                 """
-                INSERT INTO MANUSCRIPT (MANUSCRIPT_ID, SUBMITTER_ID, CURRENT_VERSION_ID, CURRENT_STATUS, CURRENT_ROUND_NO, BLIND_MODE, SUBMITTED_AT, LAST_DECISION_CODE)
-                VALUES (?, 1001, NULL, 'UNDER_SCREENING', 1, 'DOUBLE_BLIND', ?, NULL)
+                INSERT INTO MANUSCRIPT (MANUSCRIPT_ID, SUBMITTER_ID, CONFERENCE_ID, CURRENT_VERSION_ID, CURRENT_STATUS, CURRENT_ROUND_NO, BLIND_MODE, SUBMITTED_AT, LAST_DECISION_CODE)
+                VALUES (?, 1001, 0, NULL, 'UNDER_SCREENING', 1, 'DOUBLE_BLIND', ?, NULL)
                 """,
                 manuscriptId,
                 Timestamp.from(Instant.now())
@@ -323,6 +334,72 @@ class DecisionServiceTest {
 
         JsonNode root = objectMapper.readTree(result.getResponse().getContentAsString());
         return root.path("token").asText();
+    }
+
+    private void seedLegacyConference() {
+        jdbcTemplate.update(
+                """
+                MERGE INTO CONFERENCE C
+                USING (
+                  SELECT
+                    0 AS CONFERENCE_ID,
+                    'Legacy / Platform Default' AS NAME,
+                    'LEGACY' AS ACRONYM,
+                    2026 AS CONFERENCE_YEAR,
+                    1003 AS ORGANIZER_USER_ID,
+                    'OPEN_FOR_SUBMISSION' AS CONFERENCE_STATUS,
+                    'DOUBLE_BLIND' AS BLIND_MODE,
+                    'Default conference for tests.' AS CFP_TEXT,
+                    '["LEGACY"]' AS TOPIC_AREAS_JSON,
+                    3 AS TARGET_REVIEWS_PER_PAPER,
+                    3 AS DEFAULT_REVIEWER_MAX_LOAD,
+                    'legacy-platform-default' AS PUBLIC_SLUG,
+                    0 AS CFP_PUBLISHED
+                  FROM DUAL
+                ) S
+                ON (C.CONFERENCE_ID = S.CONFERENCE_ID)
+                WHEN MATCHED THEN
+                  UPDATE SET C.CONFERENCE_STATUS = S.CONFERENCE_STATUS, C.BLIND_MODE = S.BLIND_MODE
+                WHEN NOT MATCHED THEN
+                  INSERT (
+                    CONFERENCE_ID, NAME, ACRONYM, CONFERENCE_YEAR, ORGANIZER_USER_ID,
+                    CONFERENCE_STATUS, BLIND_MODE, CFP_TEXT, TOPIC_AREAS_JSON,
+                    TARGET_REVIEWS_PER_PAPER, DEFAULT_REVIEWER_MAX_LOAD, PUBLIC_SLUG, CFP_PUBLISHED
+                  ) VALUES (
+                    S.CONFERENCE_ID, S.NAME, S.ACRONYM, S.CONFERENCE_YEAR, S.ORGANIZER_USER_ID,
+                    S.CONFERENCE_STATUS, S.BLIND_MODE, S.CFP_TEXT, S.TOPIC_AREAS_JSON,
+                    S.TARGET_REVIEWS_PER_PAPER, S.DEFAULT_REVIEWER_MAX_LOAD, S.PUBLIC_SLUG, S.CFP_PUBLISHED
+                  )
+                """
+        );
+        jdbcTemplate.update(
+                """
+                MERGE INTO CONFERENCE_PHASE P
+                USING (
+                  SELECT
+                    0 AS PHASE_ID,
+                    0 AS CONFERENCE_ID,
+                    TIMESTAMP '2026-01-01 00:00:00' AS SUBMISSION_OPEN_AT,
+                    TIMESTAMP '2099-12-31 00:00:00' AS SUBMISSION_CLOSE_AT,
+                    TIMESTAMP '2100-01-01 00:00:00' AS BIDDING_OPEN_AT,
+                    TIMESTAMP '2100-01-02 00:00:00' AS BIDDING_CLOSE_AT,
+                    TIMESTAMP '2100-01-03 00:00:00' AS REVIEW_DEADLINE_AT,
+                    TIMESTAMP '2100-01-04 00:00:00' AS DECISION_RELEASE_AT
+                  FROM DUAL
+                ) S
+                ON (P.CONFERENCE_ID = S.CONFERENCE_ID)
+                WHEN MATCHED THEN
+                  UPDATE SET P.SUBMISSION_CLOSE_AT = S.SUBMISSION_CLOSE_AT
+                WHEN NOT MATCHED THEN
+                  INSERT (
+                    PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, SUBMISSION_CLOSE_AT,
+                    BIDDING_OPEN_AT, BIDDING_CLOSE_AT, REVIEW_DEADLINE_AT, DECISION_RELEASE_AT
+                  ) VALUES (
+                    S.PHASE_ID, S.CONFERENCE_ID, S.SUBMISSION_OPEN_AT, S.SUBMISSION_CLOSE_AT,
+                    S.BIDDING_OPEN_AT, S.BIDDING_CLOSE_AT, S.REVIEW_DEADLINE_AT, S.DECISION_RELEASE_AT
+                  )
+                """
+        );
     }
 
     private record ReviewFixture(long manuscriptId, long versionId, long roundId, long assignmentId) {

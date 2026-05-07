@@ -53,6 +53,7 @@ public class ReviewReportService {
         if (reviewReportRepository.findByAssignmentId(assignmentId).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Review report already submitted for this assignment");
         }
+        ensureReviewDeadlineOpen(assignment);
 
         long reviewId = reviewReportRepository.nextReviewId();
         Timestamp submittedAt = Timestamp.from(Instant.now());
@@ -95,6 +96,18 @@ public class ReviewReportService {
     private void validateScore(int score, String fieldName) {
         if (score < 1 || score > 5) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, fieldName + " must be between 1 and 5");
+        }
+    }
+
+    private void ensureReviewDeadlineOpen(ReviewAssignmentRow assignment) {
+        Timestamp deadline = assignment.deadlineAt();
+        if (deadline == null) {
+            deadline = reviewRoundRepository.findById(assignment.roundId())
+                    .map(ReviewRoundRow::deadlineAt)
+                    .orElse(null);
+        }
+        if (deadline != null && !Instant.now().isBefore(deadline.toInstant())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Review deadline has passed");
         }
     }
 

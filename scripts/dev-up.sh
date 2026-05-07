@@ -114,6 +114,13 @@ apply_oracle_conference_scoped_submission_schema() {
     >/dev/null
 }
 
+apply_oracle_reviewer_pool_bidding_schema() {
+  docker cp "$ROOT_DIR/database/oracle/016_reviewer_pool_bidding.sql" "$DEFAULT_ORACLE_CONTAINER:/tmp/016_reviewer_pool_bidding.sql" >/dev/null
+  docker exec "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE} @/tmp/016_reviewer_pool_bidding.sql" \
+    >/dev/null
+}
+
 oracle_column_exists() {
   local table_name="$1"
   local column_name="$2"
@@ -194,6 +201,11 @@ ensure_oracle_schema() {
   if oracle_table_exists "MANUSCRIPT" && ! oracle_column_exists "MANUSCRIPT" "CONFERENCE_ID"; then
     echo "Oracle schema detected without 015 conference-scoped submission objects. Applying incremental schema..." >&2
     apply_oracle_conference_scoped_submission_schema
+  fi
+
+  if ! oracle_table_exists "CONFERENCE_REVIEWER"; then
+    echo "Oracle schema detected without 016 reviewer-pool bidding objects. Applying incremental schema..." >&2
+    apply_oracle_reviewer_pool_bidding_schema
   fi
 
   if verify_oracle_schema; then

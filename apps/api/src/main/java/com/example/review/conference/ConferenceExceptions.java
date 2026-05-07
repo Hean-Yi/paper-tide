@@ -17,3 +17,9 @@ class ConferenceNotFoundException extends RuntimeException {
         super(message);
     }
 }
+
+class ConferenceStateException extends RuntimeException {
+    ConferenceStateException(String message) {
+        super(message);
+    }
+}

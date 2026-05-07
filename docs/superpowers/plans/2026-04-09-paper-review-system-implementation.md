@@ -2060,8 +2060,28 @@ Expected after implementation: both commands pass.
       - Real Oracle `verify_schema.sql` passed after updating the verification SQL in the container.
     - Current completion state:
       - 25.3 conference-scoped submission migration is implemented, frontend selection is wired, and the local Oracle schema has been migrated through `015`.
-- [ ] **Task 25.4: Reviewer pool, conflicts, and bidding**
+- [x] **Task 25.4: Reviewer pool, conflicts, and bidding**
   - Add platform-approved reviewer pool membership, `CONFERENCE_REVIEWER` research-area snapshots from `USER_RESEARCH_AREA`, de-identified bidding views, bid persistence, conflict reuse through `CONFLICT_CHECK_RECORD`, phase boundary checks, and multi-conference isolation checks.
+  - Execution notes, 2026-05-07:
+    - Added `016_reviewer_pool_bidding.sql` with `CONFERENCE_REVIEWER`, `REVIEWER_BID`, sequences, triggers, lookup indexes, and nullable `CONFLICT_CHECK_RECORD.ASSIGNMENT_ID` so bidding-stage self-declared conflicts can reuse the existing conflict table before assignments exist.
+    - Wired `016_reviewer_pool_bidding.sql` into full Oracle apply, incremental `dev-up.sh`, and `verify_schema.sql`; schema verification now expects 30 tables, 29 sequences, 32 triggers, and 47 custom indexes.
+    - Added chair/admin reviewer-pool APIs under `/api/chair/conferences/{conferenceId}/reviewers`; the service only admits active platform `REVIEWER` users and snapshots their current `USER_RESEARCH_AREA` rows into `CONFERENCE_REVIEWER.RESEARCH_AREAS_JSON`.
+    - Added reviewer bidding APIs under `/api/reviewer/conferences/{conferenceId}/bids/open` and `/api/reviewer/conferences/{conferenceId}/bids`; bidding is restricted to active conference-pool reviewers, `BIDDING_OPEN` conferences, and `BIDDING_CLOSE_AT` in the future.
+    - Bidding reads are conference-scoped, exclude other conferences' manuscripts, return only title/abstract/keywords/bid state, and redact submitted author names, emails, and institutions from those fields.
+    - Bid submission upserts `REVIEWER_BID`; self-declared conflict bids create one `CONFLICT_CHECK_RECORD` row with `ASSIGNMENT_ID = NULL` and `SOURCE = SELF_DECLARED`.
+    - Verification:
+      - Red run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=ConferenceReviewerBiddingSchemaTest,ConferenceReviewerBiddingServiceTest test` failed because `016_reviewer_pool_bidding.sql` was missing; the service integration path was also blocked inside the normal sandbox by Oracle socket permissions.
+      - Real Oracle migration: `docker cp database/oracle/016_reviewer_pool_bidding.sql review-oracle:/tmp/016_reviewer_pool_bidding.sql && docker exec review-oracle bash -lc "sqlplus -s review_app/ReviewApp12345@localhost/FREEPDB1 @/tmp/016_reviewer_pool_bidding.sql"` created the reviewer-pool and bidding objects.
+      - First real Oracle green attempt exposed a test seed order bug against `FK_MANUSCRIPT_CURRENT_VERSION`; fixed the test to insert manuscript, insert version, then update current version.
+      - Green run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=ConferenceReviewerBiddingServiceTest test` passed with Oracle access.
+      - Focused guard run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=ConferenceReviewerBiddingSchemaTest,ConferenceReviewerBiddingServiceTest,ConferenceSchemaTest,ConferenceSubmissionSchemaTest,RegistrationSchemaTest,CodeQualityTest test` passed with Oracle access.
+      - Real Oracle `verify_schema.sql` passed after copying the updated verification SQL into the container.
+      - API compile check: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -DskipTests test` passed.
+      - Script checks: `bash -n scripts/oracle-schema-apply.sh && bash -n scripts/dev-up.sh` passed.
+      - Whitespace check: `git diff --check` passed.
+    - Current completion state:
+      - 25.4 backend/schema slice is implemented and verified against the local Oracle container.
+      - Frontend bidding screens are not included in 25.4 and remain part of the later integrated frontend workflow slice.
 - [ ] **Task 25.5: Guided deterministic assignment**
   - Add ranked candidate queries, hard constraint filtering, runtime load calculation, per-candidate assignment drafts, bulk chair confirmation with selected reviewer row locks, and final `REVIEW_ASSIGNMENT` validation.
 - [ ] **Task 25.6: Reviewer assignment Agent assist**

@@ -29,10 +29,10 @@ class RegistrationSchemaTest {
         assertTrue(verification.contains("USER_ACADEMIC_PROFILE"));
         assertTrue(verification.contains("ROLE_APPLICATION"));
         assertTrue(verification.contains("EMAIL_VERIFICATION_TOKEN"));
-        assertTrue(verification.contains("Expected 28 tables"));
-        assertTrue(verification.contains("Expected 27 sequences"));
-        assertTrue(verification.contains("Expected 30 triggers"));
-        assertTrue(verification.contains("Expected 43 indexes"));
+        assertTrue(verification.contains("Expected 30 tables"));
+        assertTrue(verification.contains("Expected 29 sequences"));
+        assertTrue(verification.contains("Expected 32 triggers"));
+        assertTrue(verification.contains("Expected 47 indexes"));
 
         assertTrue(fullApply.contains("012_registration_foundation.sql"));
         assertTrue(fullApply.contains("013_registration_token_indexes.sql"));

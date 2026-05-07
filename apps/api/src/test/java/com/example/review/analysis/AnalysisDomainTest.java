@@ -51,6 +51,11 @@ class AnalysisDomainTest {
   }
 
   @Test
+  void reviewerAssignmentAssistUsesManuscriptAnchorType() {
+    assertThat(AnalysisType.REVIEWER_ASSIGNMENT_ASSIST.businessAnchorType()).isEqualTo(AnalysisAnchorType.MANUSCRIPT);
+  }
+
+  @Test
   void screeningPolicyAcceptsVersionScopedBusinessAnchor() {
     assertThat(AnalysisRequestPolicy.allows(AnalysisType.SCREENING, AnalysisBusinessAnchor.screening(77L, 11L)))
         .isTrue();

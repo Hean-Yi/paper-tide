@@ -2,8 +2,11 @@ package com.example.review.analysis.interfaces;
 
 import com.example.review.analysis.application.RequestConflictAnalysisUseCase;
 import com.example.review.analysis.application.RequestReviewerAssistUseCase;
+import com.example.review.analysis.application.RequestReviewerAssignmentAssistUseCase;
 import com.example.review.analysis.application.RequestScreeningAnalysisUseCase;
 import com.example.review.analysis.interfaces.AnalysisDtos.AnalysisIntentResponse;
+import com.example.review.analysis.interfaces.AnalysisDtos.AssignmentAssistRequest;
+import com.example.review.analysis.interfaces.AnalysisDtos.AssignmentAssistStateResponse;
 import com.example.review.analysis.interfaces.AnalysisDtos.ConflictAnalysisRequest;
 import com.example.review.analysis.interfaces.AnalysisDtos.ReviewerAssistRequest;
 import com.example.review.analysis.interfaces.AnalysisDtos.ReviewerAssistStateResponse;
@@ -23,15 +26,18 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 public class AnalysisController {
     private final RequestReviewerAssistUseCase requestReviewerAssistUseCase;
+    private final RequestReviewerAssignmentAssistUseCase requestReviewerAssignmentAssistUseCase;
     private final RequestConflictAnalysisUseCase requestConflictAnalysisUseCase;
     private final RequestScreeningAnalysisUseCase requestScreeningAnalysisUseCase;
 
     public AnalysisController(
             RequestReviewerAssistUseCase requestReviewerAssistUseCase,
+            RequestReviewerAssignmentAssistUseCase requestReviewerAssignmentAssistUseCase,
             RequestConflictAnalysisUseCase requestConflictAnalysisUseCase,
             RequestScreeningAnalysisUseCase requestScreeningAnalysisUseCase
     ) {
         this.requestReviewerAssistUseCase = requestReviewerAssistUseCase;
+        this.requestReviewerAssignmentAssistUseCase = requestReviewerAssignmentAssistUseCase;
         this.requestConflictAnalysisUseCase = requestConflictAnalysisUseCase;
         this.requestScreeningAnalysisUseCase = requestScreeningAnalysisUseCase;
     }
@@ -86,5 +92,27 @@ public class AnalysisController {
                 roundId,
                 request != null && request.forceRequested()
         );
+    }
+
+    @PostMapping("/review-rounds/{roundId}/assignment-assist")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public AnalysisIntentResponse requestReviewerAssignmentAssist(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long roundId,
+            @RequestBody(required = false) AssignmentAssistRequest request
+    ) {
+        return requestReviewerAssignmentAssistUseCase.request(
+                principal,
+                roundId,
+                request != null && request.forceRequested()
+        );
+    }
+
+    @GetMapping("/review-rounds/{roundId}/assignment-assist")
+    public AssignmentAssistStateResponse getReviewerAssignmentAssist(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long roundId
+    ) {
+        return requestReviewerAssignmentAssistUseCase.get(principal, roundId);
     }
 }

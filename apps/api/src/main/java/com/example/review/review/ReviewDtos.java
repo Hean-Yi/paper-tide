@@ -2,6 +2,7 @@ package com.example.review.review;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.List;
 
 record CreateReviewRoundRequest(
         long manuscriptId,
@@ -51,5 +52,30 @@ record ConflictCheckResponse(
         String conflictType,
         String conflictDesc,
         String source
+) {
+}
+
+record GenerateAssignmentDraftRequest(Integer limit) {
+}
+
+record ConfirmAssignmentDraftRequest(
+        List<Long> draftIds,
+        Instant deadlineAt
+) {
+}
+
+record AssignmentDraftResponse(
+        long draftId,
+        long roundId,
+        long manuscriptId,
+        long versionId,
+        long reviewerId,
+        int rankOrder,
+        int score,
+        int currentLoad,
+        int maxLoad,
+        String bidValue,
+        String reason,
+        String draftStatus
 ) {
 }

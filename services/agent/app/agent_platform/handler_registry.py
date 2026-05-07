@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.agent_platform.handlers.base import AnalysisTaskHandler
 from app.agent_platform.handlers.conflict_analysis import ConflictAnalysisHandler
 from app.agent_platform.handlers.reviewer_assist import ReviewerAssistHandler
+from app.agent_platform.handlers.reviewer_assignment_assist import ReviewerAssignmentAssistHandler
 from app.agent_platform.handlers.screening import ScreeningAnalysisHandler
 
 
@@ -10,6 +11,7 @@ class AnalysisHandlerRegistry:
     def __init__(self, handlers: list[AnalysisTaskHandler] | None = None) -> None:
         resolved_handlers = handlers or [
             ReviewerAssistHandler(),
+            ReviewerAssignmentAssistHandler(),
             ConflictAnalysisHandler(),
             ScreeningAnalysisHandler(),
         ]

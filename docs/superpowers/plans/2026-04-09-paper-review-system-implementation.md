@@ -2082,10 +2082,41 @@ Expected after implementation: both commands pass.
     - Current completion state:
       - 25.4 backend/schema slice is implemented and verified against the local Oracle container.
       - Frontend bidding screens are not included in 25.4 and remain part of the later integrated frontend workflow slice.
-- [ ] **Task 25.5: Guided deterministic assignment**
+- [x] **Task 25.5: Guided deterministic assignment**
   - Add ranked candidate queries, hard constraint filtering, runtime load calculation, per-candidate assignment drafts, bulk chair confirmation with selected reviewer row locks, and final `REVIEW_ASSIGNMENT` validation.
-- [ ] **Task 25.6: Reviewer assignment Agent assist**
+  - Execution notes, 2026-05-07:
+    - Added `017_assignment_drafts.sql` with one row per proposed `(ROUND_ID, REVIEWER_ID)` assignment candidate, status tracking, non-redundant lookup indexes, sequence, trigger, and foreign keys to review round, manuscript, manuscript version, and reviewer user.
+    - Wired `017_assignment_drafts.sql` into full Oracle apply, incremental `dev-up.sh`, and `verify_schema.sql`; schema verification now expects 31 tables, 30 sequences, 33 triggers, and 50 custom indexes.
+    - Added `AssignmentDraftRepository` and `AssignmentDraftService` plus chair/admin endpoints for generating, listing, and confirming assignment drafts under `/api/review-rounds/{roundId}/assignment-drafts`.
+    - Candidate generation now ranks active conference reviewers while hard-filtering manuscript authors, existing conflict records, `DECLINE` bids, existing assignments, and reviewers whose runtime confirmed load is already at `MAX_LOAD`.
+    - Confirmation locks the review round, selected draft rows, and selected `CONFERENCE_REVIEWER` rows; it recomputes confirmed load inside the transaction before inserting `REVIEW_ASSIGNMENT`, marks drafts `CONFIRMED`, moves the round to `IN_PROGRESS`, and records detected same-institution conflicts.
+    - Updated older Oracle-backed workflow test cleanup helpers so `ASSIGNMENT_DRAFT` children are deleted after `REVIEW_ASSIGNMENT` and before `REVIEW_ROUND`.
+    - Verification:
+      - Red run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AssignmentDraftSchemaTest,AssignmentDraftServiceTest test` failed while `017_assignment_drafts.sql` and the draft service were absent.
+      - Real Oracle migration: `docker cp database/oracle/017_assignment_drafts.sql review-oracle:/tmp/017_assignment_drafts.sql && docker exec review-oracle bash -lc "sqlplus -s review_app/ReviewApp12345@localhost/FREEPDB1 @/tmp/017_assignment_drafts.sql"` created the assignment-draft objects.
+      - First green attempt exposed a test seed user-id collision; the focused draft test seed was moved to non-conflicting reviewer IDs.
+      - Green run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AssignmentDraftSchemaTest,AssignmentDraftServiceTest,AnalysisDomainTest,RequestReviewerAssignmentAssistUseCaseTest,ConferenceReviewerBiddingSchemaTest,ConferenceReviewerBiddingServiceTest,CodeQualityTest test` passed with Oracle access.
+    - Current completion state:
+      - 25.5 backend/schema slice is implemented and verified against the local Oracle container.
+      - Frontend chair editing controls for drafts remain part of the integrated frontend workflow slice.
+- [x] **Task 25.6: Reviewer assignment Agent assist**
   - Add `REVIEWER_ASSIGNMENT_ASSIST` across API analysis type, intent use case, Agent handler, projection, and chair-facing progress/error UI.
+  - Execution notes, 2026-05-07:
+    - Added `018_reviewer_assignment_assist_analysis.sql` to extend API and Agent analysis type constraints for `REVIEWER_ASSIGNMENT_ASSIST`; wired it into full Oracle apply, incremental `dev-up.sh`, and `verify_schema.sql`.
+    - Added `REVIEWER_ASSIGNMENT_ASSIST` to the API analysis domain with `MANUSCRIPT` as the business anchor, matching the approved one-manuscript-per-request design while keeping `roundId` as workflow context in the payload.
+    - Added `ReviewerAssignmentAssistContextRepository` and `RequestReviewerAssignmentAssistUseCase`; chair/admin endpoints now support `POST /api/review-rounds/{roundId}/assignment-assist` and `GET /api/review-rounds/{roundId}/assignment-assist`.
+    - Assignment-assist payloads are built by the owning Spring API from one manuscript/version and current `ASSIGNMENT_DRAFT` candidates, then submitted through the existing AnalysisIntent/outbox path; Agent output stays advisory.
+    - Added Agent-side schema validation, provider fallback, handler registration, redaction, and runtime execution support for `REVIEWER_ASSIGNMENT_ASSIST`, returning a redacted summary projection with ranked candidates.
+    - Verification:
+      - Red run: the new Java use-case test first failed while the analysis type, context repository, and use case were absent.
+      - Red run: the Agent runtime/schema tests first failed while the handler/schema/provider support was absent.
+      - Green Java run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=AssignmentDraftSchemaTest,AssignmentDraftServiceTest,AnalysisDomainTest,RequestReviewerAssignmentAssistUseCaseTest,ConferenceReviewerBiddingSchemaTest,ConferenceReviewerBiddingServiceTest,CodeQualityTest test` passed with Oracle access.
+      - Green Agent run: `.venv/bin/python -m pytest services/agent/tests/test_workflow_schemas.py services/agent/tests/test_execution_runtime.py -q` passed with 15 tests.
+      - Real Oracle migration: `docker cp database/oracle/018_reviewer_assignment_assist_analysis.sql review-oracle:/tmp/018_reviewer_assignment_assist_analysis.sql && docker exec review-oracle bash -lc "sqlplus -s review_app/ReviewApp12345@localhost/FREEPDB1 @/tmp/018_reviewer_assignment_assist_analysis.sql"` updated the analysis constraints.
+      - Real Oracle `verify_schema.sql` passed after copying the updated verification SQL into the container.
+    - Current completion state:
+      - 25.6 backend/API/Agent execution path is implemented and verified.
+      - Chair-facing progress/error state is exposed through the new assignment-assist state endpoint; full visual workflow integration remains in Task 25.7.
 - [ ] **Task 25.7: Integrated frontend workflows**
   - Add Public CFP, Register tabs, Author conference submission path, Chair conference console, Admin approval workbench, and route-guard coverage.
 - [ ] **Task 25.8: Operational docs and verification**

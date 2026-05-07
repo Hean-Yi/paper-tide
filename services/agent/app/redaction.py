@@ -78,6 +78,16 @@ def redact_result(task_type: str, raw_result: dict[str, Any]) -> dict[str, Any]:
             "decisionSummary",
             "confidence",
         }
+    elif task_type == "REVIEWER_ASSIGNMENT_ASSIST":
+        safe_keys = {
+            "taskType",
+            "manuscriptId",
+            "versionId",
+            "status",
+            "rankedCandidates",
+            "assignmentSummary",
+            "confidence",
+        }
     else:
         safe_keys = set(raw_result)
 

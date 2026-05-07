@@ -118,6 +118,9 @@ Current lessons captured from recent review cycles:
 - Registration resubmission paths must update or upsert durable profile rows that are keyed by user. Do not insert-only into one-to-one profile tables such as `USER_ACADEMIC_PROFILE` when rejected applications can be reopened, or a valid retry can become a server error.
 - When running real Oracle migration verification on an existing local database, do not assume earlier incremental migrations were already applied. Run `verify_schema.sql`, inspect missing object classes, and apply missing prior migrations in numeric order before treating the latest migration as failed.
 - Direct test seeds for manuscripts must respect the current-version foreign-key order used by the application: insert `MANUSCRIPT` with `CURRENT_VERSION_ID = NULL`, insert `MANUSCRIPT_VERSION`, then update `MANUSCRIPT.CURRENT_VERSION_ID`. Do not insert a manuscript pointing at a version row that does not exist yet.
+- Oracle test cleanup must include assignment planning children before review rounds. Delete `ASSIGNMENT_DRAFT` after `REVIEW_ASSIGNMENT` and before `REVIEW_ROUND` so assignment-planning slices do not break older workflow tests.
+- Adding a new analysis type requires synchronized changes across both systems: API enum/anchor policy/use case, Oracle analysis constraints in a new migration, outbox payload construction, Agent schema/provider/handler registry/redaction, and focused API plus Agent tests. Do not update only one side of the split-sovereignty analysis flow.
+- Reviewer-assignment assist should consume persisted assignment drafts as advisory candidate input and return ranked guidance only. Keep final assignment confirmation in the API transaction that locks conference-reviewer rows and revalidates load.
 
 ## Plan File Discipline
 Execution work must stay anchored to one authoritative implementation plan file.

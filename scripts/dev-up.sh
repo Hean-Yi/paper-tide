@@ -121,6 +121,20 @@ apply_oracle_reviewer_pool_bidding_schema() {
     >/dev/null
 }
 
+apply_oracle_assignment_drafts_schema() {
+  docker cp "$ROOT_DIR/database/oracle/017_assignment_drafts.sql" "$DEFAULT_ORACLE_CONTAINER:/tmp/017_assignment_drafts.sql" >/dev/null
+  docker exec "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE} @/tmp/017_assignment_drafts.sql" \
+    >/dev/null
+}
+
+apply_oracle_reviewer_assignment_assist_schema() {
+  docker cp "$ROOT_DIR/database/oracle/018_reviewer_assignment_assist_analysis.sql" "$DEFAULT_ORACLE_CONTAINER:/tmp/018_reviewer_assignment_assist_analysis.sql" >/dev/null
+  docker exec "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE} @/tmp/018_reviewer_assignment_assist_analysis.sql" \
+    >/dev/null
+}
+
 oracle_column_exists() {
   local table_name="$1"
   local column_name="$2"
@@ -150,6 +164,25 @@ SQL
 )"
 
   [[ "$index_count" == "1" ]]
+}
+
+oracle_constraint_mentions() {
+  local constraint_name="$1"
+  local expected_text="$2"
+  local constraint_count
+
+  constraint_count="$(docker exec -i "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE}" <<SQL | tr -d '[:space:]'
+SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF
+SELECT COUNT(*)
+FROM USER_CONSTRAINTS
+WHERE CONSTRAINT_NAME = UPPER('${constraint_name}')
+  AND SEARCH_CONDITION_VC LIKE '%' || '${expected_text}' || '%';
+EXIT;
+SQL
+)"
+
+  [[ "$constraint_count" == "1" ]]
 }
 
 ensure_oracle_schema() {
@@ -206,6 +239,16 @@ ensure_oracle_schema() {
   if ! oracle_table_exists "CONFERENCE_REVIEWER"; then
     echo "Oracle schema detected without 016 reviewer-pool bidding objects. Applying incremental schema..." >&2
     apply_oracle_reviewer_pool_bidding_schema
+  fi
+
+  if ! oracle_table_exists "ASSIGNMENT_DRAFT"; then
+    echo "Oracle schema detected without 017 assignment draft objects. Applying incremental schema..." >&2
+    apply_oracle_assignment_drafts_schema
+  fi
+
+  if ! oracle_constraint_mentions "CK_ANALYSIS_INTENT_TYPE" "REVIEWER_ASSIGNMENT_ASSIST"; then
+    echo "Oracle schema detected without 018 reviewer assignment assist analysis type. Applying incremental schema..." >&2
+    apply_oracle_reviewer_assignment_assist_schema
   fi
 
   if verify_oracle_schema; then

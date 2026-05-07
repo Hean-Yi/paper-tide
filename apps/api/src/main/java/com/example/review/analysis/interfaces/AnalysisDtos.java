@@ -20,6 +20,12 @@ public final class AnalysisDtos {
         }
     }
 
+    public record AssignmentAssistRequest(Boolean force) {
+        public boolean forceRequested() {
+            return Boolean.TRUE.equals(force);
+        }
+    }
+
     public record ScreeningAnalysisRequest(Boolean force) {
         public boolean forceRequested() {
             return Boolean.TRUE.equals(force);
@@ -45,6 +51,12 @@ public final class AnalysisDtos {
     }
 
     public record ReviewerAssistStateResponse(
+            AnalysisIntentResponse intent,
+            List<AnalysisProjectionResponse> projections
+    ) {
+    }
+
+    public record AssignmentAssistStateResponse(
             AnalysisIntentResponse intent,
             List<AnalysisProjectionResponse> projections
     ) {

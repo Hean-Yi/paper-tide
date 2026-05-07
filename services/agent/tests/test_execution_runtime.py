@@ -42,6 +42,48 @@ def test_runtime_executes_reviewer_assist_and_emits_completed_event() -> None:
     pending_events = app.state.execution_completed_publisher.pending()
     assert len(pending_events) == 1
     assert pending_events[0].topic == "analysis.completed"
+
+
+def test_runtime_executes_reviewer_assignment_assist_and_emits_completed_event() -> None:
+    app = create_app(
+        enable_background_execution=False,
+        require_internal_api_key=False,
+        provider_executor=ProviderExecutor(),
+    )
+    runtime = app.state.agent_platform
+    requested = AnalysisRequestedMessage(
+        idempotency_key="assignment-key-1",
+        analysis_type="REVIEWER_ASSIGNMENT_ASSIST",
+        intent_reference="202",
+        request_payload={
+            "title": "Assignment Paper",
+            "abstract": "A paper that needs reviewer assignment.",
+            "keywords": ["assignment"],
+            "assignmentAssist": {
+                "roundId": 8,
+                "manuscriptId": 9,
+                "versionId": 10,
+            },
+            "candidateDrafts": [
+                {
+                    "draftId": 501,
+                    "reviewerId": 1002,
+                    "rankOrder": 1,
+                    "score": 102,
+                    "bidValue": "WANT_TO_REVIEW",
+                }
+            ],
+        },
+    )
+    job = runtime.analysis_requested_consumer.handle(requested)
+
+    event = runtime.execute_requested_job(job)
+
+    assert event["analysisType"] == "REVIEWER_ASSIGNMENT_ASSIST"
+    assert event["businessStatus"] == "AVAILABLE"
+    assert event["redactedResult"]["taskType"] == "REVIEWER_ASSIGNMENT_ASSIST"
+    pending_events = app.state.execution_completed_publisher.pending()
+    assert len(pending_events) == 1
     assert pending_events[0].payload["eventType"] == "analysis.completed"
 
 

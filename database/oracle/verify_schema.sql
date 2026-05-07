@@ -14,6 +14,7 @@ DECLARE
   v_execution_job_attempt_count_column NUMBER;
   v_manuscript_conference_column NUMBER;
   v_manuscript_conference_fk NUMBER;
+  v_assignment_assist_type_constraints NUMBER;
 BEGIN
   SELECT COUNT(*)
     INTO v_table_count
@@ -34,6 +35,7 @@ BEGIN
      'MANUSCRIPT_VERSION',
      'MANUSCRIPT_AUTHOR',
      'REVIEW_ROUND',
+     'ASSIGNMENT_DRAFT',
      'REVIEW_ASSIGNMENT',
      'CONFLICT_CHECK_RECORD',
      'REVIEW_REPORT',
@@ -70,6 +72,7 @@ BEGIN
      'SEQ_MANUSCRIPT_VERSION',
      'SEQ_MANUSCRIPT_AUTHOR',
      'SEQ_REVIEW_ROUND',
+     'SEQ_ASSIGNMENT_DRAFT',
      'SEQ_REVIEW_ASSIGNMENT',
      'SEQ_CONFLICT_CHECK_RECORD',
      'SEQ_REVIEW_REPORT',
@@ -105,6 +108,7 @@ BEGIN
      'TRG_MANUSCRIPT_VERSION_BI',
      'TRG_MANUSCRIPT_AUTHOR_BI',
      'TRG_REVIEW_ROUND_BI',
+     'TRG_ASSIGNMENT_DRAFT_BI',
      'TRG_REVIEW_ASSIGNMENT_BI',
      'TRG_CONFLICT_CHECK_RECORD_BI',
      'TRG_REVIEW_REPORT_BI',
@@ -147,6 +151,9 @@ BEGIN
      'IDX_MANUSCRIPT_STATUS',
      'IDX_MANUSCRIPT_VERSION_SUBMITTED_BY',
      'IDX_REVIEW_ROUND_VERSION',
+     'IDX_ASSIGNMENT_DRAFT_ROUND_STATUS',
+     'IDX_ASSIGNMENT_DRAFT_REVIEWER',
+     'IDX_ASSIGNMENT_DRAFT_MANUSCRIPT',
      'IDX_REVIEW_ASSIGNMENT_REVIEWER_STATUS',
      'IDX_CONFLICT_CHECK_ASSIGNMENT',
      'IDX_REVIEW_REPORT_MANUSCRIPT',
@@ -206,6 +213,7 @@ BEGIN
        'TRG_MANUSCRIPT_VERSION_BI',
        'TRG_MANUSCRIPT_AUTHOR_BI',
        'TRG_REVIEW_ROUND_BI',
+       'TRG_ASSIGNMENT_DRAFT_BI',
        'TRG_REVIEW_ASSIGNMENT_BI',
        'TRG_CONFLICT_CHECK_RECORD_BI',
        'TRG_REVIEW_REPORT_BI',
@@ -247,6 +255,7 @@ BEGIN
      'TRG_MANUSCRIPT_VERSION_BI',
      'TRG_MANUSCRIPT_AUTHOR_BI',
      'TRG_REVIEW_ROUND_BI',
+     'TRG_ASSIGNMENT_DRAFT_BI',
      'TRG_REVIEW_ASSIGNMENT_BI',
      'TRG_CONFLICT_CHECK_RECORD_BI',
      'TRG_REVIEW_REPORT_BI',
@@ -291,24 +300,34 @@ BEGIN
      AND CONSTRAINT_NAME = 'FK_MANUSCRIPT_CONFERENCE'
      AND CONSTRAINT_TYPE = 'R';
 
-  IF v_table_count <> 30 THEN
-    RAISE_APPLICATION_ERROR(-20001, 'Expected 30 tables, found ' || v_table_count);
+  SELECT COUNT(*)
+    INTO v_assignment_assist_type_constraints
+    FROM USER_CONSTRAINTS
+   WHERE CONSTRAINT_NAME IN (
+       'CK_ANALYSIS_INTENT_TYPE',
+       'CK_ANALYSIS_PROJECTION_TYPE',
+       'CK_EXECUTION_JOB_TYPE'
+     )
+     AND SEARCH_CONDITION_VC LIKE '%REVIEWER_ASSIGNMENT_ASSIST%';
+
+  IF v_table_count <> 31 THEN
+    RAISE_APPLICATION_ERROR(-20001, 'Expected 31 tables, found ' || v_table_count);
   END IF;
 
-  IF v_sequence_count <> 29 THEN
-    RAISE_APPLICATION_ERROR(-20002, 'Expected 29 sequences, found ' || v_sequence_count);
+  IF v_sequence_count <> 30 THEN
+    RAISE_APPLICATION_ERROR(-20002, 'Expected 30 sequences, found ' || v_sequence_count);
   END IF;
 
-  IF v_trigger_count <> 32 THEN
-    RAISE_APPLICATION_ERROR(-20003, 'Expected 32 triggers, found ' || v_trigger_count);
+  IF v_trigger_count <> 33 THEN
+    RAISE_APPLICATION_ERROR(-20003, 'Expected 33 triggers, found ' || v_trigger_count);
   END IF;
 
   IF v_procedure_count <> 2 THEN
     RAISE_APPLICATION_ERROR(-20004, 'Expected 2 procedures, found ' || v_procedure_count);
   END IF;
 
-  IF v_index_count <> 47 THEN
-    RAISE_APPLICATION_ERROR(-20005, 'Expected 47 indexes, found ' || v_index_count);
+  IF v_index_count <> 50 THEN
+    RAISE_APPLICATION_ERROR(-20005, 'Expected 50 indexes, found ' || v_index_count);
   END IF;
 
   IF v_role_count <> 4 THEN
@@ -325,6 +344,10 @@ BEGIN
 
   IF v_manuscript_conference_fk <> 1 THEN
     RAISE_APPLICATION_ERROR(-20011, 'Expected FK_MANUSCRIPT_CONFERENCE constraint to exist');
+  END IF;
+
+  IF v_assignment_assist_type_constraints <> 3 THEN
+    RAISE_APPLICATION_ERROR(-20012, 'Expected reviewer assignment assist analysis type constraints to exist');
   END IF;
 
   IF v_invalid_count <> 0 THEN

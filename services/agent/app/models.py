@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 TASK_TYPES = {
     "SCREENING_ANALYSIS",
     "REVIEW_ASSIST_ANALYSIS",
+    "REVIEWER_ASSIGNMENT_ASSIST",
     "DECISION_CONFLICT_ANALYSIS",
 }
 

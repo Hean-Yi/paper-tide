@@ -43,6 +43,7 @@ class ConferenceReviewerBiddingServiceTest {
         jdbcTemplate.update("DELETE FROM CONFERENCE_REVIEWER");
         jdbcTemplate.update("DELETE FROM REVIEW_REPORT");
         jdbcTemplate.update("DELETE FROM REVIEW_ASSIGNMENT");
+        jdbcTemplate.update("DELETE FROM ASSIGNMENT_DRAFT");
         jdbcTemplate.update("UPDATE MANUSCRIPT_VERSION SET SOURCE_DECISION_ID = NULL");
         jdbcTemplate.update("DELETE FROM DECISION_RECORD");
         jdbcTemplate.update("DELETE FROM REVIEW_ROUND");

@@ -4,7 +4,12 @@ import json
 from typing import Any
 
 from app.agent_platform.config import AgentPlatformConfig
-from app.workflows.schemas import ConflictAnalysisResult, ReviewAssistResult, ScreeningAnalysisResult
+from app.workflows.schemas import (
+    ConflictAnalysisResult,
+    ReviewAssistResult,
+    ReviewerAssignmentAssistResult,
+    ScreeningAnalysisResult,
+)
 
 _DEFAULT_TEXT_BUDGET = 4000
 _PDF_TEXT_BUDGET = 3000
@@ -90,6 +95,41 @@ class ProviderExecutor:
                 "Summarize reviewer consensus and conflicts for the chair decision workflow. "
                 "Use evidence from submitted reports only, keep the output concise, and return only the schema fields. "
                 f"Conflict payload JSON: {_prompt_json(payload)}"
+            ),
+            fallback=fallback,
+        )
+
+    def run_reviewer_assignment_assist(self, payload: dict[str, Any]) -> dict[str, Any]:
+        context = payload.get("assignmentAssist") or {}
+        candidates = list(payload.get("candidateDrafts") or [])
+        ranked = []
+        for index, candidate in enumerate(candidates, start=1):
+            ranked.append(
+                {
+                    "reviewerId": str(candidate.get("reviewerId", "")),
+                    "draftId": str(candidate.get("draftId", "")),
+                    "rank": index,
+                    "rationale": str(candidate.get("reason") or "Candidate from deterministic assignment draft."),
+                    "riskFlags": [],
+                }
+            )
+        fallback = {
+            "taskType": "REVIEWER_ASSIGNMENT_ASSIST",
+            "manuscriptId": str(context.get("manuscriptId", "")),
+            "versionId": str(context.get("versionId", "")),
+            "status": "SUCCESS",
+            "rankedCandidates": ranked,
+            "assignmentSummary": f"{len(ranked)} reviewer candidate(s) ranked for chair confirmation.",
+            "confidence": 0.5,
+        }
+        return self._request_structured_result(
+            schema_name="reviewer_assignment_assist",
+            schema=ReviewerAssignmentAssistResult.model_json_schema(),
+            instruction=(
+                "Rank reviewer assignment draft candidates for a paper review chair. Use only supplied candidate "
+                "metadata, bidding signals, load, and risk flags. Do not invent reviewers, scores, decisions, "
+                "or author identity. Return only the schema fields. "
+                f"Assignment payload JSON: {_prompt_json(payload)}"
             ),
             fallback=fallback,
         )

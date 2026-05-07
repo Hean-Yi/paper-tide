@@ -59,6 +59,28 @@ class ConflictAnalysisResult(BaseModel):
     confidence: float = Field(ge=0, le=1)
 
 
+class RankedAssignmentCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reviewerId: str
+    draftId: str
+    rank: conint(strict=True, ge=1)
+    rationale: str
+    riskFlags: list[str]
+
+
+class ReviewerAssignmentAssistResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    taskType: Literal["REVIEWER_ASSIGNMENT_ASSIST"]
+    manuscriptId: str
+    versionId: str
+    status: str
+    rankedCandidates: list[RankedAssignmentCandidate]
+    assignmentSummary: str
+    confidence: float = Field(ge=0, le=1)
+
+
 def validate_result(task_type: str, raw_result: dict) -> dict:
     if task_type == "SCREENING_ANALYSIS":
         return ScreeningAnalysisResult.model_validate(raw_result).model_dump()
@@ -66,4 +88,6 @@ def validate_result(task_type: str, raw_result: dict) -> dict:
         return ReviewAssistResult.model_validate(raw_result).model_dump()
     if task_type == "DECISION_CONFLICT_ANALYSIS":
         return ConflictAnalysisResult.model_validate(raw_result).model_dump()
+    if task_type == "REVIEWER_ASSIGNMENT_ASSIST":
+        return ReviewerAssignmentAssistResult.model_validate(raw_result).model_dump()
     raise ValueError(f"Unsupported task type: {task_type}")

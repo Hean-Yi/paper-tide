@@ -2,6 +2,7 @@ package com.example.review.analysis.domain;
 
 public enum AnalysisType {
   REVIEWER_ASSIST(AnalysisAnchorType.ASSIGNMENT),
+  REVIEWER_ASSIGNMENT_ASSIST(AnalysisAnchorType.MANUSCRIPT),
   CONFLICT_ANALYSIS(AnalysisAnchorType.ROUND),
   SCREENING(AnalysisAnchorType.MANUSCRIPT_VERSION);
 

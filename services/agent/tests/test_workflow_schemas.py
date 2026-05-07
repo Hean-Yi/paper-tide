@@ -5,6 +5,7 @@ from app.redaction import redact_result
 from app.workflows.router import build_initial_state, select_workflow
 from app.workflows.schemas import (
     ConflictAnalysisResult,
+    ReviewerAssignmentAssistResult,
     ReviewAssistResult,
     ScreeningAnalysisResult,
 )
@@ -122,6 +123,30 @@ def test_conflict_schema_rejects_extra_model_output() -> None:
                 "recommendation": "ACCEPT",
             }
         )
+
+
+def test_reviewer_assignment_assist_schema_accepts_ranked_candidates() -> None:
+    result = ReviewerAssignmentAssistResult.model_validate(
+        {
+            "taskType": "REVIEWER_ASSIGNMENT_ASSIST",
+            "manuscriptId": "101",
+            "versionId": "201",
+            "status": "SUCCESS",
+            "rankedCandidates": [
+                {
+                    "reviewerId": "1002",
+                    "draftId": "501",
+                    "rank": 1,
+                    "rationale": "Strong bid and available load.",
+                    "riskFlags": [],
+                }
+            ],
+            "assignmentSummary": "One candidate is ready for chair confirmation.",
+            "confidence": 0.6,
+        }
+    )
+
+    assert result.rankedCandidates[0].reviewerId == "1002"
 
 
 def test_decision_conflict_requires_round_id() -> None:

@@ -24,7 +24,7 @@ class ConferenceSubmissionSchemaTest {
         assertTrue(verification.contains("CONFERENCE_ID"));
         assertTrue(verification.contains("FK_MANUSCRIPT_CONFERENCE"));
         assertTrue(verification.contains("IDX_MANUSCRIPT_CONFERENCE_STATUS"));
-        assertTrue(verification.contains("Expected 47 indexes"));
+        assertTrue(verification.contains("Expected 50 indexes"));
 
         assertTrue(fullApply.contains("015_conference_scoped_submission.sql"));
         assertTrue(devUp.contains("015_conference_scoped_submission.sql"));

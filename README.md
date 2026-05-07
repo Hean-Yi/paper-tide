@@ -14,7 +14,7 @@
 
 - 后端：Java 21, Spring Boot 3.3, Spring Security, JWT, Oracle
 - 前端：Vue 3, Vite, TypeScript, Element Plus
-- Agent：Python 3.11+, FastAPI, LangGraph
+- Agent：Python 3.11+, FastAPI, RabbitMQ worker, deterministic offline provider fallback
 
 ## 仓库结构
 
@@ -39,6 +39,7 @@ docs/         # 项目文档
 - Node.js 20+
 - Python 3.11+
 - Oracle（本地容器或远端实例）
+- RabbitMQ（本地容器，消息驱动 Agent 路径需要）
 
 ### 2. 一键启动（自动跳过缺失运行时）
 
@@ -90,6 +91,10 @@ bash scripts/oracle-schema-apply.sh
 
 当前迁移已经覆盖注册审批、会议/CFP、会议范围投稿、reviewer pool/bidding、assignment draft、analysis intent/execution 平台和 `REVIEWER_ASSIGNMENT_ASSIST`。直接手动执行 SQL 时必须保持 `database/oracle/*.sql` 的编号顺序，最后运行 `database/oracle/verify_schema.sql`。
 
+## 环境变量
+
+环境变量模板见 `.env.example`，详细说明见 `docs/ENVIRONMENT.md`。默认不配置 LLM provider 时，Agent 使用 deterministic offline fallback，方便本地验证和演示不消耗外部模型额度。
+
 ## 贡献指南
 
 见 `CONTRIBUTING.md`。
@@ -106,5 +111,6 @@ bash scripts/oracle-schema-apply.sh
 - 设计结构：`docs/DESIGN_STRUCTURE.md`
 - Workflow：`docs/WORKFLOW.md`
 - 测试说明：`docs/TESTING.md`
+- 环境配置：`docs/ENVIRONMENT.md`
 - 测试快照：`docs/TEST_RESULTS_2026-04-13.md`
 - 演示文档包：`docs/demo/README.md`

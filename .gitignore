@@ -5,6 +5,7 @@
 .venv/
 .m2/
 .skill-staging/
+.git-tmp/
 .superpowers/
 .worktrees/
 

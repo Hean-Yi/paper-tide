@@ -4,11 +4,15 @@ const DEFAULT_API_BASE_URL = "/api";
 
 export class ApiError extends Error {
   readonly status: number;
+  readonly code?: string;
+  readonly traceId?: string;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code?: string, traceId?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
+    this.traceId = traceId;
   }
 }
 
@@ -38,7 +42,7 @@ export async function apiRequest<T = unknown>(path: string, options: ApiRequestO
   });
 
   if (!response.ok) {
-    throw new ApiError(response.status, await errorMessage(response));
+    throw await apiError(response);
   }
 
   if (response.status === 204 || response.headers?.get?.("Content-Length") === "0") {
@@ -65,7 +69,7 @@ export async function apiBlob(path: string, options: RequestInit = {}): Promise<
     headers: Object.fromEntries(requestHeaders.entries())
   });
   if (!response.ok) {
-    throw new ApiError(response.status, await errorMessage(response));
+    throw await apiError(response);
   }
   return response.blob();
 }
@@ -85,17 +89,14 @@ function apiBaseUrl(): string {
   return (import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/$/, "");
 }
 
-async function errorMessage(response: Response): Promise<string> {
+async function apiError(response: Response): Promise<ApiError> {
   try {
     const body = await response.json();
-    if (typeof body?.message === "string") {
-      return body.message;
-    }
-    if (typeof body?.detail === "string") {
-      return body.detail;
-    }
+    const message = typeof body?.message === "string" ? body.message : "Request failed";
+    const code = typeof body?.code === "string" ? body.code : undefined;
+    const traceId = typeof body?.traceId === "string" ? body.traceId : undefined;
+    return new ApiError(response.status, message, code, traceId);
   } catch {
-    return response.statusText || "Request failed";
+    return new ApiError(response.status, "Request failed");
   }
-  return response.statusText || "Request failed";
 }

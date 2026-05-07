@@ -1,6 +1,6 @@
 package com.example.review.config;
 
-import java.time.Instant;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,40 +15,46 @@ import org.springframework.web.server.ResponseStatusException;
 public class GlobalExceptionHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    private final ApiErrorResponseFactory errorResponseFactory;
+
+    public GlobalExceptionHandler(ApiErrorResponseFactory errorResponseFactory) {
+        this.errorResponseFactory = errorResponseFactory;
+    }
+
     @ExceptionHandler(ResponseStatusException.class)
-    public ResponseEntity<Map<String, Object>> handleResponseStatus(ResponseStatusException ex) {
+    public ResponseEntity<Map<String, Object>> handleResponseStatus(
+            ResponseStatusException ex,
+            HttpServletRequest request
+    ) {
         HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
         if (status == null) {
             status = HttpStatus.INTERNAL_SERVER_ERROR;
         }
-        return ResponseEntity.status(status).body(body(status, ex.getReason()));
+        return ResponseEntity.status(status).body(errorResponseFactory.body(status, ex.getReason(), request));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<Map<String, Object>> handleMalformedBody(HttpMessageNotReadableException ex) {
+    public ResponseEntity<Map<String, Object>> handleMalformedBody(
+            HttpMessageNotReadableException ex,
+            HttpServletRequest request
+    ) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(body(HttpStatus.BAD_REQUEST, "Request body is invalid"));
+                .body(errorResponseFactory.body(HttpStatus.BAD_REQUEST, "Request body is invalid", request));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(
+            IllegalArgumentException ex,
+            HttpServletRequest request
+    ) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(body(HttpStatus.BAD_REQUEST, ex.getMessage()));
+                .body(errorResponseFactory.body(HttpStatus.BAD_REQUEST, ex.getMessage(), request));
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleUnexpected(Exception ex) {
+    public ResponseEntity<Map<String, Object>> handleUnexpected(Exception ex, HttpServletRequest request) {
         LOGGER.error("Unhandled exception in API request", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(body(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error"));
-    }
-
-    private Map<String, Object> body(HttpStatus status, String message) {
-        return Map.of(
-                "timestamp", Instant.now().toString(),
-                "status", status.value(),
-                "error", status.getReasonPhrase(),
-                "message", message == null ? status.getReasonPhrase() : message
-        );
+                .body(errorResponseFactory.body(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error", request));
     }
 }

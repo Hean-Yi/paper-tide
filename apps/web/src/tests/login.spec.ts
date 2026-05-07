@@ -188,6 +188,28 @@ describe("frontend authentication", () => {
     await expect(apiRequest("/manuscripts/1/versions/2/pdf", { method: "POST" })).resolves.toBeUndefined();
   });
 
+  it("parses structured API errors with code and trace id instead of status text", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      statusText: "Conflict from browser",
+      json: () => Promise.resolve({
+        status: 409,
+        code: "CONFLICT",
+        message: "Review report already submitted",
+        traceId: "trace-123"
+      })
+    }));
+
+    await expect(apiRequest("/review-assignments/7/review-report", { method: "POST" }))
+      .rejects.toMatchObject({
+        status: 409,
+        code: "CONFLICT",
+        traceId: "trace-123",
+        message: "Review report already submitted"
+      });
+  });
+
   it("allows admin users to open chair workflow routes", async () => {
     const router = createAppRouter();
     localStorage.setItem("review.auth.token", futureToken(["ADMIN"]));

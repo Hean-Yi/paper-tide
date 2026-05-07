@@ -52,6 +52,7 @@
 - `test_provider_executor_limits_large_assignment_candidate_payload_before_prompting`：150 个候选和长 rationale 不应生成超大 prompt
 - `test_runtime_processes_many_assignment_assist_requests_without_cross_polluting_events`：60 个 assignment-assist 请求应生成隔离的完成事件
 - `test_runtime_marks_provider_failure_retryable_instead_of_leaving_job_running`：provider 异常不能让 job 长期停在 `RUNNING`
+- `test_runtime_marks_schema_failure_terminal`：provider JSON/schema 错误应进入终态失败并记录错误类别
 
 ### 2.3 Web（Vitest + jsdom + vue-tsc）
 
@@ -87,6 +88,21 @@ bash scripts/test-all.sh
 3. 运行 API 测试
 4. 运行完整 Agent pytest；若缺少 Python 依赖则退化为语法校验
 5. 运行 Web 测试 + typecheck + build；若缺少 `node_modules` 则退化为最小文件存在性检查
+6. 当 `RUN_ANALYSIS_E2E_SMOKE=1` 时，运行真实 Oracle + RabbitMQ + API + Agent 的 message-driven smoke
+
+真实消息链路验证：
+
+```bash
+RUN_ANALYSIS_E2E_SMOKE=1 bash scripts/test-all.sh
+```
+
+或单独运行：
+
+```bash
+bash scripts/analysis-e2e-smoke.sh
+```
+
+该 smoke 会启动 RabbitMQ、应用 Oracle schema/seed、启动 API 与 Agent，触发 demo screening analysis，并轮询 admin monitor 直到 projection 变为 `AVAILABLE`。
 
 ## 4. 单服务调试命令
 
@@ -138,3 +154,4 @@ npm run test -- --run src/tests/conference-workflow.spec.ts
 - 修复缺陷必须补回归测试
 - 涉及权限和状态机改动时，补充 e2e 或集成测试
 - 涉及 analysis 平台改动时，优先补 execution job、message consumer 或对应 flow 测试，而不是只测 HTTP 外壳
+- 涉及 message-driven 真实运行路径改动时，最终至少运行一次 `RUN_ANALYSIS_E2E_SMOKE=1 bash scripts/test-all.sh` 或等价命令

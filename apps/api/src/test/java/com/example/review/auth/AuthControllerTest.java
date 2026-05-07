@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.blankOrNullString;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -50,7 +51,12 @@ class AuthControllerTest {
                                   "password": "wrong-password"
                                 }
                                 """))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().string("X-Trace-Id", not(blankOrNullString())))
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+                .andExpect(jsonPath("$.message").value("Invalid credentials"))
+                .andExpect(jsonPath("$.traceId", not(blankOrNullString())));
     }
 
     @Test
@@ -69,7 +75,12 @@ class AuthControllerTest {
     @Test
     void manuscriptEndpointRejectsAnonymousRequests() throws Exception {
         mockMvc.perform(get("/api/manuscripts"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().string("X-Trace-Id", not(blankOrNullString())))
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+                .andExpect(jsonPath("$.message").value("Authentication is required"))
+                .andExpect(jsonPath("$.traceId", not(blankOrNullString())));
     }
 
     @Test

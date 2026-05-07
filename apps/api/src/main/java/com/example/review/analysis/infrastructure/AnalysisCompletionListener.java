@@ -14,7 +14,7 @@ public class AnalysisCompletionListener {
         this.eventConsumer = eventConsumer;
     }
 
-    @RabbitListener(queues = "${review.analysis.completion-queue:analysis.completed}")
+    @RabbitListener(queues = "${review.analysis.completion-queue:analysis.completed.api}")
     public void onCompleted(Map<String, Object> message) {
         eventConsumer.consume(message);
     }

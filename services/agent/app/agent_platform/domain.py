@@ -18,6 +18,9 @@ class ExecutionJob:
     intent_reference: str | None = None
     attempt_count: int = 0
     failure_reason: str | None = None
+    last_error_category: str | None = None
+    last_attempt_at: datetime | None = None
+    completed_at: datetime | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @classmethod

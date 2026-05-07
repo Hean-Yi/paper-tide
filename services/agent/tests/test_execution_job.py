@@ -13,11 +13,12 @@ def test_retryable_failure_transitions_to_dead_letter_after_limit() -> None:
 
     machine = ExecutionStateMachine(max_attempts=2)
     job = machine.mark_running(job)
-    job = machine.mark_retryable_failure(job, "provider timeout")
+    job = machine.mark_retryable_failure(job, "provider timeout", error_category="PROVIDER_TRANSIENT")
     job = machine.mark_running(job)
-    job = machine.mark_retryable_failure(job, "provider timeout")
+    job = machine.mark_retryable_failure(job, "provider timeout", error_category="PROVIDER_TRANSIENT")
 
     assert job.execution_state == "DEAD_LETTERED"
+    assert job.last_error_category == "PROVIDER_TRANSIENT"
 
 
 def test_duplicate_intake_reuses_existing_job_id() -> None:
@@ -65,6 +66,17 @@ def test_state_machine_returns_new_job_without_mutating_original() -> None:
     assert job.attempt_count == 0
     assert running.execution_state == "RUNNING"
     assert running.attempt_count == 1
+    assert running.last_attempt_at is not None
+
+
+def test_state_machine_records_completion_time_on_success() -> None:
+    job = ExecutionJob.new("job-1", "key-1", "REVIEWER_ASSIST", {"title": "Paper"})
+    machine = ExecutionStateMachine(max_attempts=2)
+
+    succeeded = machine.mark_succeeded(machine.mark_running(job))
+
+    assert succeeded.execution_state == "SUCCEEDED"
+    assert succeeded.completed_at is not None
 
 
 def test_execution_job_input_snapshot_is_recursively_immutable() -> None:
@@ -144,6 +156,9 @@ class _FakeOracleCursor:
                 "EXECUTION_STATE": str(values["execution_state"]),
                 "INPUT_SNAPSHOT": str(values["input_snapshot"]),
                 "FAILURE_REASON": values["failure_reason"],
+                "LAST_ERROR_CATEGORY": values["last_error_category"],
+                "LAST_ATTEMPT_AT": values["last_attempt_at"],
+                "COMPLETED_AT": values["completed_at"],
                 "ATTEMPT_COUNT": int(values["attempt_count"]),
                 "CREATED_AT": values["created_at"],
             }
@@ -155,6 +170,9 @@ class _FakeOracleCursor:
             row = self._connection.jobs_by_id[str(values["job_id"])]
             row["EXECUTION_STATE"] = str(values["execution_state"])
             row["FAILURE_REASON"] = values["failure_reason"]
+            row["LAST_ERROR_CATEGORY"] = values["last_error_category"]
+            row["LAST_ATTEMPT_AT"] = values["last_attempt_at"]
+            row["COMPLETED_AT"] = values["completed_at"]
             row["ATTEMPT_COUNT"] = int(values["attempt_count"])
             return
 
@@ -223,6 +241,9 @@ class _FakeOracleConnection:
             row["ATTEMPT_COUNT"],
             row["INTENT_ID"],
             row["CREATED_AT"],
+            row["LAST_ERROR_CATEGORY"],
+            row["LAST_ATTEMPT_AT"],
+            row["COMPLETED_AT"],
         )
 
     @staticmethod
@@ -258,6 +279,7 @@ def test_oracle_execution_job_repository_round_trips_job_state() -> None:
     assert loaded.intent_reference == "101"
     assert loaded.execution_state == "RUNNING"
     assert loaded.input_snapshot["title"] == "Paper"
+    assert loaded.last_attempt_at is not None
     assert connection.commit_count == 2
 
 

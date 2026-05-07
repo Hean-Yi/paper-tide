@@ -2,8 +2,8 @@ import pytest
 from pydantic import ValidationError
 
 from app.redaction import redact_result
-from app.workflows.router import build_initial_state, select_workflow
-from app.workflows.schemas import (
+from app.agent_platform.handler_registry import AnalysisHandlerRegistry
+from app.agent_platform.schemas import (
     ConflictAnalysisResult,
     ReviewerAssignmentAssistResult,
     ReviewAssistResult,
@@ -149,28 +149,16 @@ def test_reviewer_assignment_assist_schema_accepts_ranked_candidates() -> None:
     assert result.rankedCandidates[0].reviewerId == "1002"
 
 
-def test_decision_conflict_requires_round_id() -> None:
-    task = {
-        "task_id": "task-1",
-        "task_type": "DECISION_CONFLICT_ANALYSIS",
-        "manuscript_id": 101,
-        "version_id": 201,
-        "round_id": None,
-        "request_payload": {},
-    }
+def test_agent_platform_registry_selects_handler_for_each_task_type() -> None:
+    registry = AnalysisHandlerRegistry()
 
-    with pytest.raises(ValueError, match="roundId is required"):
-        build_initial_state(task)
-
-
-def test_router_selects_graph_for_each_task_type() -> None:
     for task_type in (
-        "SCREENING_ANALYSIS",
-        "REVIEW_ASSIST_ANALYSIS",
-        "DECISION_CONFLICT_ANALYSIS",
+        "SCREENING",
+        "REVIEWER_ASSIST",
+        "CONFLICT_ANALYSIS",
+        "REVIEWER_ASSIGNMENT_ASSIST",
     ):
-        workflow = select_workflow(task_type)
-        assert hasattr(workflow, "invoke")
+        assert registry.get(task_type).analysis_type == task_type
 
 
 def test_redaction_sanitizes_identity_clues() -> None:

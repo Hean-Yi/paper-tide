@@ -5,8 +5,8 @@ from typing import Any
 from app.agent_platform.domain import ExecutionJob
 from app.agent_platform.handlers.base import ProviderExecutor
 from app.redaction import redact_result
-from app.workflows.paper_understanding import build_paper_understanding
-from app.workflows.schemas import validate_result
+from app.agent_platform.paper_understanding import build_paper_understanding
+from app.agent_platform.schemas import validate_result
 
 
 class ReviewerAssistHandler:

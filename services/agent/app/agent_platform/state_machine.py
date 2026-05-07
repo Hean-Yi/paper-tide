@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import UTC, datetime
 
 from app.agent_platform.domain import ExecutionJob
 
@@ -22,23 +23,50 @@ class ExecutionStateMachine:
             attempt_count=job.attempt_count + 1,
             execution_state=self._ACTIVE_STATE,
             failure_reason=None,
+            last_error_category=None,
+            last_attempt_at=datetime.now(UTC),
         )
 
-    def mark_retryable_failure(self, job: ExecutionJob, reason: str) -> ExecutionJob:
+    def mark_retryable_failure(
+        self,
+        job: ExecutionJob,
+        reason: str,
+        *,
+        error_category: str | None = None,
+    ) -> ExecutionJob:
         self._require_state(job, {self._ACTIVE_STATE}, "mark_retryable_failure")
         return replace(
             job,
             failure_reason=reason,
+            last_error_category=error_category,
             execution_state="DEAD_LETTERED" if job.attempt_count >= self._max_attempts else "FAILED_RETRYABLE",
         )
 
     def mark_succeeded(self, job: ExecutionJob) -> ExecutionJob:
         self._require_state(job, {self._ACTIVE_STATE}, "mark_succeeded")
-        return replace(job, execution_state="SUCCEEDED", failure_reason=None)
+        return replace(
+            job,
+            execution_state="SUCCEEDED",
+            failure_reason=None,
+            last_error_category=None,
+            completed_at=datetime.now(UTC),
+        )
 
-    def mark_terminal_failure(self, job: ExecutionJob, reason: str) -> ExecutionJob:
+    def mark_terminal_failure(
+        self,
+        job: ExecutionJob,
+        reason: str,
+        *,
+        error_category: str | None = None,
+    ) -> ExecutionJob:
         self._require_state(job, {self._ACTIVE_STATE}, "mark_terminal_failure")
-        return replace(job, failure_reason=reason, execution_state="FAILED_TERMINAL")
+        return replace(
+            job,
+            failure_reason=reason,
+            last_error_category=error_category,
+            execution_state="FAILED_TERMINAL",
+            completed_at=datetime.now(UTC),
+        )
 
     def _require_state(self, job: ExecutionJob, allowed_states: set[str], action: str) -> None:
         if job.execution_state in self._TERMINAL_STATES:

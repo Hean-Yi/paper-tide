@@ -1,6 +1,7 @@
 import pytest
 
 from app.agent_platform.messages import AnalysisRequestedMessage
+from app.agent_platform.errors import PROVIDER_SCHEMA, PROVIDER_TRANSIENT, ProviderExecutionError
 from app.agent_platform.provider_executor import ProviderExecutor
 from app.main import create_app
 
@@ -158,6 +159,9 @@ def test_runtime_uses_durable_repository_when_db_config_present(monkeypatch) -> 
                     row["ATTEMPT_COUNT"],
                     row["INTENT_ID"],
                     row["CREATED_AT"],
+                    row["LAST_ERROR_CATEGORY"],
+                    row["LAST_ATTEMPT_AT"],
+                    row["COMPLETED_AT"],
                 )
                 return
             if "FROM EXECUTION_JOB WHERE JOB_ID = :job_id" in normalized:
@@ -172,6 +176,9 @@ def test_runtime_uses_durable_repository_when_db_config_present(monkeypatch) -> 
                     row["ATTEMPT_COUNT"],
                     row["INTENT_ID"],
                     row["CREATED_AT"],
+                    row["LAST_ERROR_CATEGORY"],
+                    row["LAST_ATTEMPT_AT"],
+                    row["COMPLETED_AT"],
                 )
                 return
             if normalized.startswith("INSERT INTO EXECUTION_JOB"):
@@ -182,6 +189,9 @@ def test_runtime_uses_durable_repository_when_db_config_present(monkeypatch) -> 
                     "EXECUTION_STATE": str(values["execution_state"]),
                     "INPUT_SNAPSHOT": str(values["input_snapshot"]),
                     "FAILURE_REASON": values["failure_reason"],
+                    "LAST_ERROR_CATEGORY": values["last_error_category"],
+                    "LAST_ATTEMPT_AT": values["last_attempt_at"],
+                    "COMPLETED_AT": values["completed_at"],
                     "ATTEMPT_COUNT": int(values["attempt_count"]),
                     "INTENT_ID": int(values["intent_id"]),
                     "CREATED_AT": values["created_at"],
@@ -191,6 +201,9 @@ def test_runtime_uses_durable_repository_when_db_config_present(monkeypatch) -> 
                 row = next(item for item in self._connection.jobs.values() if item["JOB_ID"] == str(values["job_id"]))
                 row["EXECUTION_STATE"] = str(values["execution_state"])
                 row["FAILURE_REASON"] = values["failure_reason"]
+                row["LAST_ERROR_CATEGORY"] = values["last_error_category"]
+                row["LAST_ATTEMPT_AT"] = values["last_attempt_at"]
+                row["COMPLETED_AT"] = values["completed_at"]
                 row["ATTEMPT_COUNT"] = int(values["attempt_count"])
                 return
             if normalized.startswith("INSERT INTO EXECUTION_OUTBOX"):
@@ -253,7 +266,7 @@ def test_runtime_uses_durable_repository_when_db_config_present(monkeypatch) -> 
 
 class ExplodingProviderExecutor(ProviderExecutor):
     def run_reviewer_assist(self, paper: dict[str, object]) -> dict[str, object]:
-        raise RuntimeError("provider timeout")
+        raise ProviderExecutionError("provider timeout", category=PROVIDER_TRANSIENT, retryable=True)
 
 
 def test_runtime_marks_provider_failure_retryable_instead_of_leaving_job_running() -> None:
@@ -282,3 +295,45 @@ def test_runtime_marks_provider_failure_retryable_instead_of_leaving_job_running
     assert persisted is not None
     assert persisted.execution_state == "FAILED_RETRYABLE"
     assert persisted.failure_reason == "provider timeout"
+    assert persisted.last_error_category == PROVIDER_TRANSIENT
+
+
+class InvalidProviderExecutor(ProviderExecutor):
+    def run_screening(self, payload: dict[str, object]) -> dict[str, object]:
+        return {
+            "taskType": "SCREENING_ANALYSIS",
+            "manuscriptId": "3",
+            "versionId": "4",
+            "status": "SUCCESS",
+            "topicCategory": "Systems",
+            "scopeFit": "NOT_A_SCOPE",
+            "formatRisks": [],
+            "blindnessRisks": [],
+            "screeningSummary": "Invalid enum from provider.",
+            "confidence": 0.5,
+        }
+
+
+def test_runtime_marks_schema_failure_terminal() -> None:
+    app = create_app(
+        enable_background_execution=False,
+        require_internal_api_key=False,
+        provider_executor=InvalidProviderExecutor(),
+    )
+    runtime = app.state.agent_platform
+    requested = AnalysisRequestedMessage(
+        idempotency_key="key-schema-failure",
+        analysis_type="SCREENING",
+        intent_reference="404",
+        request_payload={"screening": {"manuscriptId": 3, "versionId": 4}},
+    )
+    job = runtime.analysis_requested_consumer.handle(requested)
+
+    with pytest.raises(Exception):
+        runtime.execute_requested_job(job)
+
+    persisted = runtime.execution_job_repository.get(job.job_id)
+    assert persisted is not None
+    assert persisted.execution_state == "FAILED_TERMINAL"
+    assert persisted.last_error_category == PROVIDER_SCHEMA
+    assert persisted.completed_at is not None

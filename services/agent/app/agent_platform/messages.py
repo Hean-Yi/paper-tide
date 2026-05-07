@@ -56,6 +56,7 @@ class AnalysisCompletedMessage:
     business_status: str
     summary_projection: dict[str, Any]
     redacted_result: dict[str, Any]
+    trace_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -67,4 +68,5 @@ class AnalysisCompletedMessage:
             "businessStatus": self.business_status,
             "summaryProjection": deepcopy(self.summary_projection),
             "redactedResult": deepcopy(self.redacted_result),
+            "traceId": self.trace_id,
         }

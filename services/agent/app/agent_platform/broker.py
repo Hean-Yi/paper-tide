@@ -3,12 +3,15 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
 from app.agent_platform.config import AgentPlatformConfig
 from app.agent_platform.outbox import payload_copy
 from app.agent_platform.runtime import AgentPlatformRuntime
+
+LOGGER = logging.getLogger(__name__)
 
 
 class AnalysisBroker(Protocol):
@@ -30,6 +33,13 @@ class AgentPlatformBrokerWorker:
 
     def handle_requested(self, message: dict[str, Any]) -> dict[str, Any]:
         job = self._runtime.analysis_requested_consumer.handle(message)
+        LOGGER.info(
+            "analysis requested consumed jobId=%s intentId=%s analysisType=%s traceId=%s",
+            job.job_id,
+            job.intent_reference,
+            job.analysis_type,
+            job.input_snapshot_copy().get("traceId"),
+        )
         return self._runtime.execute_requested_job(job)
 
     def pending_completed(self) -> list[dict[str, Any]]:
@@ -42,6 +52,7 @@ class AgentPlatformBrokerWorker:
             if inspect.isawaitable(result):
                 raise RuntimeError("Use publish_pending_completed_once_async for async brokers")
             self._runtime.execution_completed_publisher.mark_published(message.message_id)
+            LOGGER.info("analysis completed published messageId=%s topic=%s", message.message_id, message.topic)
             published += 1
         return published
 
@@ -52,6 +63,7 @@ class AgentPlatformBrokerWorker:
             if inspect.isawaitable(result):
                 await result
             self._runtime.execution_completed_publisher.mark_published(message.message_id)
+            LOGGER.info("analysis completed published messageId=%s topic=%s", message.message_id, message.topic)
             published += 1
         return published
 

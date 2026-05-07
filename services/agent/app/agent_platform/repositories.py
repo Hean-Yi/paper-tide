@@ -102,6 +102,9 @@ class OracleExecutionJobRepository:
                       EXECUTION_STATE,
                       INPUT_SNAPSHOT,
                       FAILURE_REASON,
+                      LAST_ERROR_CATEGORY,
+                      LAST_ATTEMPT_AT,
+                      COMPLETED_AT,
                       ATTEMPT_COUNT,
                       CREATED_AT
                     ) VALUES (
@@ -112,6 +115,9 @@ class OracleExecutionJobRepository:
                       :execution_state,
                       :input_snapshot,
                       :failure_reason,
+                      :last_error_category,
+                      :last_attempt_at,
+                      :completed_at,
                       :attempt_count,
                       :created_at
                     )
@@ -124,6 +130,9 @@ class OracleExecutionJobRepository:
                         "execution_state": job.execution_state,
                         "input_snapshot": _serialize_json(job.input_snapshot_copy()),
                         "failure_reason": job.failure_reason,
+                        "last_error_category": job.last_error_category,
+                        "last_attempt_at": job.last_attempt_at,
+                        "completed_at": job.completed_at,
                         "attempt_count": job.attempt_count,
                         "created_at": job.created_at,
                     },
@@ -150,6 +159,9 @@ class OracleExecutionJobRepository:
                     UPDATE EXECUTION_JOB
                        SET EXECUTION_STATE = :execution_state,
                            FAILURE_REASON = :failure_reason,
+                           LAST_ERROR_CATEGORY = :last_error_category,
+                           LAST_ATTEMPT_AT = :last_attempt_at,
+                           COMPLETED_AT = :completed_at,
                            ATTEMPT_COUNT = :attempt_count
                      WHERE JOB_ID = :job_id
                     """,
@@ -157,6 +169,9 @@ class OracleExecutionJobRepository:
                         "job_id": job.job_id,
                         "execution_state": job.execution_state,
                         "failure_reason": job.failure_reason,
+                        "last_error_category": job.last_error_category,
+                        "last_attempt_at": job.last_attempt_at,
+                        "completed_at": job.completed_at,
                         "attempt_count": job.attempt_count,
                     },
                 )
@@ -179,7 +194,10 @@ class OracleExecutionJobRepository:
                            FAILURE_REASON,
                            ATTEMPT_COUNT,
                            INTENT_ID,
-                           CREATED_AT
+                           CREATED_AT,
+                           LAST_ERROR_CATEGORY,
+                           LAST_ATTEMPT_AT,
+                           COMPLETED_AT
                       FROM EXECUTION_JOB
                      WHERE JOB_ID = :job_id
                     """,
@@ -209,7 +227,10 @@ class OracleExecutionJobRepository:
                        FAILURE_REASON,
                        ATTEMPT_COUNT,
                        INTENT_ID,
-                       CREATED_AT
+                       CREATED_AT,
+                       LAST_ERROR_CATEGORY,
+                       LAST_ATTEMPT_AT,
+                       COMPLETED_AT
                   FROM EXECUTION_JOB
                  WHERE IDEMPOTENCY_KEY = :idempotency_key
                 """,
@@ -239,6 +260,9 @@ def _job_from_row(row: tuple[Any, ...] | None) -> ExecutionJob | None:
         attempt_count=int(row[6]),
         intent_reference=str(row[7]),
         created_at=created_at,
+        last_error_category=None if row[9] is None else str(row[9]),
+        last_attempt_at=row[10] if isinstance(row[10], datetime) else row[10],
+        completed_at=row[11] if isinstance(row[11], datetime) else row[11],
     )
 
 

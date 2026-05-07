@@ -7,6 +7,7 @@ import com.example.review.analysis.infrastructure.AnalysisOutboxPublisher;
 import com.example.review.analysis.infrastructure.AnalysisOutboxRepository;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 
 class AnalysisOutboxPublisherTest {
     @Test
@@ -27,6 +28,26 @@ class AnalysisOutboxPublisherTest {
         assertThat(repository.payload).containsEntry("analysisType", "REVIEWER_ASSIST");
         assertThat(repository.payload).containsEntry("intentReference", "12");
         assertThat(repository.payload).containsEntry("requestPayload", Map.of("title", "Boundary Paper"));
+    }
+
+    @Test
+    void publishRequestedCarriesTraceIdFromMdcWhenPresent() {
+        CapturingOutboxRepository repository = new CapturingOutboxRepository();
+        AnalysisOutboxPublisher publisher = new AnalysisOutboxPublisher(repository);
+
+        MDC.put("traceId", "trace-abc");
+        try {
+            publisher.publishRequested(
+                    12L,
+                    AnalysisType.SCREENING,
+                    "idem-trace",
+                    Map.<String, Object>of("title", "Trace Paper")
+            );
+        } finally {
+            MDC.remove("traceId");
+        }
+
+        assertThat(repository.payload).containsEntry("traceId", "trace-abc");
     }
 
     private static class CapturingOutboxRepository extends AnalysisOutboxRepository {

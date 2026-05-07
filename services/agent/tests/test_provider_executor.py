@@ -1,6 +1,9 @@
 import json
 
+import pytest
+
 from app.agent_platform.config import AgentPlatformConfig
+from app.agent_platform.errors import PROVIDER_SCHEMA, PROVIDER_TRANSIENT, ProviderExecutionError
 from app.agent_platform.provider_executor import ProviderExecutor
 
 
@@ -40,6 +43,38 @@ class FakeChatCompletions:
 class FakeClient:
     def __init__(self) -> None:
         self.chat = type("FakeChat", (), {"completions": FakeChatCompletions()})()
+
+
+class BrokenJsonChatCompletions:
+    def create(self, **kwargs):
+        return type(
+            "FakeResponse",
+            (),
+            {
+                "choices": [
+                    type(
+                        "FakeChoice",
+                        (),
+                        {"message": type("FakeMessage", (), {"content": "{not-json"})()},
+                    )()
+                ]
+            },
+        )()
+
+
+class BrokenJsonClient:
+    def __init__(self) -> None:
+        self.chat = type("FakeChat", (), {"completions": BrokenJsonChatCompletions()})()
+
+
+class TimeoutChatCompletions:
+    def create(self, **kwargs):
+        raise TimeoutError("provider timed out")
+
+
+class TimeoutClient:
+    def __init__(self) -> None:
+        self.chat = type("FakeChat", (), {"completions": TimeoutChatCompletions()})()
 
 
 def test_provider_executor_calls_configured_model_with_strict_json_schema() -> None:
@@ -130,3 +165,37 @@ def test_provider_executor_limits_large_assignment_candidate_payload_before_prom
     assert "10000" in prompt
     assert "10080" not in prompt
     assert "[truncated" in prompt
+
+
+def test_provider_executor_classifies_provider_transport_failure_retryable() -> None:
+    executor = ProviderExecutor(
+        AgentPlatformConfig(
+            llm_api_key="secret-key",
+            llm_base_url="https://api.siliconflow.cn/v1",
+            llm_model="Qwen/Qwen3-VL-32B-Thinking",
+        ),
+        client=TimeoutClient(),
+    )
+
+    with pytest.raises(ProviderExecutionError) as exc_info:
+        executor.run_screening({"screening": {"manuscriptId": 11, "versionId": 21}})
+
+    assert exc_info.value.category == PROVIDER_TRANSIENT
+    assert exc_info.value.retryable is True
+
+
+def test_provider_executor_classifies_invalid_json_non_retryable() -> None:
+    executor = ProviderExecutor(
+        AgentPlatformConfig(
+            llm_api_key="secret-key",
+            llm_base_url="https://api.siliconflow.cn/v1",
+            llm_model="Qwen/Qwen3-VL-32B-Thinking",
+        ),
+        client=BrokenJsonClient(),
+    )
+
+    with pytest.raises(ProviderExecutionError) as exc_info:
+        executor.run_screening({"screening": {"manuscriptId": 11, "versionId": 21}})
+
+    assert exc_info.value.category == PROVIDER_SCHEMA
+    assert exc_info.value.retryable is False

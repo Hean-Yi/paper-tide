@@ -23,6 +23,22 @@ def test_analysis_requested_consumer_reuses_existing_job_id() -> None:
     assert second.job_id == first.job_id
 
 
+def test_analysis_requested_consumer_persists_trace_id_in_input_snapshot() -> None:
+    repository = InMemoryExecutionJobRepository()
+    consumer = AnalysisRequestedConsumer(repository)
+
+    job = consumer.handle(
+        {
+            "idempotencyKey": "key-trace",
+            "analysisType": "SCREENING",
+            "requestPayload": {"title": "Paper"},
+            "traceId": "trace-123",
+        }
+    )
+
+    assert job.input_snapshot["traceId"] == "trace-123"
+
+
 def test_create_app_exposes_agent_platform_components() -> None:
     app = create_app(enable_background_execution=False, require_internal_api_key=False)
 

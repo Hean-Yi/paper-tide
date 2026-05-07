@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+from json import JSONDecodeError
 from typing import Any
 
 from app.agent_platform.config import AgentPlatformConfig
-from app.workflows.schemas import (
+from app.agent_platform.errors import PROVIDER_SCHEMA, PROVIDER_TRANSIENT, ProviderExecutionError
+from app.agent_platform.schemas import (
     ConflictAnalysisResult,
     ReviewAssistResult,
     ReviewerAssignmentAssistResult,
@@ -190,31 +192,52 @@ class ProviderExecutor:
         if self._client is None or not self._config.has_llm_provider():
             return fallback
 
-        response = self._client.chat.completions.create(
-            model=self._config.llm_model,
-            temperature=0,
-            max_tokens=self._config.llm_max_tokens,
-            response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": schema_name,
-                    "strict": True,
-                    "schema": schema,
+        try:
+            response = self._client.chat.completions.create(
+                model=self._config.llm_model,
+                temperature=0,
+                max_tokens=self._config.llm_max_tokens,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": schema_name,
+                        "strict": True,
+                        "schema": schema,
+                    },
                 },
-            },
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an internal paper-review analysis component. Return strict JSON only. "
-                        "Do not expose chain-of-thought; provide concise final fields that match the schema."
-                    ),
-                },
-                {"role": "user", "content": instruction},
-            ],
-        )
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are an internal paper-review analysis component. Return strict JSON only. "
+                            "Do not expose chain-of-thought; provide concise final fields that match the schema."
+                        ),
+                    },
+                    {"role": "user", "content": instruction},
+                ],
+            )
+        except Exception as exc:
+            raise ProviderExecutionError(
+                f"LLM provider request failed: {exc}",
+                category=PROVIDER_TRANSIENT,
+                retryable=True,
+            ) from exc
         content = response.choices[0].message.content or "{}"
-        return {**fallback, **json.loads(content)}
+        try:
+            provider_result = json.loads(content)
+        except JSONDecodeError as exc:
+            raise ProviderExecutionError(
+                "LLM provider returned invalid JSON",
+                category=PROVIDER_SCHEMA,
+                retryable=False,
+            ) from exc
+        if not isinstance(provider_result, dict):
+            raise ProviderExecutionError(
+                "LLM provider returned a non-object JSON payload",
+                category=PROVIDER_SCHEMA,
+                retryable=False,
+            )
+        return {**fallback, **provider_result}
 
 
 def _prompt_json(value: dict[str, Any]) -> str:

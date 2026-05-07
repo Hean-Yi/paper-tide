@@ -18,10 +18,14 @@ class AnalysisRequestedConsumer:
         else:
             requested = AnalysisRequestedMessage.from_mapping(message)
 
+        input_snapshot = dict(requested.request_payload)
+        if requested.trace_id:
+            input_snapshot["traceId"] = requested.trace_id
+
         return self._repository.create_or_reuse(
             requested.idempotency_key,
             requested.analysis_type,
-            requested.request_payload,
+            input_snapshot,
             job_id=requested.job_id,
             intent_reference=requested.intent_reference,
         )

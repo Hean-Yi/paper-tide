@@ -1,9 +1,15 @@
 package com.example.review.analysis.infrastructure;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -12,6 +18,16 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @ConditionalOnProperty(name = "review.analysis.broker-enabled", havingValue = "true")
 public class AnalysisRabbitConfiguration {
+    @Bean
+    AmqpAdmin analysisAmqpAdmin(ConnectionFactory connectionFactory) {
+        return new RabbitAdmin(connectionFactory);
+    }
+
+    @Bean
+    MessageConverter analysisRabbitMessageConverter(ObjectMapper objectMapper) {
+        return new Jackson2JsonMessageConverter(objectMapper);
+    }
+
     @Bean
     DirectExchange analysisExchange(@Value("${review.analysis.broker-exchange:review.analysis.exchange}") String exchange) {
         return new DirectExchange(exchange, true, false);

@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from typing import Any, Callable
 
 from app.agent_platform.broker import AgentPlatformBrokerLifecycle
@@ -75,6 +76,36 @@ def create_app(
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/health/liveness")
+    def liveness() -> dict[str, str]:
+        return {"status": "alive"}
+
+    @app.get("/health/readiness")
+    def readiness() -> JSONResponse:
+        if connection_factory is None:
+            return JSONResponse({"status": "ready", "executionStore": "memory"})
+        try:
+            connection = connection_factory()
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT 1 FROM DUAL")
+                    row = cursor.fetchone()
+                if row and int(row[0]) == 1:
+                    return JSONResponse({"status": "ready", "executionStore": "oracle"})
+            finally:
+                close = getattr(connection, "close", None)
+                if callable(close):
+                    close()
+        except Exception:
+            return JSONResponse(
+                {"status": "not_ready", "executionStore": "unavailable"},
+                status_code=503,
+            )
+        return JSONResponse(
+            {"status": "not_ready", "executionStore": "unexpected"},
+            status_code=503,
+        )
 
     return app
 

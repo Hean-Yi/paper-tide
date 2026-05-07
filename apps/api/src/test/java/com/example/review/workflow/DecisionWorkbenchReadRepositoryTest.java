@@ -30,6 +30,7 @@ class DecisionWorkbenchReadRepositoryTest {
     void cleanWorkflowTables() {
         jdbcTemplate.update("DELETE FROM CONFLICT_CHECK_RECORD");
         jdbcTemplate.update("DELETE FROM REVIEW_REPORT");
+        jdbcTemplate.update("DELETE FROM REVIEWER_BID");
         jdbcTemplate.update("DELETE FROM REVIEW_ASSIGNMENT");
         jdbcTemplate.update("DELETE FROM ASSIGNMENT_DRAFT");
         jdbcTemplate.update("DELETE FROM SYS_NOTIFICATION");
@@ -43,6 +44,7 @@ class DecisionWorkbenchReadRepositoryTest {
         jdbcTemplate.update("DELETE FROM MANUSCRIPT");
         
         // Clean up analysis tables
+        jdbcTemplate.update("DELETE FROM ANALYSIS_OUTBOX");
         jdbcTemplate.update("DELETE FROM ANALYSIS_PROJECTION");
         jdbcTemplate.update("DELETE FROM ANALYSIS_INTENT");
     }

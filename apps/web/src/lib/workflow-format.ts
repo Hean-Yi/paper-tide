@@ -5,6 +5,9 @@ const LABELS: Record<string, string> = {
   ACCEPTED: "Accepted",
   AVAILABLE: "Available",
   ASSIGNED: "Assigned",
+  BIDDING_OPEN: "Bidding open",
+  CAN_REVIEW: "Can review",
+  CONFLICT: "Conflict",
   DECISION_CONFLICT_ANALYSIS: "Decision conflict analysis",
   DESK_REJECT: "Desk reject",
   DESK_REJECTED: "Desk rejected",
@@ -16,6 +19,7 @@ const LABELS: Record<string, string> = {
   MAJOR_REVISION: "Major revision",
   MINOR_REVISION: "Minor revision",
   OPEN: "Open",
+  OPEN_FOR_SUBMISSION: "Open for submission",
   OVERDUE: "Overdue",
   PENDING: "Pending",
   PROCESSING: "Processing",
@@ -24,6 +28,7 @@ const LABELS: Record<string, string> = {
   REJECT: "Reject",
   REJECTED: "Rejected",
   REVIEW_ASSIST_ANALYSIS: "Review assist analysis",
+  REVIEWER_ASSIGNMENT_ASSIST: "Reviewer assignment assist",
   REVISED_SUBMITTED: "Revised submitted",
   REVISION_REQUIRED: "Revision required",
   SCREENING_ANALYSIS: "Screening analysis",
@@ -34,7 +39,7 @@ const LABELS: Record<string, string> = {
   UNDER_SCREENING: "Under screening"
 };
 
-const SUCCESS_STATUSES = new Set(["ACCEPT", "ACCEPTED", "AVAILABLE", "SUCCESS", "COMPLETED"]);
+const SUCCESS_STATUSES = new Set(["ACCEPT", "ACCEPTED", "AVAILABLE", "OPEN_FOR_SUBMISSION", "SUCCESS", "COMPLETED", "WANT_TO_REVIEW"]);
 const WARNING_STATUSES = new Set([
   "IN_PROGRESS",
   "MAJOR_REVISION",
@@ -48,8 +53,8 @@ const WARNING_STATUSES = new Set([
   "UNDER_REVIEW",
   "UNDER_SCREENING"
 ]);
-const DANGER_STATUSES = new Set(["DECLINED", "DESK_REJECT", "DESK_REJECTED", "FAILED", "OVERDUE", "REJECT", "REJECTED"]);
-const INFO_STATUSES = new Set(["ASSIGNED", "DRAFT", "OPEN", "REVIEW_ASSIST_ANALYSIS", "SCREENING_ANALYSIS", "DECISION_CONFLICT_ANALYSIS"]);
+const DANGER_STATUSES = new Set(["CONFLICT", "DECLINED", "DESK_REJECT", "DESK_REJECTED", "FAILED", "FAILED_VISIBLE", "OVERDUE", "REJECT", "REJECTED"]);
+const INFO_STATUSES = new Set(["ASSIGNED", "CAN_REVIEW", "DRAFT", "OPEN", "REVIEW_ASSIST_ANALYSIS", "SCREENING_ANALYSIS", "DECISION_CONFLICT_ANALYSIS", "REVIEWER_ASSIGNMENT_ASSIST"]);
 
 export function workflowLabel(value: string | null | undefined): string {
   if (!value) {

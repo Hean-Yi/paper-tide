@@ -46,6 +46,7 @@ class ManuscriptServiceTest {
     @BeforeEach
     void cleanManuscriptTables() {
         jdbcTemplate.update("DELETE FROM CONFLICT_CHECK_RECORD");
+        jdbcTemplate.update("DELETE FROM REVIEWER_BID");
         jdbcTemplate.update("DELETE FROM REVIEW_REPORT");
         jdbcTemplate.update("DELETE FROM REVIEW_ASSIGNMENT");
         jdbcTemplate.update("DELETE FROM ASSIGNMENT_DRAFT");
@@ -56,6 +57,7 @@ class ManuscriptServiceTest {
         jdbcTemplate.update("UPDATE MANUSCRIPT SET CURRENT_VERSION_ID = NULL");
         jdbcTemplate.update("DELETE FROM MANUSCRIPT_VERSION");
         jdbcTemplate.update("DELETE FROM MANUSCRIPT");
+        jdbcTemplate.update("DELETE FROM CONFERENCE_REVIEWER");
         jdbcTemplate.update("DELETE FROM CONFERENCE_PHASE");
         jdbcTemplate.update("DELETE FROM CONFERENCE");
         seedSecondaryAuthor();

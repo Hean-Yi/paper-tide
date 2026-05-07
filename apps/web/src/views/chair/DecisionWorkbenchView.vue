@@ -6,11 +6,17 @@ import { onMounted, reactive, ref } from "vue";
 import { useApiError } from "../../composables/useApiError";
 import { useAsyncAction } from "../../composables/useAsyncAction";
 import {
+  confirmAssignmentDrafts,
   assignReviewer,
   decide,
+  generateAssignmentDrafts,
+  getAssignmentAssist,
   listDecisionWorkbench,
   markOverdue,
+  runAssignmentAssist,
   triggerConflictAnalysis,
+  type AssignmentAssistState,
+  type AssignmentDraft,
   type AnalysisProjectionResponse,
   type DecisionWorkbenchItem
 } from "../../lib/workflow-api";
@@ -18,6 +24,9 @@ import { formatDateTime, printableTrace, statusTagType, workflowLabel } from "..
 
 const loading = ref(false);
 const rows = ref<DecisionWorkbenchItem[]>([]);
+const draftsByRound = reactive<Record<number, AssignmentDraft[]>>({});
+const assignmentAssistByRound = reactive<Record<number, AssignmentAssistState>>({});
+const draftDeadlineByRound = reactive<Record<number, string>>({});
 const actions = useAsyncAction();
 const { showApiError } = useApiError();
 const assignDialogOpen = ref(false);
@@ -98,8 +107,62 @@ async function conflict(row: DecisionWorkbenchItem) {
   await loadWorkbench();
 }
 
+async function generateDrafts(row: DecisionWorkbenchItem) {
+  await actions.run(`drafts:${row.roundId}`, async () => {
+    try {
+      draftsByRound[row.roundId] = await generateAssignmentDrafts(row.roundId, 5);
+      if (!draftDeadlineByRound[row.roundId]) {
+        draftDeadlineByRound[row.roundId] = defaultReviewDeadline();
+      }
+      ElMessage.success("Assignment drafts generated.");
+    } catch (error) {
+      showApiError(error, "Assignment drafts could not be generated.");
+    }
+  });
+}
+
+async function assignmentAssist(row: DecisionWorkbenchItem) {
+  await actions.run(`assignment-assist:${row.roundId}`, async () => {
+    try {
+      await runAssignmentAssist(row.roundId);
+      assignmentAssistByRound[row.roundId] = await getAssignmentAssist(row.roundId);
+      ElMessage.success("Assignment assist requested.");
+    } catch (error) {
+      showApiError(error, "Assignment assist could not be requested.");
+    }
+  });
+}
+
+async function confirmDrafts(row: DecisionWorkbenchItem) {
+  const draftIds = pendingDrafts(row.roundId).map((draft) => draft.draftId);
+  if (!draftIds.length) {
+    return;
+  }
+  await actions.run(`confirm-drafts:${row.roundId}`, async () => {
+    try {
+      await confirmAssignmentDrafts(row.roundId, draftIds, draftDeadlineByRound[row.roundId] || defaultReviewDeadline());
+      ElMessage.success("Assignment drafts confirmed.");
+      await loadWorkbench();
+    } catch (error) {
+      showApiError(error, "Assignment drafts could not be confirmed.");
+    }
+  });
+}
+
 function conflictProjections(row: DecisionWorkbenchItem): AnalysisProjectionResponse[] {
   return row.conflictProjections ?? [];
+}
+
+function pendingDrafts(roundId: number): AssignmentDraft[] {
+  return (draftsByRound[roundId] ?? []).filter((draft) => draft.draftStatus === "PROPOSED");
+}
+
+function assignmentAssistProjections(row: DecisionWorkbenchItem): AnalysisProjectionResponse[] {
+  return assignmentAssistByRound[row.roundId]?.projections ?? [];
+}
+
+function defaultReviewDeadline(): string {
+  return new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
 }
 
 function openDecision(row: DecisionWorkbenchItem) {
@@ -179,6 +242,65 @@ async function submitDecision() {
                 </template>
               </el-table-column>
             </el-table>
+
+            <section class="workflow-section">
+              <div class="subsection-heading">
+                <h2>Assignment drafts</h2>
+                <div class="action-row">
+                  <el-button
+                    size="small"
+                    :loading="actions.isPending(`drafts:${row.roundId}`)"
+                    @click="generateDrafts(row)"
+                  >
+                    Generate drafts
+                  </el-button>
+                  <el-button
+                    size="small"
+                    :disabled="!pendingDrafts(row.roundId).length"
+                    :loading="actions.isPending(`assignment-assist:${row.roundId}`)"
+                    @click="assignmentAssist(row)"
+                  >
+                    Run assignment assist
+                  </el-button>
+                  <el-button
+                    size="small"
+                    type="primary"
+                    :disabled="!pendingDrafts(row.roundId).length"
+                    :loading="actions.isPending(`confirm-drafts:${row.roundId}`)"
+                    @click="confirmDrafts(row)"
+                  >
+                    Confirm drafts
+                  </el-button>
+                </div>
+              </div>
+              <el-table :data="draftsByRound[row.roundId] ?? []" size="small" empty-text="No assignment drafts generated.">
+                <el-table-column prop="rankOrder" label="Rank" width="80" />
+                <el-table-column label="Reviewer" width="140">
+                  <template #default="{ row: draft }">Reviewer {{ draft.reviewerId }}</template>
+                </el-table-column>
+                <el-table-column label="Load" width="120">
+                  <template #default="{ row: draft }">{{ draft.currentLoad }}/{{ draft.maxLoad }}</template>
+                </el-table-column>
+                <el-table-column prop="bidValue" label="Bid" width="160">
+                  <template #default="{ row: draft }">{{ workflowLabel(draft.bidValue) }}</template>
+                </el-table-column>
+                <el-table-column prop="reason" label="Reason" min-width="220" />
+              </el-table>
+              <article
+                v-for="projection in assignmentAssistProjections(row)"
+                :key="projection.projectionId"
+                class="trace-entry"
+              >
+                <div class="trace-entry-heading">
+                  <strong>{{ workflowLabel(projection.analysisType) }}</strong>
+                  <el-tag :type="statusTagType(projection.businessStatus)">
+                    {{ workflowLabel(projection.businessStatus) }}
+                  </el-tag>
+                </div>
+                <p v-if="projection.summaryText" class="body">{{ projection.summaryText }}</p>
+                <pre class="json-block">{{ printableTrace(projection.redactedResult) }}</pre>
+              </article>
+            </section>
 
             <h2>Conflict analysis projections</h2>
             <el-alert

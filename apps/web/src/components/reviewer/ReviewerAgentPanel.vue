@@ -1,57 +1,115 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 import {
   getReviewerAssist,
   runReviewerAssist,
   type ReviewerAssistState
 } from "../../lib/workflow-api";
+import { apiErrorMessage } from "../../composables/useApiError";
 import { printableTrace, statusTagType, workflowLabel } from "../../lib/workflow-format";
 
 const props = defineProps<{
   assignmentId: number;
 }>();
 
+const POLL_INTERVAL_MS = 3000;
+const PENDING_STATUSES = new Set(["REQUESTED", "PENDING", "PROCESSING", "IN_PROGRESS"]);
+
 const assist = ref<ReviewerAssistState>({ intent: null, projections: [] });
 const loading = ref(false);
 const running = ref(false);
 const error = ref("");
+let pollTimer: number | undefined;
+
+const latestStatus = computed(() => assist.value.intent?.businessStatus ?? null);
+const hasProjection = computed(() => assist.value.projections.length > 0);
+const assistFailed = computed(() => isFailedStatus(latestStatus.value));
+const assistPending = computed(() => running.value || isPendingStatus(latestStatus.value));
+const showProgress = computed(() => assistPending.value && !hasProjection.value && !assistFailed.value);
+const showEmpty = computed(() => !loading.value && !showProgress.value && !assistFailed.value && !hasProjection.value);
+const visibleError = computed(() => error.value || (assistFailed.value ? "Review assistant failed. Try again." : ""));
 
 onMounted(loadAssist);
+onBeforeUnmount(stopPolling);
 
 watch(() => props.assignmentId, () => {
+  stopPolling();
+  assist.value = { intent: null, projections: [] };
   void loadAssist();
 });
 
-async function loadAssist() {
+async function loadAssist(options: { preserveIntent?: boolean } = {}) {
   loading.value = true;
-  error.value = "";
   try {
     const state = await getReviewerAssist(props.assignmentId);
     assist.value = {
-      intent: state.intent ?? null,
+      intent: state.intent ?? (options.preserveIntent ? assist.value.intent : null),
       projections: state.projections ?? []
     };
+    error.value = "";
+    syncPolling();
   } catch (err) {
-    error.value = err instanceof Error ? err.message : "Reviewer assistance is unavailable.";
+    error.value = apiErrorMessage(err, "Reviewer assistance is unavailable.");
     assist.value = { intent: null, projections: [] };
+    stopPolling();
   } finally {
     loading.value = false;
   }
 }
 
 async function runAssist(force = false) {
+  stopPolling();
   running.value = true;
   error.value = "";
   try {
     const intent = await runReviewerAssist(props.assignmentId, force);
     assist.value = { ...assist.value, intent };
-    await loadAssist();
+    syncPolling();
+    await loadAssist({ preserveIntent: true });
   } catch (err) {
-    error.value = err instanceof Error ? err.message : "Reviewer assistance could not be started.";
+    error.value = apiErrorMessage(err, "Reviewer assistance could not be started.");
+    stopPolling();
   } finally {
     running.value = false;
+    syncPolling();
   }
+}
+
+function syncPolling() {
+  if (shouldPoll()) {
+    startPolling();
+    return;
+  }
+  stopPolling();
+}
+
+function shouldPoll() {
+  return Boolean(assist.value.intent && isPendingStatus(assist.value.intent.businessStatus) && !hasProjection.value);
+}
+
+function startPolling() {
+  if (pollTimer) {
+    return;
+  }
+  pollTimer = window.setInterval(() => {
+    void loadAssist({ preserveIntent: true });
+  }, POLL_INTERVAL_MS);
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    window.clearInterval(pollTimer);
+    pollTimer = undefined;
+  }
+}
+
+function isPendingStatus(status: string | null) {
+  return Boolean(status && PENDING_STATUSES.has(status));
+}
+
+function isFailedStatus(status: string | null) {
+  return Boolean(status?.startsWith("FAILED"));
 }
 </script>
 
@@ -65,7 +123,7 @@ async function runAssist(force = false) {
       <el-tag type="info">Reviewer safe</el-tag>
     </div>
 
-    <el-alert v-if="error" :title="error" type="warning" :closable="false" />
+    <el-alert v-if="visibleError" :title="visibleError" type="warning" :closable="false" />
 
     <div class="action-row">
       <el-button type="primary" :loading="running" @click="runAssist(false)">Run review assistant</el-button>
@@ -76,8 +134,20 @@ async function runAssist(force = false) {
       </el-tag>
     </div>
 
+    <div v-if="showProgress" class="assist-progress" aria-live="polite">
+      <div>
+        <strong>Analysis in progress</strong>
+        <p>Request submitted. The assistant is reading the assignment and preparing a checklist.</p>
+      </div>
+      <div class="assist-progress-animation" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+    </div>
+
     <el-alert
-      v-if="!assist.projections.length"
+      v-if="showEmpty"
       title="No reviewer assistance is available for this assignment."
       type="info"
       :closable="false"
@@ -87,6 +157,7 @@ async function runAssist(force = false) {
         <strong>{{ workflowLabel(projection.analysisType) }}</strong>
         <el-tag :type="statusTagType(projection.businessStatus)">Reviewer safe</el-tag>
       </div>
+      <p v-if="projection.summaryText" class="trace-summary">{{ projection.summaryText }}</p>
       <pre class="json-block">{{ printableTrace(projection.redactedResult) }}</pre>
     </article>
   </section>

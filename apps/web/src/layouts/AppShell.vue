@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { RouterView, useRouter } from "vue-router";
+import { RouterView, useRoute, useRouter } from "vue-router";
 
 import { authState, logout } from "../stores/auth";
 
+const route = useRoute();
 const router = useRouter();
+
+const contentClass = computed(() => ({
+  "content--review-editor": route.name === "reviewer-review-editor"
+}));
 
 const navItems = computed(() => {
   const roles = new Set(authState.user?.roles ?? []);
@@ -15,8 +20,10 @@ const navItems = computed(() => {
   }
   if (roles.has("REVIEWER")) {
     items.push({ label: "Review assignments", target: "/reviewer/assignments" });
+    items.push({ label: "Reviewer bidding", target: "/reviewer/bidding" });
   }
   if (roles.has("CHAIR") || roles.has("ADMIN")) {
+    items.push({ label: "Conferences", target: "/chair/conferences" });
     items.push({ label: "Screening", target: "/chair/screening" });
     items.push({ label: "Decisions", target: "/chair/decisions" });
   }
@@ -47,7 +54,7 @@ async function signOut() {
       </div>
     </header>
 
-    <main class="content">
+    <main class="content" :class="contentClass">
       <RouterView />
     </main>
   </div>

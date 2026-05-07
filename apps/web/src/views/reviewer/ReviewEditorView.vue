@@ -19,6 +19,8 @@ const router = useRouter();
 const assignment = ref<ReviewerAssignment | null>(null);
 const loading = ref(false);
 const submitting = ref(false);
+const sidePanelCollapsed = ref(false);
+const assignmentPanels = ref<string[]>([]);
 const reviewFormRef = ref<FormInstance>();
 const form = reactive<ReviewReportForm>({
   noveltyScore: 3,
@@ -103,37 +105,62 @@ async function submitReport() {
         <h1>Review editor</h1>
         <p class="body">Read the assignment details and submit one complete review report.</p>
       </div>
-      <el-button @click="router.push('/reviewer/assignments')">Back to assignments</el-button>
+      <div class="header-actions">
+        <el-button @click="sidePanelCollapsed = !sidePanelCollapsed">
+          {{ sidePanelCollapsed ? "Show assist panel" : "Collapse assist panel" }}
+        </el-button>
+        <el-button @click="router.push('/reviewer/assignments')">Back to assignments</el-button>
+      </div>
     </div>
 
     <el-skeleton v-if="loading && !assignment" :rows="6" animated />
     <template v-else-if="assignment">
-      <div class="review-workspace">
-        <SecurePaperReader :assignment-id="assignmentId" />
+      <div class="review-workspace" :class="{ 'is-side-collapsed': sidePanelCollapsed }">
+        <div class="review-reader-column">
+          <SecurePaperReader :assignment-id="assignmentId" />
+        </div>
 
-        <div class="review-side-panel">
-          <el-descriptions title="Assignment" :column="1" border>
-            <el-descriptions-item label="Title">{{ assignment.title }}</el-descriptions-item>
-            <el-descriptions-item label="Status">
-              <el-tag :type="statusTagType(assignment.taskStatus)">{{ workflowLabel(assignment.taskStatus) }}</el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="Version">v{{ assignment.versionNo }}</el-descriptions-item>
-            <el-descriptions-item label="Deadline">{{ formatDateTime(assignment.deadlineAt) }}</el-descriptions-item>
-            <el-descriptions-item label="Keywords">{{ assignment.keywords || "None" }}</el-descriptions-item>
-            <el-descriptions-item label="Abstract">{{ assignment.abstractText }}</el-descriptions-item>
-          </el-descriptions>
+        <aside v-if="!sidePanelCollapsed" class="review-side-panel" data-test="review-side-panel">
+          <el-collapse
+            v-model="assignmentPanels"
+            data-test="assignment-details"
+            class="assignment-details"
+            :class="{ 'is-collapsed': !assignmentPanels.includes('assignment') }"
+          >
+            <el-collapse-item name="assignment">
+              <template #title>
+                <div class="assignment-summary">
+                  <span>Assignment</span>
+                  <strong>{{ assignment.title }}</strong>
+                  <el-tag :type="statusTagType(assignment.taskStatus)">
+                    {{ workflowLabel(assignment.taskStatus) }}
+                  </el-tag>
+                </div>
+              </template>
+              <el-descriptions :column="1" border>
+                <el-descriptions-item label="Title">{{ assignment.title }}</el-descriptions-item>
+                <el-descriptions-item label="Status">
+                  <el-tag :type="statusTagType(assignment.taskStatus)">{{ workflowLabel(assignment.taskStatus) }}</el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="Version">v{{ assignment.versionNo }}</el-descriptions-item>
+                <el-descriptions-item label="Deadline">{{ formatDateTime(assignment.deadlineAt) }}</el-descriptions-item>
+                <el-descriptions-item label="Keywords">{{ assignment.keywords || "None" }}</el-descriptions-item>
+                <el-descriptions-item label="Abstract">{{ assignment.abstractText }}</el-descriptions-item>
+              </el-descriptions>
+            </el-collapse-item>
+          </el-collapse>
 
           <ReviewerAgentPanel :assignment-id="assignmentId" />
 
           <el-form
             ref="reviewFormRef"
-            class="workflow-form"
+            class="workflow-form review-form-panel"
             :model="form"
             :rules="reviewRules"
             label-position="top"
             @submit.prevent="submitReport"
           >
-            <div class="score-grid">
+            <div class="score-grid review-score-grid">
               <el-form-item label="Novelty">
                 <el-input-number v-model="form.noveltyScore" :min="1" :max="5" />
               </el-form-item>
@@ -180,7 +207,7 @@ async function submitReport() {
             </el-form-item>
             <el-button type="primary" native-type="submit" :loading="submitting">Submit review</el-button>
           </el-form>
-        </div>
+        </aside>
       </div>
     </template>
   </section>

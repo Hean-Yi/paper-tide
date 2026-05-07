@@ -27,8 +27,10 @@ docs/
 ### 2.2 包级模块
 
 - `auth`：登录、JWT、当前用户、角色守卫
+- `registration`：公开注册、邮箱验证、角色申请审批与 profile 持久化
+- `conference`：Conference/CFP 生命周期、reviewer pool、bidding
 - `manuscript`：稿件、版本、作者归属、PDF 上传
-- `review`：轮次、分配、评审报告、Reviewer 论文阅读
+- `review`：轮次、assignment draft、分配确认、评审报告、Reviewer 论文阅读
 - `decision`：主席决策入口
 - `workflow`：Author / Reviewer / Chair / Admin 的聚合查询与 decision workbench 查询
 - `analysis`：新的分析平台边界，替代旧的通用 agent-task 入口
@@ -37,7 +39,7 @@ docs/
 
 ### 2.3 `analysis` 包结构
 
-- `application/`：`RequestScreeningAnalysisUseCase`、`RequestReviewerAssistUseCase`、`RequestConflictAnalysisUseCase`
+- `application/`：`RequestScreeningAnalysisUseCase`、`RequestReviewerAssistUseCase`、`RequestReviewerAssignmentAssistUseCase`、`RequestConflictAnalysisUseCase`
 - `domain/`：`AnalysisIntent`、`AnalysisProjection`、`AnalysisType`、`AnalysisStatus`、`AnalysisVisibilityPolicy` 等
 - `infrastructure/`：intent / projection / outbox / inbox repository 与事件消费、上下文查询
 - `interfaces/`：`AnalysisController`、`AnalysisDtos`
@@ -67,6 +69,7 @@ docs/
 - Reviewer：`views/reviewer/*`
 - Chair：`views/chair/*`
 - Admin：`views/admin/*`
+- Public：`views/PublicCfpView.vue`、`views/RegisterView.vue`、`views/VerifyEmailView.vue`
 
 ### 3.3 代表性文件
 
@@ -90,7 +93,7 @@ docs/
 
 ### 4.2 处理器与工作流层
 
-- `app/agent_platform/handlers/`：`reviewer_assist`、`conflict_analysis`、`screening` 处理器
+- `app/agent_platform/handlers/`：`reviewer_assist`、`reviewer_assignment_assist`、`conflict_analysis`、`screening` 处理器
 - `app/workflows/`：分析工作流与 schema
 - `app/pdf_tools.py`：PDF 解析与页面处理
 - `app/redaction.py`：双盲脱敏
@@ -113,6 +116,7 @@ docs/
 - `007_seed_demo_workflow.sql`：演示流程数据
 - `008_agent_platform_refactor.sql`：分析意图 / 投影、执行作业、outbox / inbox 结构
 - `009_execution_job_attempt_count.sql`：执行作业尝试计数补充迁移
+- `010_database_query_optimization.sql` 到 `018_reviewer_assignment_assist_analysis.sql`：查询优化、注册审批、会议/CFP、会议投稿、reviewer pool/bidding、assignment draft、assignment assist analysis type
 - `verify_schema.sql`：对象校验
 
 ## 6. 工具脚本（scripts）

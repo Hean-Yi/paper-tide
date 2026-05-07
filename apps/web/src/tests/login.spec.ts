@@ -177,6 +177,17 @@ describe("frontend authentication", () => {
     expect(new Headers(options.headers).get("Authorization")).toBe(`Bearer ${authToken}`);
   });
 
+  it("treats successful empty response bodies as undefined", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "Content-Length": "0" }),
+      json: vi.fn()
+    }));
+
+    await expect(apiRequest("/manuscripts/1/versions/2/pdf", { method: "POST" })).resolves.toBeUndefined();
+  });
+
   it("allows admin users to open chair workflow routes", async () => {
     const router = createAppRouter();
     localStorage.setItem("review.auth.token", futureToken(["ADMIN"]));

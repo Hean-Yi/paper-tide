@@ -5,9 +5,10 @@
 ## 核心能力
 
 - 多角色权限：`AUTHOR`、`REVIEWER`、`CHAIR`、`ADMIN`
-- 论文全流程：投稿、分配、评审、冲突汇总、主席终审
+- 会议流程：公开注册、CFP 发布、会议投稿、审稿人池、bidding、引导分配
+- 论文全流程：投稿、分配草稿、评审、冲突汇总、主席终审
 - 双盲约束：Agent 结果支持原始/脱敏视图
-- 异步 Agent 集成：任务创建、轮询、结果回填
+- 异步 Agent 集成：业务 intent、RabbitMQ/outbox、执行作业、结果投影
 
 ## 技术栈
 
@@ -81,16 +82,13 @@ npm run build
 
 ## 数据库初始化
 
-Oracle SQL 需按顺序执行：
+推荐使用脚本按当前迁移顺序初始化并校验：
 
-1. `database/oracle/001_init.sql`
-2. `database/oracle/002_seed_roles.sql`
-3. `database/oracle/003_indexes.sql`
-4. `database/oracle/004_procedures.sql`
-5. `database/oracle/005_triggers.sql`
-6. `database/oracle/006_seed_demo_users.sql`
-7. `database/oracle/007_seed_demo_workflow.sql`
-8. `database/oracle/verify_schema.sql`
+```bash
+bash scripts/oracle-schema-apply.sh
+```
+
+当前迁移已经覆盖注册审批、会议/CFP、会议范围投稿、reviewer pool/bidding、assignment draft、analysis intent/execution 平台和 `REVIEWER_ASSIGNMENT_ASSIST`。直接手动执行 SQL 时必须保持 `database/oracle/*.sql` 的编号顺序，最后运行 `database/oracle/verify_schema.sql`。
 
 ## 贡献指南
 

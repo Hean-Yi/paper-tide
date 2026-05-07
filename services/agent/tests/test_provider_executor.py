@@ -94,3 +94,39 @@ def test_provider_executor_truncates_large_pdf_payload_before_prompting() -> Non
     prompt = client.chat.completions.calls[0]["messages"][1]["content"]
     assert len(prompt) < 9000
     assert "[truncated" in prompt
+
+
+def test_provider_executor_limits_large_assignment_candidate_payload_before_prompting() -> None:
+    client = FakeClient()
+    executor = ProviderExecutor(
+        AgentPlatformConfig(
+            llm_api_key="secret-key",
+            llm_base_url="https://api.siliconflow.cn/v1",
+            llm_model="Qwen/Qwen3-VL-32B-Thinking",
+        ),
+        client=client,
+    )
+
+    executor.run_reviewer_assignment_assist(
+        {
+            "title": "Extreme Assignment Paper",
+            "abstract": "A paper with a large candidate pool.",
+            "assignmentAssist": {"roundId": 7, "manuscriptId": 11, "versionId": 21},
+            "candidateDrafts": [
+                {
+                    "draftId": index,
+                    "reviewerId": 10_000 + index,
+                    "rankOrder": index,
+                    "score": 100 - index,
+                    "reason": "candidate rationale " * 200,
+                }
+                for index in range(150)
+            ],
+        }
+    )
+
+    prompt = client.chat.completions.calls[0]["messages"][1]["content"]
+    assert len(prompt) < 16_000
+    assert "10000" in prompt
+    assert "10080" not in prompt
+    assert "[truncated" in prompt

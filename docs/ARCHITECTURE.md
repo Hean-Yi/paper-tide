@@ -36,14 +36,17 @@ PaperTide Review 当前采用三应用服务 + Oracle + 本地可选 RabbitMQ �
 - API 拥有业务身份、权限、工作流状态与分析结果可见性
 - Agent 拥有执行作业、尝试次数、处理器选择和产物生成
 - Agent 平台在缺少数据库配置时可以退化为内存执行存储；配置完整时使用 Oracle 持久化执行状态
+- Agent provider 边界会对大文本和大候选集做输入预算，避免极端用户数据把 prompt 放大到不可控大小
 
 ## 3. 服务职责边界
 
 ### 3.1 API（Spring Boot）
 
 - 账号认证与 JWT 鉴权
+- 公开注册、邮箱验证、角色申请和 Admin 审批
+- Conference/CFP 生命周期、会议范围投稿、reviewer pool、bidding
 - 投稿与版本管理（创建版本、上传 PDF、提交）
-- 评审轮次、分配、评审报告、冲突检查
+- 评审轮次、确定性 assignment draft、Chair 确认分配、评审报告、冲突检查
 - 主席决策与工作台查询
 - 创建 `ANALYSIS_INTENT` / `ANALYSIS_PROJECTION`，发布分析请求，消费完成事件
 
@@ -51,29 +54,33 @@ PaperTide Review 当前采用三应用服务 + Oracle + 本地可选 RabbitMQ �
 
 - 登录态管理与角色守卫
 - Author / Reviewer / Chair / Admin 的工作流页面
-- 调用 API 发起 screening、reviewer assist、conflict analysis
+- 公开 CFP、注册、会议投稿、Reviewer bidding、Chair conference console 与 assignment draft 工作台
+- 调用 API 发起 screening、reviewer assist、reviewer assignment assist、conflict analysis
 - 呈现 redacted 结果、冲突摘要、决策工作台和管理员监控视图
 
 ### 3.3 Agent 平台（FastAPI）
 
 - 在 `app/main.py` 中组装 `AgentPlatformRuntime`
 - 用 `ExecutionStateMachine` 管理 `QUEUED`、`RUNNING`、`SUCCEEDED`、`FAILED_*` 等执行状态
-- 通过 `AnalysisHandlerRegistry` 选择 `reviewer_assist`、`conflict_analysis`、`screening` 处理器
+- 通过 `AnalysisHandlerRegistry` 选择 `reviewer_assist`、`reviewer_assignment_assist`、`conflict_analysis`、`screening` 处理器
 - 使用 `ProviderExecutor`、`workflows/*`、`pdf_tools.py`、`redaction.py` 产出结构化分析结果
 
 ## 4. 数据流与一致性
 
 ### 4.1 投稿与评审主链路
 
-1. Author 创建稿件、版本并提交。
-2. Chair 进入 screening queue，创建评审轮次并分配 Reviewer。
-3. Reviewer 接受任务、在线阅读稿件并提交评审报告。
-4. Chair 在 decision workbench 汇总评审、冲突分析和辅助结果后做最终决策。
-5. API 在事务内更新业务状态，并通过审计与通知服务记录横切行为。
+1. 用户通过 Author / Reviewer / Organizer 注册进入平台；Reviewer 与 Organizer 需要 Admin 审批。
+2. Chair 创建会议 CFP，Admin 批准后会议进入投稿窗口。
+3. Author 选择公开 CFP 创建稿件、上传 PDF 并提交。
+4. Chair 建 reviewer pool；Reviewer 在 bidding 窗口提交偏好或声明冲突。
+5. Chair 创建评审轮次，生成 assignment draft，可请求 `REVIEWER_ASSIGNMENT_ASSIST` 排序建议，最终由 Chair 确认分配。
+6. Reviewer 接受任务、在线阅读稿件并提交评审报告。
+7. Chair 在 decision workbench 汇总评审、冲突分析和辅助结果后做最终决策。
+8. API 在事务内更新业务状态，并通过审计与通知服务记录横切行为。
 
 ### 4.2 分析异步链路
 
-1. API 按业务锚点创建分析意图：`SCREENING`、`REVIEWER_ASSIST`、`CONFLICT_ANALYSIS`。
+1. API 按业务锚点创建分析意图：`SCREENING`、`REVIEWER_ASSIST`、`REVIEWER_ASSIGNMENT_ASSIST`、`CONFLICT_ANALYSIS`。
 2. API 记录 outbox 消息，向执行平台发布分析请求。
 3. Agent 平台将请求转换为 `EXECUTION_JOB`，通过状态机和处理器执行分析。
 4. Agent 平台写入执行尝试、产物与执行 outbox / inbox，并发布完成结果。
@@ -97,7 +104,7 @@ PaperTide Review 当前采用三应用服务 + Oracle + 本地可选 RabbitMQ �
 ## 7. 当前约束
 
 - 仓库中仍保留一部分旧工作流代码和历史测试结果文档，阅读时应以 `analysis/*`、`agent_platform/*` 与最新计划文件为准
-- `scripts/test-all.sh` 当前对 Agent 只跑健康检查子集；完整 Agent 平台测试需要单独执行 `pytest tests/`
+- `scripts/test-all.sh` 在 Python 依赖齐全时会运行完整 Agent pytest 套件；缺依赖时才退化为语法检查
 - 运行消息驱动全链路时，需要本地 Oracle 与 RabbitMQ 都可用
 
 详细实施状态以 `docs/superpowers/plans/2026-04-09-paper-review-system-implementation.md` 为准。

@@ -4,6 +4,9 @@ import AppShell from "../layouts/AppShell.vue";
 import { hasRole, initializeAuth, isAuthenticated } from "../stores/auth";
 import DashboardView from "../views/DashboardView.vue";
 import LoginView from "../views/LoginView.vue";
+import PublicCfpView from "../views/PublicCfpView.vue";
+import ConferenceConsoleView from "../views/chair/ConferenceConsoleView.vue";
+import BiddingView from "../views/reviewer/BiddingView.vue";
 
 declare module "vue-router" {
   interface RouteMeta {
@@ -25,6 +28,11 @@ export function createAppRouter() {
         path: "/register",
         name: "register",
         component: () => import("../views/RegisterView.vue")
+      },
+      {
+        path: "/cfp",
+        name: "public-cfp",
+        component: PublicCfpView
       },
       {
         path: "/verify-email",
@@ -65,6 +73,12 @@ export function createAppRouter() {
             meta: { requiresAuth: true, roles: ["REVIEWER"] }
           },
           {
+            path: "reviewer/bidding",
+            name: "reviewer-bidding",
+            component: BiddingView,
+            meta: { requiresAuth: true, roles: ["REVIEWER"] }
+          },
+          {
             path: "reviewer/reviews/:assignmentId",
             name: "reviewer-review-editor",
             component: () => import("../views/reviewer/ReviewEditorView.vue"),
@@ -74,6 +88,12 @@ export function createAppRouter() {
             path: "chair/screening",
             name: "chair-screening",
             component: () => import("../views/chair/ScreeningQueueView.vue"),
+            meta: { requiresAuth: true, roles: ["CHAIR", "ADMIN"] }
+          },
+          {
+            path: "chair/conferences",
+            name: "chair-conferences",
+            component: ConferenceConsoleView,
             meta: { requiresAuth: true, roles: ["CHAIR", "ADMIN"] }
           },
           {

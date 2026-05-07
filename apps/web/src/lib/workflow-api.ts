@@ -151,6 +151,57 @@ export interface ConferenceCfpSummary {
   submissionCloseAt: string | null;
 }
 
+export interface ConferencePhaseInput {
+  submissionOpenAt: string | null;
+  submissionCloseAt: string | null;
+  biddingOpenAt: string | null;
+  biddingCloseAt: string | null;
+  reviewDeadlineAt: string | null;
+  decisionReleaseAt: string | null;
+}
+
+export interface ConferenceDetail extends ConferenceCfpSummary {
+  organizerUserId?: number;
+  cfpText?: string;
+  topicAreas?: string[];
+  targetReviewsPerPaper?: number;
+  defaultReviewerMaxLoad?: number;
+  cfpPublished?: boolean;
+  approvedBy?: number | null;
+  approvedAt?: string | null;
+  phase?: ConferencePhaseInput | null;
+}
+
+export interface ReviewerBiddingItem {
+  manuscriptId: number;
+  versionId: number;
+  title: string;
+  abstractText: string;
+  keywords: string;
+  bidValue: string | null;
+  conflictDeclared: boolean;
+}
+
+export interface AssignmentDraft {
+  draftId: number;
+  roundId: number;
+  manuscriptId: number;
+  versionId: number;
+  reviewerId: number;
+  rankOrder: number;
+  score: number;
+  currentLoad: number;
+  maxLoad: number;
+  bidValue: string | null;
+  reason: string | null;
+  draftStatus: string;
+}
+
+export interface AssignmentAssistState {
+  intent: AnalysisIntentResponse | null;
+  projections: AnalysisProjectionResponse[];
+}
+
 export interface ReviewReportForm {
   noveltyScore: number;
   methodScore: number;
@@ -171,6 +222,55 @@ export function listManuscripts() {
 
 export function listPublicCfps() {
   return apiRequest<ConferenceCfpSummary[]>("/conferences/cfp");
+}
+
+export function createConferenceDraft(payload: {
+  name: string;
+  acronym: string;
+  year: number;
+  blindMode: string;
+  cfpText: string;
+  topicAreas: string[];
+  targetReviewsPerPaper: number;
+  defaultReviewerMaxLoad: number;
+  publicSlug: string;
+  phase: ConferencePhaseInput;
+}) {
+  return apiRequest<ConferenceDetail>("/chair/conferences", { method: "POST", json: payload });
+}
+
+export function submitConferenceForApproval(conferenceId: number) {
+  return apiRequest<ConferenceDetail>(`/chair/conferences/${conferenceId}/submit-approval`, { method: "POST" });
+}
+
+export function advanceConference(conferenceId: number, status: string) {
+  return apiRequest<ConferenceDetail>(`/chair/conferences/${conferenceId}/advance`, { method: "POST", json: { status } });
+}
+
+export function listPendingConferenceApprovals() {
+  return apiRequest<ConferenceCfpSummary[]>("/admin/conferences/pending");
+}
+
+export function approveConference(conferenceId: number) {
+  return apiRequest<ConferenceDetail>(`/admin/conferences/${conferenceId}/approve`, { method: "POST" });
+}
+
+export function addConferenceReviewer(conferenceId: number, reviewerId: number, maxLoad: number) {
+  return apiRequest(`/chair/conferences/${conferenceId}/reviewers`, { method: "POST", json: { reviewerId, maxLoad } });
+}
+
+export function listReviewerBiddingItems(conferenceId: number) {
+  return apiRequest<ReviewerBiddingItem[]>(`/reviewer/conferences/${conferenceId}/bids/open`);
+}
+
+export function submitReviewerBid(conferenceId: number, payload: {
+  manuscriptId: number;
+  bidValue: string;
+  conflictDeclared: boolean;
+  conflictType?: string | null;
+  conflictDescription?: string | null;
+}) {
+  return apiRequest(`/reviewer/conferences/${conferenceId}/bids`, { method: "POST", json: payload });
 }
 
 export function listVersions(manuscriptId: number) {
@@ -293,12 +393,38 @@ export function assignReviewer(roundId: number, reviewerId: number, deadlineAt: 
   return apiRequest(`/review-rounds/${roundId}/assignments`, { method: "POST", json: { reviewerId, deadlineAt } });
 }
 
+export function generateAssignmentDrafts(roundId: number, limit = 5) {
+  return apiRequest<AssignmentDraft[]>(`/review-rounds/${roundId}/assignment-drafts/generate`, {
+    method: "POST",
+    json: { limit }
+  });
+}
+
+export function listAssignmentDrafts(roundId: number) {
+  return apiRequest<AssignmentDraft[]>(`/review-rounds/${roundId}/assignment-drafts`);
+}
+
+export function confirmAssignmentDrafts(roundId: number, draftIds: number[], deadlineAt: string) {
+  return apiRequest(`/review-rounds/${roundId}/assignment-drafts/confirm`, {
+    method: "POST",
+    json: { draftIds, deadlineAt }
+  });
+}
+
 export function markOverdue(assignmentId: number) {
   return apiRequest(`/review-assignments/${assignmentId}/mark-overdue`, { method: "POST" });
 }
 
 export function triggerConflictAnalysis(roundId: number, force = false) {
   return apiRequest<AnalysisIntentResponse>(`/review-rounds/${roundId}/conflict-analysis`, { method: "POST", json: { force } });
+}
+
+export function runAssignmentAssist(roundId: number, force = false) {
+  return apiRequest<AnalysisIntentResponse>(`/review-rounds/${roundId}/assignment-assist`, { method: "POST", json: { force } });
+}
+
+export function getAssignmentAssist(roundId: number) {
+  return apiRequest<AssignmentAssistState>(`/review-rounds/${roundId}/assignment-assist`);
 }
 
 export function decide(payload: {

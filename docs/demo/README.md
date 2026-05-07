@@ -11,15 +11,19 @@
 ## 建议演示顺序
 
 1. 环境与系统架构（2 分钟）
-2. Author 投稿（3 分钟）
-3. Chair 发起评审轮次与分配（4 分钟）
-4. Reviewer 提交评审（3 分钟）
-5. Chair 决策与 Agent 分析展示（5 分钟）
-6. 测试与已知问题说明（2 分钟）
+2. 公开注册、Admin 审批与 CFP 浏览（3 分钟）
+3. Author 选择会议投稿（3 分钟）
+4. Chair 建 reviewer pool、Reviewer bidding、生成 assignment draft（4 分钟）
+5. Chair 请求 reviewer assignment assist 并确认分配（3 分钟）
+6. Reviewer 在线阅读并提交评审（3 分钟）
+7. Chair 决策与 Agent 分析展示（5 分钟）
+8. 测试与已知问题说明（2 分钟）
 
 ## 演示前检查
 
 - Oracle 已执行 demo seed 脚本
 - API、Web、Agent 均可启动
 - 登录账号可用（AUTHOR/REVIEWER/CHAIR/ADMIN）
+- 会议相关迁移已应用到 `018_reviewer_assignment_assist_analysis.sql`
+- `GET /api/conferences/cfp`、`GET /api/admin/analysis-monitor` 可返回 JSON
 - 浏览器缓存已清理（避免旧 token 干扰）

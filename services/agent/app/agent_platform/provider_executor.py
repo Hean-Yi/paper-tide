@@ -14,6 +14,13 @@ from app.workflows.schemas import (
 _DEFAULT_TEXT_BUDGET = 4000
 _PDF_TEXT_BUDGET = 3000
 _SECTION_TEXT_BUDGET = 1200
+_SHORT_TEXT_BUDGET = 240
+_LIST_ITEM_BUDGETS = {
+    "candidateDrafts": 40,
+    "reviewReports": 25,
+}
+_SHORT_TEXT_KEYS = {"reason", "rationale", "conflictDescription", "commentsToChair"}
+_ASSIGNMENT_RESULT_LIMIT = 20
 
 
 class ProviderExecutor:
@@ -103,7 +110,7 @@ class ProviderExecutor:
         context = payload.get("assignmentAssist") or {}
         candidates = list(payload.get("candidateDrafts") or [])
         ranked = []
-        for index, candidate in enumerate(candidates, start=1):
+        for index, candidate in enumerate(candidates[:_ASSIGNMENT_RESULT_LIMIT], start=1):
             ranked.append(
                 {
                     "reviewerId": str(candidate.get("reviewerId", "")),
@@ -119,7 +126,7 @@ class ProviderExecutor:
             "versionId": str(context.get("versionId", "")),
             "status": "SUCCESS",
             "rankedCandidates": ranked,
-            "assignmentSummary": f"{len(ranked)} reviewer candidate(s) ranked for chair confirmation.",
+            "assignmentSummary": f"{len(ranked)} of {len(candidates)} reviewer candidate(s) ranked for chair confirmation.",
             "confidence": 0.5,
         }
         return self._request_structured_result(
@@ -218,9 +225,22 @@ def _budget_payload(value: Any, *, key: str | None = None) -> Any:
     if isinstance(value, dict):
         return {str(child_key): _budget_payload(child_value, key=str(child_key)) for child_key, child_value in value.items()}
     if isinstance(value, list):
-        return [_budget_payload(item, key=key) for item in value]
+        limit = _LIST_ITEM_BUDGETS.get(key or "")
+        items = value if limit is None else value[:limit]
+        budgeted = [_budget_payload(item, key=key) for item in items]
+        if limit is not None and len(value) > limit:
+            budgeted.append({"truncatedItems": len(value) - limit})
+        return budgeted
     if isinstance(value, str):
-        limit = _PDF_TEXT_BUDGET if key == "pdfText" else _SECTION_TEXT_BUDGET if key in {"introduction", "method", "experiment", "conclusion"} else _DEFAULT_TEXT_BUDGET
+        limit = (
+            _PDF_TEXT_BUDGET
+            if key == "pdfText"
+            else _SECTION_TEXT_BUDGET
+            if key in {"introduction", "method", "experiment", "conclusion"}
+            else _SHORT_TEXT_BUDGET
+            if key in _SHORT_TEXT_KEYS
+            else _DEFAULT_TEXT_BUDGET
+        )
         return _truncate_text(value, limit)
     return value
 

@@ -11,6 +11,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -86,9 +88,11 @@ class ReviewFlowE2eTest {
         jdbcTemplate.update("DELETE FROM ANALYSIS_PROJECTION");
         jdbcTemplate.update("DELETE FROM ANALYSIS_INTENT");
         jdbcTemplate.update("DELETE FROM CONFLICT_CHECK_RECORD");
+        jdbcTemplate.update("DELETE FROM REVIEWER_BID");
         jdbcTemplate.update("DELETE FROM REVIEW_REPORT");
         jdbcTemplate.update("DELETE FROM REVIEW_ASSIGNMENT");
         jdbcTemplate.update("DELETE FROM ASSIGNMENT_DRAFT");
+        jdbcTemplate.update("DELETE FROM CONFERENCE_REVIEWER");
         jdbcTemplate.update("DELETE FROM SYS_NOTIFICATION");
         jdbcTemplate.update("UPDATE MANUSCRIPT_VERSION SET SOURCE_DECISION_ID = NULL");
         jdbcTemplate.update("DELETE FROM DECISION_RECORD");
@@ -107,12 +111,17 @@ class ReviewFlowE2eTest {
         String adminToken = loginAndExtractToken("admin_demo", "demo123");
         String reviewerToken = loginAndExtractToken("reviewer_demo", "demo123");
 
-        ManuscriptIds manuscript = createManuscript(authorToken);
+        long conferenceId = seedOpenConference();
+        ManuscriptIds manuscript = createManuscript(authorToken, conferenceId);
         uploadPdf(authorToken, manuscript);
         mockMvc.perform(post("/api/manuscripts/{id}/versions/{versionId}/submit", manuscript.manuscriptId(), manuscript.versionId())
                         .header("Authorization", "Bearer " + authorToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentStatus").value("SUBMITTED"));
+
+        addReviewerToPool(chairToken, conferenceId);
+        openBidding(conferenceId);
+        submitBid(reviewerToken, conferenceId, manuscript.manuscriptId());
 
         mockMvc.perform(get("/api/chair/screening-queue")
                         .header("Authorization", "Bearer " + chairToken))
@@ -133,7 +142,9 @@ class ReviewFlowE2eTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].roundId").value(roundId));
 
-        long assignmentId = assignReviewer(chairToken, roundId);
+        generateAssignmentDrafts(chairToken, roundId);
+        requestAssignmentAssist(chairToken, roundId);
+        long assignmentId = confirmAssignmentDrafts(chairToken, roundId);
         mockMvc.perform(post("/api/review-assignments/{assignmentId}/accept", assignmentId)
                         .header("Authorization", "Bearer " + reviewerToken))
                 .andExpect(status().isOk())
@@ -170,7 +181,7 @@ class ReviewFlowE2eTest {
 
         triggerConflictAnalysis(chairToken, roundId);
         Integer outboxCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ANALYSIS_OUTBOX", Integer.class);
-        org.junit.jupiter.api.Assertions.assertEquals(2, outboxCount);
+        org.junit.jupiter.api.Assertions.assertEquals(3, outboxCount);
 
         mockMvc.perform(post("/api/decisions")
                         .header("Authorization", "Bearer " + chairToken)
@@ -196,11 +207,12 @@ class ReviewFlowE2eTest {
                 .andExpect(jsonPath("$[0].lastDecisionCode").value("MINOR_REVISION"));
     }
 
-    private ManuscriptIds createManuscript(String authorToken) throws Exception {
+    private ManuscriptIds createManuscript(String authorToken, long conferenceId) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/manuscripts")
                         .header("Authorization", "Bearer " + authorToken)
                         .contentType(APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
+                                "conferenceId", conferenceId,
                                 "title", "Robust Review Systems",
                                 "abstract", "A paper about resilient manuscript review workflows.",
                                 "keywords", "review,workflow,agent",
@@ -259,20 +271,39 @@ class ReviewFlowE2eTest {
         return objectMapper.readTree(result.getResponse().getContentAsString()).path("roundId").asLong();
     }
 
-    private long assignReviewer(String chairToken, long roundId) throws Exception {
-        MvcResult result = mockMvc.perform(post("/api/review-rounds/{roundId}/assignments", roundId)
+    private void generateAssignmentDrafts(String chairToken, long roundId) throws Exception {
+        mockMvc.perform(post("/api/review-rounds/{roundId}/assignment-drafts/generate", roundId)
                         .header("Authorization", "Bearer " + chairToken)
                         .contentType(APPLICATION_JSON)
                         .content("""
                                 {
-                                  "reviewerId": 1002,
-                                  "deadlineAt": "2026-05-01T12:00:00Z"
+                                  "limit": 5
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.taskStatus").value("ASSIGNED"))
+                .andExpect(jsonPath("$[0].reviewerId").value(1002))
+                .andExpect(jsonPath("$[0].draftStatus").value("PROPOSED"));
+    }
+
+    private long confirmAssignmentDrafts(String chairToken, long roundId) throws Exception {
+        Long draftId = jdbcTemplate.queryForObject(
+                "SELECT ASSIGNMENT_DRAFT_ID FROM ASSIGNMENT_DRAFT WHERE ROUND_ID = ? AND REVIEWER_ID = 1002",
+                Long.class,
+                roundId
+        );
+        MvcResult result = mockMvc.perform(post("/api/review-rounds/{roundId}/assignment-drafts/confirm", roundId)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "draftIds": [%d],
+                                  "deadlineAt": "2026-05-01T12:00:00Z"
+                                }
+                                """.formatted(draftId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].taskStatus").value("ASSIGNED"))
                 .andReturn();
-        return objectMapper.readTree(result.getResponse().getContentAsString()).path("assignmentId").asLong();
+        return objectMapper.readTree(result.getResponse().getContentAsString()).path(0).path("assignmentId").asLong();
     }
 
     private void requestReviewerAssist(String reviewerToken, long assignmentId) throws Exception {
@@ -295,6 +326,55 @@ class ReviewFlowE2eTest {
                 .andExpect(jsonPath("$.analysisType").value("CONFLICT_ANALYSIS"))
                 .andExpect(jsonPath("$.businessStatus").value("REQUESTED"))
                 .andExpect(jsonPath("$.externalTaskId").doesNotExist());
+    }
+
+    private void requestAssignmentAssist(String chairToken, long roundId) throws Exception {
+        mockMvc.perform(post("/api/review-rounds/{roundId}/assignment-assist", roundId)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.analysisType").value("REVIEWER_ASSIGNMENT_ASSIST"))
+                .andExpect(jsonPath("$.businessStatus").value("REQUESTED"));
+
+        mockMvc.perform(get("/api/review-rounds/{roundId}/assignment-assist", roundId)
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.intent.analysisType").value("REVIEWER_ASSIGNMENT_ASSIST"));
+    }
+
+    private void addReviewerToPool(String chairToken, long conferenceId) throws Exception {
+        mockMvc.perform(post("/api/chair/conferences/{conferenceId}/reviewers", conferenceId)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "reviewerId": 1002,
+                                  "maxLoad": 3
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reviewerId").value(1002));
+    }
+
+    private void submitBid(String reviewerToken, long conferenceId, long manuscriptId) throws Exception {
+        mockMvc.perform(get("/api/reviewer/conferences/{conferenceId}/bids/open", conferenceId)
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].manuscriptId").value(manuscriptId));
+
+        mockMvc.perform(post("/api/reviewer/conferences/{conferenceId}/bids", conferenceId)
+                        .header("Authorization", "Bearer " + reviewerToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "manuscriptId": %d,
+                                  "bidValue": "WANT_TO_REVIEW",
+                                  "conflictDeclared": false
+                                }
+                                """.formatted(manuscriptId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bidValue").value("WANT_TO_REVIEW"));
     }
 
     private void submitReviewReport(String reviewerToken, long assignmentId) throws Exception {
@@ -332,6 +412,50 @@ class ReviewFlowE2eTest {
                 .andExpect(status().isOk())
                 .andReturn();
         return objectMapper.readTree(result.getResponse().getContentAsString()).path("token").asText();
+    }
+
+    private long seedOpenConference() {
+        long conferenceId = jdbcTemplate.queryForObject("SELECT SEQ_CONFERENCE.NEXTVAL FROM DUAL", Long.class);
+        Instant submissionCloseAt = Instant.now().plusSeconds(30 * 24 * 60 * 60);
+        jdbcTemplate.update(
+                """
+                INSERT INTO CONFERENCE (
+                  CONFERENCE_ID, NAME, ACRONYM, CONFERENCE_YEAR, ORGANIZER_USER_ID, CONFERENCE_STATUS,
+                  BLIND_MODE, CFP_TEXT, TOPIC_AREAS_JSON, TARGET_REVIEWS_PER_PAPER,
+                  DEFAULT_REVIEWER_MAX_LOAD, PUBLIC_SLUG, CFP_PUBLISHED, APPROVED_BY, APPROVED_AT
+                ) VALUES (?, ?, ?, ?, 1003, 'OPEN_FOR_SUBMISSION', 'DOUBLE_BLIND', ?, '[\"review\",\"agent\"]',
+                          2, 3, ?, 1, 1004, CURRENT_TIMESTAMP)
+                """,
+                conferenceId,
+                "E2E Conference " + conferenceId,
+                "E2E" + conferenceId,
+                2026,
+                "E2E CFP",
+                "e2e-" + conferenceId
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO CONFERENCE_PHASE (
+                  PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, SUBMISSION_CLOSE_AT, BIDDING_OPEN_AT,
+                  BIDDING_CLOSE_AT, REVIEW_DEADLINE_AT, DECISION_RELEASE_AT
+                ) VALUES (SEQ_CONFERENCE_PHASE.NEXTVAL, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                conferenceId,
+                Timestamp.from(submissionCloseAt.minusSeconds(30 * 24 * 60 * 60)),
+                Timestamp.from(submissionCloseAt),
+                Timestamp.from(submissionCloseAt.plusSeconds(24 * 60 * 60)),
+                Timestamp.from(submissionCloseAt.plusSeconds(7 * 24 * 60 * 60)),
+                Timestamp.from(submissionCloseAt.plusSeconds(14 * 24 * 60 * 60)),
+                Timestamp.from(submissionCloseAt.plusSeconds(21 * 24 * 60 * 60))
+        );
+        return conferenceId;
+    }
+
+    private void openBidding(long conferenceId) {
+        jdbcTemplate.update(
+                "UPDATE CONFERENCE SET CONFERENCE_STATUS = 'BIDDING_OPEN' WHERE CONFERENCE_ID = ?",
+                conferenceId
+        );
     }
 
     private record ManuscriptIds(long manuscriptId, long versionId) {

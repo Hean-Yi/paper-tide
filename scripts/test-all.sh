@@ -33,7 +33,7 @@ if command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   if "$PYTHON_BIN" -c 'import fastapi, uvicorn, pytest' >/dev/null 2>&1; then
     (
       cd "$ROOT_DIR/services/agent"
-      "$PYTHON_BIN" -m pytest tests/test_health.py
+      "$PYTHON_BIN" -m pytest tests/
     )
     echo "[full] agent verification"
   else

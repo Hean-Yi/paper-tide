@@ -87,6 +87,50 @@ def test_runtime_executes_reviewer_assignment_assist_and_emits_completed_event()
     assert pending_events[0].payload["eventType"] == "analysis.completed"
 
 
+def test_runtime_processes_many_assignment_assist_requests_without_cross_polluting_events() -> None:
+    app = create_app(
+        enable_background_execution=False,
+        require_internal_api_key=False,
+        provider_executor=ProviderExecutor(),
+    )
+    runtime = app.state.agent_platform
+
+    for index in range(60):
+        requested = AnalysisRequestedMessage(
+            idempotency_key=f"assignment-stress-key-{index}",
+            analysis_type="REVIEWER_ASSIGNMENT_ASSIST",
+            intent_reference=str(1_000 + index),
+            request_payload={
+                "title": f"Assignment Paper {index}",
+                "abstract": "A paper that needs reviewer assignment under load.",
+                "assignmentAssist": {
+                    "roundId": 80 + index,
+                    "manuscriptId": 90 + index,
+                    "versionId": 100 + index,
+                },
+                "candidateDrafts": [
+                    {
+                        "draftId": 5_000 + index,
+                        "reviewerId": 7_000 + index,
+                        "rankOrder": 1,
+                        "score": 100,
+                        "bidValue": "WANT_TO_REVIEW",
+                    }
+                ],
+            },
+        )
+        job = runtime.analysis_requested_consumer.handle(requested)
+        event = runtime.execute_requested_job(job)
+
+        assert event["intentId"] == 1_000 + index
+        assert event["analysisType"] == "REVIEWER_ASSIGNMENT_ASSIST"
+        assert event["redactedResult"]["rankedCandidates"][0]["reviewerId"] == str(7_000 + index)
+
+    pending_events = app.state.execution_completed_publisher.pending()
+    assert len(pending_events) == 60
+    assert {event.payload["intentId"] for event in pending_events} == set(range(1_000, 1_060))
+
+
 def test_runtime_uses_durable_repository_when_db_config_present(monkeypatch) -> None:
     class FakeCursor:
         def __init__(self, connection: "FakeConnection") -> None:

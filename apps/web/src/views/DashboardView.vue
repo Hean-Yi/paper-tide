@@ -12,12 +12,15 @@ const entries = computed(() => {
   }
   if (roles.has("REVIEWER")) {
     items.push({ label: "Review assignments", detail: "Assigned papers and review deadlines.", target: "/reviewer/assignments" });
+    items.push({ label: "Reviewer bidding", detail: "Bid on open conference submissions.", target: "/reviewer/bidding" });
   }
   if (roles.has("CHAIR") || roles.has("ADMIN")) {
+    items.push({ label: "Conferences", detail: "Publish CFPs and manage reviewer pools.", target: "/chair/conferences" });
     items.push({ label: "Screening", detail: "Submission checks and reviewer coordination.", target: "/chair/screening" });
     items.push({ label: "Decisions", detail: "Round decisions and conflict analysis.", target: "/chair/decisions" });
   }
   if (roles.has("ADMIN")) {
+    items.push({ label: "Conference approvals", detail: "Approve submitted conference CFPs.", target: "/chair/conferences" });
     items.push({ label: "Role applications", detail: "Review pending reviewer and organizer approvals.", target: "/admin/role-applications" });
     items.push({ label: "Agent monitor", detail: "Analysis intent, projection, and execution checks.", target: "/admin/agents" });
   }

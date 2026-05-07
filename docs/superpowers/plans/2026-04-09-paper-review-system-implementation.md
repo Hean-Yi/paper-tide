@@ -2117,10 +2117,38 @@ Expected after implementation: both commands pass.
     - Current completion state:
       - 25.6 backend/API/Agent execution path is implemented and verified.
       - Chair-facing progress/error state is exposed through the new assignment-assist state endpoint; full visual workflow integration remains in Task 25.7.
-- [ ] **Task 25.7: Integrated frontend workflows**
+- [x] **Task 25.7: Integrated frontend workflows**
   - Add Public CFP, Register tabs, Author conference submission path, Chair conference console, Admin approval workbench, and route-guard coverage.
-- [ ] **Task 25.8: Operational docs and verification**
+  - Execution notes, 2026-05-07:
+    - Added `/cfp` public CFP route and page using `GET /api/conferences/cfp`.
+    - Added `/chair/conferences` conference console for Chair/Admin CFP draft creation, submit-for-approval, reviewer pool seeding, and Admin pending conference approval.
+    - Added `/reviewer/bidding` for reviewer conference selection, bidding item reads, preference bids, and self-declared conflict bids.
+    - Integrated 25.5/25.6 into the Chair decision workbench: generate assignment drafts, request `REVIEWER_ASSIGNMENT_ASSIST`, display assignment-assist projections, and confirm proposed drafts.
+    - Kept existing registration tabs, author conference submission, and Admin role-application workbench in the integrated route set; dashboard and shell navigation now expose conference and bidding entries.
+    - Fixed a real status mismatch found during E2E: frontend assignment-draft confirmation now treats backend `PROPOSED` rows as confirmable instead of filtering for a non-existent `DRAFT` state.
+    - Verification:
+      - Red run: `cd apps/web && npm run test -- --run src/tests/conference-workflow.spec.ts` failed with missing `/cfp`, `/chair/conferences`, `/reviewer/bidding`, assignment-draft actions, and dashboard links.
+      - Green run: `cd apps/web && npm run test -- --run src/tests/conference-workflow.spec.ts` passed with 6 tests.
+    - Current completion state:
+      - 25.7 frontend workflow integration is implemented at route/API/page level. Richer per-conference list views can be added later, but the approved simplified flow is navigable.
+- [x] **Task 25.8: Operational docs and verification**
   - Update README, architecture, workflow, code-structure, testing, demo docs, seed scripts, and repository verification commands for the new conference flow.
+  - Execution notes, 2026-05-07:
+    - Updated `README.md`, `docs/ARCHITECTURE.md`, `docs/WORKFLOW.md`, `docs/CODE_STRUCTURE.md`, `docs/TESTING.md`, and `docs/demo/README.md` for registration, CFP, conference submission, reviewer pool, bidding, assignment draft, and reviewer assignment assist.
+    - Updated `scripts/test-all.sh` so a dependency-complete Agent environment runs the full `services/agent/tests/` suite instead of only `test_health.py`; syntax-only fallback remains for missing dependencies.
+    - Added Agent extreme-input and stress tests:
+      - large `candidateDrafts` prompt-budget test for assignment assist
+      - 60-request assignment-assist execution isolation test
+    - Fixed Agent provider budgeting after the red test showed 150 assignment candidates produced a 600KB prompt; provider prompt construction now caps large lists and long candidate rationale fields, and assignment-assist fallback output is bounded.
+    - Expanded `ReviewFlowE2eTest` into a conference-aware full flow: conference-scoped submission, reviewer pool, bidding, assignment draft generation, reviewer assignment assist intent, draft confirmation, reviewer reading/reporting, conflict analysis, and chair decision.
+    - Verification:
+      - Red Agent run: `.venv/bin/python -m pytest services/agent/tests/test_provider_executor.py services/agent/tests/test_execution_runtime.py -q` failed because assignment-assist candidate prompts were unbounded.
+      - Green Agent run: `.venv/bin/python -m pytest services/agent/tests/test_provider_executor.py services/agent/tests/test_execution_runtime.py -q` passed with 8 tests.
+      - E2E investigation runs found direct-test-seed mismatches against physical Oracle names (`CONFERENCE_YEAR`, `ASSIGNMENT_DRAFT_ID`) and phase-order constraints; the test seed was corrected.
+      - Green API E2E run: `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=ReviewFlowE2eTest test` passed with Oracle access.
+      - Final repository run: `bash scripts/test-all.sh` passed on 2026-05-07 with API 96 tests, Agent 48 tests, and Web 53 tests plus `vue-tsc` and `vite build`.
+    - Current completion state:
+      - 25.8 documentation and verification assets are implemented and repository-wide verification has passed.
 
 ### Task 26: Database Query Optimization And Read Model Cleanup
 

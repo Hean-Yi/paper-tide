@@ -102,6 +102,7 @@ describe("workflow screens", () => {
   afterEach(() => {
     document.body.innerHTML = "";
     resetAuthForTests();
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -690,6 +691,191 @@ describe("workflow screens", () => {
     );
   });
 
+  it("shows reviewer assist progress immediately and polls until the projection appears", async () => {
+    vi.useFakeTimers();
+    installAuth(["REVIEWER"]);
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:reader-page-1"),
+      revokeObjectURL: vi.fn()
+    });
+    let assistReads = 0;
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/review-assignments/9") {
+        return Promise.resolve(jsonResponse({
+          assignmentId: 9,
+          manuscriptId: 11,
+          versionId: 21,
+          versionNo: 1,
+          title: "Workflow Seed",
+          abstractText: "workflow abstract",
+          keywords: "workflow,pdf",
+          pdfFileName: "workflow.pdf",
+          taskStatus: "ACCEPTED"
+        }));
+      }
+      if (path === "/review-assignments/9/paper") {
+        return Promise.resolve(jsonResponse({
+          assignmentId: 9,
+          manuscriptId: 11,
+          versionId: 21,
+          title: "Workflow Seed",
+          pageCount: 1,
+          pdfFileName: "workflow.pdf",
+          downloadAllowed: false
+        }));
+      }
+      if (path === "/review-assignments/9/paper/pages/1") {
+        return Promise.resolve(blobResponse(new Blob(["page"], { type: "image/png" })));
+      }
+      if (path === "/review-assignments/9/agent-assist" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({
+          intentId: 88,
+          analysisType: "REVIEWER_ASSIST",
+          businessStatus: "REQUESTED"
+        }));
+      }
+      if (path === "/review-assignments/9/agent-assist") {
+        assistReads += 1;
+        if (assistReads >= 3) {
+          return Promise.resolve(jsonResponse({
+            intent: {
+              intentId: 88,
+              analysisType: "REVIEWER_ASSIST",
+              businessStatus: "AVAILABLE"
+            },
+            projections: [
+              {
+                projectionId: 1,
+                analysisType: "REVIEWER_ASSIST",
+                businessStatus: "AVAILABLE",
+                summaryText: "Checklist ready.",
+                superseded: false,
+                updatedAt: "2026-04-27T12:00:00Z",
+                redactedResult: { checklist: ["Check baseline clarity"] }
+              }
+            ]
+          }));
+        }
+        return Promise.resolve(jsonResponse({
+          intent: assistReads === 1 ? null : {
+            intentId: 88,
+            analysisType: "REVIEWER_ASSIST",
+            businessStatus: "REQUESTED"
+          },
+          projections: []
+        }));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(ReviewEditorView, "/reviewer/reviews/9");
+    await clickButton(wrapper, "Run review assistant");
+
+    expect(wrapper.text()).toContain("Analysis in progress");
+    expect(wrapper.find(".assist-progress-animation").exists()).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(3000);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Checklist ready.");
+    expect(wrapper.text()).not.toContain("Analysis in progress");
+  });
+
+  it("shows reviewer assist failure feedback and retry", async () => {
+    installAuth(["REVIEWER"]);
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:reader-page-1"),
+      revokeObjectURL: vi.fn()
+    });
+    mockApi({
+      "/review-assignments/9": {
+        assignmentId: 9,
+        manuscriptId: 11,
+        versionId: 21,
+        versionNo: 1,
+        title: "Workflow Seed",
+        abstractText: "workflow abstract",
+        keywords: "workflow,pdf",
+        pdfFileName: "workflow.pdf",
+        taskStatus: "ACCEPTED"
+      },
+      "/review-assignments/9/paper": {
+        assignmentId: 9,
+        manuscriptId: 11,
+        versionId: 21,
+        title: "Workflow Seed",
+        pageCount: 1,
+        pdfFileName: "workflow.pdf",
+        downloadAllowed: false
+      },
+      "/review-assignments/9/agent-assist": {
+        intent: {
+          intentId: 88,
+          analysisType: "REVIEWER_ASSIST",
+          businessStatus: "FAILED_VISIBLE"
+        },
+        projections: []
+      }
+    }, {
+      "/review-assignments/9/paper/pages/1": new Blob(["page"], { type: "image/png" })
+    });
+
+    const wrapper = await mountWithRouter(ReviewEditorView, "/reviewer/reviews/9");
+
+    expect(wrapper.text()).toContain("Review assistant failed. Try again.");
+    expect(buttonByText(wrapper, "Retry").exists()).toBe(true);
+  });
+
+  it("collapses assignment details by default and lets reviewers collapse the side panel", async () => {
+    installAuth(["REVIEWER"]);
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:reader-page-1"),
+      revokeObjectURL: vi.fn()
+    });
+    mockApi({
+      "/review-assignments/9": {
+        assignmentId: 9,
+        manuscriptId: 11,
+        versionId: 21,
+        versionNo: 1,
+        title: "Workflow Seed",
+        abstractText: "workflow abstract",
+        keywords: "workflow,pdf",
+        pdfFileName: "workflow.pdf",
+        taskStatus: "ACCEPTED"
+      },
+      "/review-assignments/9/paper": {
+        assignmentId: 9,
+        manuscriptId: 11,
+        versionId: 21,
+        title: "Workflow Seed",
+        pageCount: 1,
+        pdfFileName: "workflow.pdf",
+        downloadAllowed: false
+      },
+      "/review-assignments/9/agent-assist": {
+        intent: null,
+        projections: []
+      }
+    }, {
+      "/review-assignments/9/paper/pages/1": new Blob(["page"], { type: "image/png" })
+    });
+
+    const wrapper = await mountWithRouter(ReviewEditorView, "/reviewer/reviews/9");
+
+    expect(wrapper.find('[data-test="assignment-details"].is-collapsed').exists()).toBe(true);
+    expect(wrapper.find('[data-test="review-side-panel"]').exists()).toBe(true);
+    expect(wrapper.find(".review-workspace").classes()).not.toContain("is-side-collapsed");
+
+    await clickButton(wrapper, "Collapse assist panel");
+
+    expect(wrapper.find(".review-workspace").classes()).toContain("is-side-collapsed");
+    expect(wrapper.find('[data-test="review-side-panel"]').exists()).toBe(false);
+    expect(wrapper.find(".secure-paper-reader").exists()).toBe(true);
+  });
+
   it("uses Element Plus validation as the single form validation surface", () => {
     const submitView = readFileSync("src/views/author/SubmitManuscriptView.vue", "utf8");
     const reviewView = readFileSync("src/views/reviewer/ReviewEditorView.vue", "utf8");
@@ -726,6 +912,7 @@ describe("workflow screens", () => {
     expect(formatDateTime(null)).toBe("Not set");
     expect(statusTagType("SUCCESS")).toBe("success");
     expect(statusTagType("FAILED")).toBe("danger");
+    expect(statusTagType("FAILED_VISIBLE")).toBe("danger");
     expect(statusTagType("UNDER_SCREENING")).toBe("warning");
   });
 

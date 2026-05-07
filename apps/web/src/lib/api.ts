@@ -41,10 +41,18 @@ export async function apiRequest<T = unknown>(path: string, options: ApiRequestO
     throw new ApiError(response.status, await errorMessage(response));
   }
 
-  if (response.status === 204) {
+  if (response.status === 204 || response.headers?.get?.("Content-Length") === "0") {
     return undefined as T;
   }
-  return response.json() as Promise<T>;
+
+  try {
+    return await response.json() as T;
+  } catch (error) {
+    if (isEmptyJsonBodyError(error)) {
+      return undefined as T;
+    }
+    throw error;
+  }
 }
 
 export async function apiBlob(path: string, options: RequestInit = {}): Promise<Blob> {
@@ -67,6 +75,10 @@ export function login(username: string, password: string): Promise<LoginResponse
     method: "POST",
     json: { username, password }
   });
+}
+
+function isEmptyJsonBodyError(error: unknown): boolean {
+  return error instanceof SyntaxError && /unexpected end of json input/i.test(error.message);
 }
 
 function apiBaseUrl(): string {

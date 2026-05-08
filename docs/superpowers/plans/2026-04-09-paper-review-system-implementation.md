@@ -2909,3 +2909,21 @@ Expected after implementation: both commands pass.
 - Current completion state:
   - Wave 6 through Wave 9 now have actor-facing API/UI loops for dynamic reviewer forms, assignment/COI operations, bulk assignment imports, proposal confirmation to drafts, publication/communication dashboards, and proceedings export metadata.
   - Remaining product-depth items are kept explicit in `TODO.md`: configurable submission/meta-review/camera-ready form coverage, review revision history, rebuttal window enforcement, saved search/formula filters, CSV export files, bulk decision/user/conflict/preference confirms, Agent proposal context enrichment, audited override UI, real file/proceedings downloads, DOI/index adapters, and richer communication compose/reminder workflows.
+
+**RealPlatform service/repository split result on 2026-05-08:**
+
+- Active follow-up scope: split the oversized `RealPlatformService` and `RealPlatformRepository` after completing Wave 6 through Wave 9, keeping endpoint compatibility while making future maintenance business-boundary based.
+- Execution result:
+  - Committed the pre-split Wave 6 through Wave 9 completion as `44c6af3` and saved temporary source backups under `/tmp/realplatform-refactor-backup-44c6af3`.
+  - Replaced `RealPlatformService` with a thin facade that delegates to `RealPlatformWorkflowCommandService`, `RealPlatformAssignmentCommandService`, and `RealPlatformPublicationCommandService`.
+  - Split persistence into `RealPlatformWorkflowRepository`, `RealPlatformAssignmentRepository`, and `RealPlatformPublicationRepository`, with shared row records moved to `PlatformRows.java` and shared lookups/JSON helpers retained in the base `RealPlatformRepository`.
+  - Added `RealPlatformAccessService` so conference/manuscript/reviewer-assignment authorization rules are centralized instead of copied across command slices.
+  - Added a `CodeQualityTest` guard that keeps the original catch-all service/repository below maintenance thresholds.
+  - Updated `AGENTS.md` with reusable rules for platform guard extraction and Spring base-repository injection qualifiers.
+- Verification run:
+  - RED: `mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=CodeQualityTest#realPlatformCatchAllClassesStayBelowMaintenanceThreshold test` failed before the split because `RealPlatformService.java` had 1100 lines.
+  - GREEN target: `mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=CodeQualityTest,RealPlatformWorkflowServiceTest,RealPlatformWaveEightServiceTest,RealPlatformWaveNineServiceTest test`.
+  - Full API: `mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test`.
+  - Repository-level: `git diff --check` and `RUN_ANALYSIS_E2E_SMOKE=1 bash scripts/test-all.sh`.
+- Current completion state:
+  - The split is behavior-preserving at the repository verification boundary. Temporary backups were eligible for deletion before the final split commit.

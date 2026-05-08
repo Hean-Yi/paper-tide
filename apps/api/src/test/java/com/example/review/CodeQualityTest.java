@@ -47,6 +47,12 @@ class CodeQualityTest {
     }
 
     @Test
+    void realPlatformCatchAllClassesStayBelowMaintenanceThreshold() throws IOException {
+        assertLineCountAtMost("src/main/java/com/example/review/platform/RealPlatformService.java", 450);
+        assertLineCountAtMost("src/main/java/com/example/review/platform/RealPlatformRepository.java", 750);
+    }
+
+    @Test
     void migratedAnalysisTestsDoNotDependOnLegacyMirroredTaskArtifacts() throws IOException {
         assertSourceDoesNotContain(
                 "src/test/java/com/example/review/analysis/AnalysisIntentFlowTest.java",
@@ -376,6 +382,11 @@ class CodeQualityTest {
                 "IMPORT_BATCH",
                 "PAPER_ROLE_ASSIGNMENT"
         );
+    }
+
+    private void assertLineCountAtMost(String path, int maxLines) throws IOException {
+        long lineCount = Files.lines(Path.of(path)).count();
+        assertTrue(lineCount <= maxLines, path + " has " + lineCount + " lines, expected <= " + maxLines);
     }
 
     private List<String> realPlatformWaveSixSevenIndexes() {

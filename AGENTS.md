@@ -150,6 +150,8 @@ Current lessons captured from recent review cycles:
 - Oracle test cleanup for bidirectional or parent-held active pointers must null the pointer before deleting the pointed child rows. For example, clear `EMAIL_TEMPLATE.ACTIVE_VERSION_ID` before deleting `EMAIL_TEMPLATE_VERSION`.
 - When closing broad real-platform waves, do not redefine completion as a smallest usable loop after the user asks for full business coverage. Keep the authoritative plan explicit about excluded production-provider work, and ship page-shaped read models plus actor-facing UI for every new write workflow before marking the wave complete.
 - Large workflow services and repositories must not keep absorbing unrelated wave behavior. When a service or repository becomes a cross-wave catch-all, split new work by business boundary and add page-shaped read repositories/services for operator screens instead of appending more ad hoc methods.
+- When splitting broad platform command services, extract shared authorization and ownership guards into a single service boundary instead of copying `requireConferenceOperator`, `requireManuscriptOperator`, or reviewer-assignment checks across every slice.
+- When Spring repositories inherit from a base repository class, constructor injection by the base type can become ambiguous. Qualify the intended base bean or inject the narrow child repository explicitly so refactors do not break application context startup.
 
 ## Plan File Discipline
 Execution work must stay anchored to one authoritative implementation plan file.

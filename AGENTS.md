@@ -147,6 +147,7 @@ Current lessons captured from recent review cycles:
 - Time-sensitive positive-path tests must not use near-term absolute dates as future deadlines. Use relative future timestamps or far-future fixtures, and keep expired-deadline behavior isolated in dedicated negative tests.
 - Schema guard tests for older migrations must verify that their objects remain wired, not assert stale global object totals after later migrations add tables, sequences, triggers, or indexes. Keep exact total-count assertions in the newest verification slice only.
 - When adding new manuscript-, assignment-, conference-, or form-scoped FK children, update every Oracle integration-test cleanup helper in the same slice. Delete new children before existing parent workflow rows so full-suite order does not depend on which test ran first.
+- Oracle test cleanup for bidirectional or parent-held active pointers must null the pointer before deleting the pointed child rows. For example, clear `EMAIL_TEMPLATE.ACTIVE_VERSION_ID` before deleting `EMAIL_TEMPLATE_VERSION`.
 
 ## Plan File Discipline
 Execution work must stay anchored to one authoritative implementation plan file.

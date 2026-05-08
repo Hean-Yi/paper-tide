@@ -2815,3 +2815,70 @@ Expected after implementation: both commands pass.
 - Verification run: `git diff --check` passed.
 - Verification run: `RUN_ANALYSIS_E2E_SMOKE=1 bash scripts/test-all.sh` passed: API 115 tests, Agent 54 tests, Web Vitest 58 tests plus `vue-tsc`, Vite production build, and analysis Oracle/RabbitMQ e2e smoke.
 - Current completion state: Wave 6 and Wave 7 are backend-foundation complete only. Dynamic web rendering, full configurable submission/meta-review/camera-ready forms, review revision history, saved search/formula filters, import/export UI, bulk confirms, and workbench filter integration remain tracked in `TODO.md`.
+
+**Wave 8/Wave 9 Scheme C execution plan on 2026-05-08:**
+
+- User decision: execute Scheme C and split it into two slices: Slice A builds the foundation, Slice B completes the product depth.
+- Execution rule: continue using this file as the single authoritative plan ledger. Do not create a separate Wave8/Wave9 plan file.
+
+**Slice A - foundation scope:**
+
+- Wave 8 schema foundation:
+  - Add reviewer invitations, external reviewer delegation requests, conflict relationship graph rows, imported reviewer matching scores, assignment proposal bundles, assignment proposal rows, and assignment override audit in a new numbered Oracle migration.
+  - Add lookup indexes for conference invitation status, assignment/delegation ownership, conflict subject/object lookup, matching score lookup, proposal bundle status, and proposal candidate lookup.
+- Wave 8 API foundation:
+  - Chair/admin invites reviewers; reviewers accept/decline invitations.
+  - Assigned reviewers request external reviewer delegation; chair/admin approves/rejects.
+  - Chair/admin records/imports conflict relationships and matching scores.
+  - Chair/admin creates assignment proposal bundles that rank eligible reviewers but do not mutate final assignments.
+  - Final assignment confirmation remains in existing API transactions with COI/load checks; proposal output is advisory.
+- Wave 9 schema foundation:
+  - Add email template/version, outbound email history/outbox, offline review import batch/row, camera-ready file metadata, publication metadata, and proceedings export batch tables in a new numbered Oracle migration.
+  - Add lookup indexes for conference template key, outbound email status, offline import batch status, camera-ready lifecycle status, publication status, and proceedings export status.
+- Wave 9 API foundation:
+  - Chair/admin creates email templates, previews rendered templates deterministically, and records test-send/send history without using real SMTP.
+  - Reviewer downloads offline review template, uploads offline review rows for preview, and confirm applies valid rows through the same review-submit validation.
+  - Author uploads camera-ready metadata; chair/admin validates/rejects/accepts camera-ready packages.
+  - Chair/admin edits publication metadata and creates proceedings export previews without external DOI/index publication.
+- Slice A verification:
+  - RED tests first: schema wiring tests plus focused API integration tests for invitation accept/decline, delegation approval, COI hard block, proposal no-mutation, email preview/history, offline review preview no-mutation, camera-ready transitions, and proceedings preview validation.
+  - GREEN verification: target tests, API full suite, `verify_schema.sql`, `git diff --check`.
+
+**Slice B - completion scope:**
+
+- Wave 8 completion:
+  - Add bulk invitation/TPMS score import preview-confirm, proposal confirm flow that writes assignment drafts, explicit audited COI override path, subject-area matching display fields, and Agent assignment-assist request path that consumes proposal context while still remaining advisory.
+  - Add frontend chair/reviewer screens for invitations, delegation review, conflict/matching imports, and assignment proposal bundles.
+- Wave 9 completion:
+  - Add chair communication console, offline review import UI with row errors and confirm, author camera-ready checklist UI, publication/proceedings workbench, email send history, and export download metadata.
+  - Keep real SMTP, DOI registration, and external indexing behind fake/local adapters unless a later task explicitly enables real providers.
+- Slice B verification:
+  - Add frontend tests for invitation/delegation/import/proceedings screens and API tests proving bulk confirm enforces the same authorization, COI, load, and state checks as single-row actions.
+  - Run full repository verification with `RUN_ANALYSIS_E2E_SMOKE=1 bash scripts/test-all.sh` before claiming Wave8/Wave9 completion.
+
+**Current execution state for Wave8/Wave9:**
+
+- Slice A is active.
+- Slice B is planned but must not be marked complete until UI, bulk operations, import/export, and product-depth tests are landed.
+
+**Slice A execution result on 2026-05-08:**
+
+- Schema landed:
+  - Added `022_assignment_coi_maturity.sql` for reviewer invitations, external reviewer delegations, conflict relationships, reviewer matching scores, assignment proposal bundles/proposals, override audit, sequences, triggers, and lookup indexes.
+  - Added `023_publication_communication_maturity.sql` for email templates/versions/history, offline review import batch/rows, camera-ready file metadata, publication metadata, proceedings export previews, sequences, triggers, and lookup indexes.
+  - Wired 022/023 into `scripts/oracle-schema-apply.sh`, `scripts/dev-up.sh`, `scripts/test-all.sh`, and `database/oracle/verify_schema.sql`; updated schema counts to 56 tables, 55 sequences, 58 triggers, and 83 indexes.
+- Backend foundation landed:
+  - Wave 8 endpoints now cover reviewer invitation create/accept/decline, external delegation request/approve/reject, conflict relationship recording, reviewer matching score import, advisory assignment proposal bundle generation without final assignment mutation, and override audit recording.
+  - Wave 9 endpoints now cover email template create/preview/test-send history, offline review template/preview/confirm, camera-ready metadata submit/accept/reject, publication metadata upsert, and proceedings preview.
+  - Updated Oracle integration-test cleanup helpers for new FK children, including `EMAIL_TEMPLATE.ACTIVE_VERSION_ID` pointer clearing before deleting template versions.
+- Tests added:
+  - `RealPlatformWaveEightServiceTest` covers invitation invitee ownership, delegation approval/rejection without assignment creation, hard COI proposal blocking, matching score import, and override audit persistence.
+  - `RealPlatformWaveNineServiceTest` covers deterministic email preview/history, offline review template + preview no-mutation + confirm mutation, camera-ready metadata transition, publication metadata, and proceedings preview.
+  - `CodeQualityTest` covers 022/023 migration wiring and schema verification object coverage.
+- Verification run:
+  - `mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=CodeQualityTest,RealPlatformWaveEightServiceTest,RealPlatformWaveNineServiceTest test` first failed red before migrations/API existed, then passed after implementation.
+  - `docker cp database/oracle/verify_schema.sql review-oracle:/tmp/verify_schema.sql` and `docker exec review-oracle bash -lc "sqlplus -s review_app/ReviewApp12345@localhost/FREEPDB1 @/tmp/verify_schema.sql"` passed with `Schema verification passed.`
+  - `mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test` passed for the API full suite after cleanup helper fixes.
+- Current completion state:
+  - Wave 8/Wave 9 Slice A backend/schema/API foundation is complete.
+  - Slice B remains open for UI, bulk preview-confirm flows, real import/export/download surfaces, richer Agent proposal context, communication console, offline review UI, publication workbench, and provider adapters.

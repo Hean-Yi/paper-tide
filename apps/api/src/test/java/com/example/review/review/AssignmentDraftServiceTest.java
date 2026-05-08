@@ -35,6 +35,7 @@ class AssignmentDraftServiceTest {
 
     @BeforeEach
     void cleanAssignmentDraftTables() {
+        cleanWaveEightNineTables();
         jdbcTemplate.update("DELETE FROM REVIEW_FORM_RESPONSE");
         jdbcTemplate.update("DELETE FROM AUTHOR_FEEDBACK");
         jdbcTemplate.update("DELETE FROM PAPER_TAG");
@@ -62,6 +63,25 @@ class AssignmentDraftServiceTest {
         jdbcTemplate.update("DELETE FROM CONFERENCE");
         seedReviewerUser(1022L, "assignment_conflicted_reviewer_demo", "Southeast University");
         seedReviewerUser(1023L, "assignment_loaded_reviewer_demo", "Reviewer University");
+    }
+
+    private void cleanWaveEightNineTables() {
+        jdbcTemplate.update("DELETE FROM PROCEEDINGS_EXPORT_BATCH");
+        jdbcTemplate.update("DELETE FROM PUBLICATION_METADATA");
+        jdbcTemplate.update("DELETE FROM CAMERA_READY_FILE");
+        jdbcTemplate.update("DELETE FROM OFFLINE_REVIEW_IMPORT_ROW");
+        jdbcTemplate.update("DELETE FROM OFFLINE_REVIEW_IMPORT_BATCH");
+        jdbcTemplate.update("DELETE FROM OUTBOUND_EMAIL_HISTORY");
+        jdbcTemplate.update("UPDATE EMAIL_TEMPLATE SET ACTIVE_VERSION_ID = NULL");
+        jdbcTemplate.update("DELETE FROM EMAIL_TEMPLATE_VERSION");
+        jdbcTemplate.update("DELETE FROM EMAIL_TEMPLATE");
+        jdbcTemplate.update("DELETE FROM ASSIGNMENT_OVERRIDE_AUDIT");
+        jdbcTemplate.update("DELETE FROM ASSIGNMENT_PROPOSAL");
+        jdbcTemplate.update("DELETE FROM ASSIGNMENT_PROPOSAL_BUNDLE");
+        jdbcTemplate.update("DELETE FROM REVIEWER_MATCHING_SCORE");
+        jdbcTemplate.update("DELETE FROM CONFLICT_RELATIONSHIP");
+        jdbcTemplate.update("DELETE FROM EXTERNAL_REVIEWER_DELEGATION");
+        jdbcTemplate.update("DELETE FROM REVIEWER_INVITATION");
     }
 
     @Test

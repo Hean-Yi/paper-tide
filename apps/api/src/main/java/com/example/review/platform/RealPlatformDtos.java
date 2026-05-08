@@ -1,6 +1,7 @@
 package com.example.review.platform;
 
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -140,5 +141,208 @@ record TagImportErrorRow(
         int rowNumber,
         String rawLine,
         String error
+) {
+}
+
+record ReviewerInvitationRequest(
+        long reviewerId,
+        String invitationMessage,
+        Instant expiresAt
+) {
+}
+
+record ReviewerInvitationResponse(
+        long invitationId,
+        long conferenceId,
+        long reviewerId,
+        String invitationStatus
+) {
+}
+
+record ExternalDelegationRequest(
+        String externalName,
+        String externalEmail,
+        String rationale
+) {
+}
+
+record ExternalDelegationDecisionRequest(String decisionNote) {
+}
+
+record ExternalDelegationResponse(
+        long delegationId,
+        long assignmentId,
+        long manuscriptId,
+        String externalName,
+        String externalEmail,
+        String delegationStatus
+) {
+}
+
+record ConflictRelationshipRequest(
+        long reviewerId,
+        String conflictType,
+        String conflictSource,
+        String severity,
+        String note
+) {
+}
+
+record ConflictRelationshipResponse(
+        long conflictRelationshipId,
+        long manuscriptId,
+        long reviewerId,
+        String conflictType,
+        String conflictSource,
+        String severity
+) {
+}
+
+record ReviewerMatchingScoreRequest(
+        long reviewerId,
+        String scoreSource,
+        Double matchingScore,
+        String rationale
+) {
+}
+
+record ReviewerMatchingScoreResponse(
+        long matchingScoreId,
+        long manuscriptId,
+        long reviewerId,
+        double matchingScore
+) {
+}
+
+record AssignmentProposalRequest(String proposalName, Integer limit) {
+}
+
+record AssignmentProposalBundleResponse(
+        long bundleId,
+        long roundId,
+        long manuscriptId,
+        int proposalCount
+) {
+}
+
+record AssignmentOverrideRequest(
+        long reviewerId,
+        String overrideReason
+) {
+}
+
+record AssignmentOverrideResponse(
+        long overrideId,
+        long bundleId,
+        long reviewerId
+) {
+}
+
+record EmailTemplateRequest(
+        String templateKey,
+        String subjectTemplate,
+        String bodyTemplate
+) {
+}
+
+record EmailTemplateResponse(
+        long templateId,
+        long templateVersionId,
+        long conferenceId,
+        String templateKey
+) {
+}
+
+record EmailTemplatePreviewRequest(Map<String, Object> variables) {
+}
+
+record EmailTemplatePreviewResponse(String subject, String body) {
+}
+
+record EmailTemplateTestSendRequest(
+        String recipientEmail,
+        Map<String, Object> variables
+) {
+}
+
+record EmailTemplateTestSendResponse(
+        long emailHistoryId,
+        String deliveryStatus
+) {
+}
+
+record OfflineReviewPreviewRequest(String csvText) {
+}
+
+record OfflineReviewTemplateResponse(
+        long assignmentId,
+        String csvHeader,
+        String sampleRow
+) {
+}
+
+record OfflineReviewPreviewResponse(
+        long batchId,
+        int rowCount,
+        int validRowCount,
+        int errorCount
+) {
+}
+
+record OfflineReviewConfirmResponse(
+        long batchId,
+        int appliedCount
+) {
+}
+
+record OfflineReviewValidRow(
+        int rowNumber,
+        int overallScore,
+        String recommendation,
+        String commentsToAuthor
+) {
+}
+
+record CameraReadyFileRequest(
+        String fileName,
+        Long fileSize,
+        String checksumSha256,
+        Boolean copyrightConfirmed,
+        String licenseType
+) {
+}
+
+record CameraReadyFileResponse(
+        long cameraReadyFileId,
+        long manuscriptId,
+        String fileStatus
+) {
+}
+
+record CameraReadyDecisionRequest(String decisionNote) {
+}
+
+record PublicationMetadataRequest(
+        String doi,
+        String indexKeywords,
+        String publicationStatus
+) {
+}
+
+record PublicationMetadataResponse(
+        long publicationMetadataId,
+        long manuscriptId,
+        String publicationStatus
+) {
+}
+
+record ProceedingsPreviewRequest(String exportName) {
+}
+
+record ProceedingsPreviewResponse(
+        long exportBatchId,
+        long conferenceId,
+        int paperCount,
+        String exportStatus
 ) {
 }

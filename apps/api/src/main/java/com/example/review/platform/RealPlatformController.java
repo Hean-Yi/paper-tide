@@ -88,4 +88,189 @@ public class RealPlatformController {
     ) {
         return service.confirmImport(principal, batchId);
     }
+
+    @PostMapping("/conferences/{conferenceId}/reviewer-invitations")
+    public ReviewerInvitationResponse createReviewerInvitation(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long conferenceId,
+            @RequestBody ReviewerInvitationRequest request
+    ) {
+        return service.createReviewerInvitation(principal, conferenceId, request);
+    }
+
+    @PostMapping("/reviewer-invitations/{invitationId}/accept")
+    public ReviewerInvitationResponse acceptReviewerInvitation(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long invitationId
+    ) {
+        return service.acceptReviewerInvitation(principal, invitationId);
+    }
+
+    @PostMapping("/reviewer-invitations/{invitationId}/decline")
+    public ReviewerInvitationResponse declineReviewerInvitation(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long invitationId
+    ) {
+        return service.declineReviewerInvitation(principal, invitationId);
+    }
+
+    @PostMapping("/review-assignments/{assignmentId}/external-delegations")
+    public ExternalDelegationResponse requestExternalDelegation(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long assignmentId,
+            @RequestBody ExternalDelegationRequest request
+    ) {
+        return service.requestExternalDelegation(principal, assignmentId, request);
+    }
+
+    @PostMapping("/external-delegations/{delegationId}/approve")
+    public ExternalDelegationResponse approveExternalDelegation(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long delegationId,
+            @RequestBody ExternalDelegationDecisionRequest request
+    ) {
+        return service.decideExternalDelegation(principal, delegationId, "APPROVED", request);
+    }
+
+    @PostMapping("/external-delegations/{delegationId}/reject")
+    public ExternalDelegationResponse rejectExternalDelegation(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long delegationId,
+            @RequestBody ExternalDelegationDecisionRequest request
+    ) {
+        return service.decideExternalDelegation(principal, delegationId, "REJECTED", request);
+    }
+
+    @PostMapping("/manuscripts/{manuscriptId}/conflicts")
+    public ConflictRelationshipResponse recordConflictRelationship(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long manuscriptId,
+            @RequestBody ConflictRelationshipRequest request
+    ) {
+        return service.recordConflictRelationship(principal, manuscriptId, request);
+    }
+
+    @PostMapping("/manuscripts/{manuscriptId}/matching-scores")
+    public ReviewerMatchingScoreResponse recordReviewerMatchingScore(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long manuscriptId,
+            @RequestBody ReviewerMatchingScoreRequest request
+    ) {
+        return service.recordReviewerMatchingScore(principal, manuscriptId, request);
+    }
+
+    @PostMapping("/review-rounds/{roundId}/assignment-proposals")
+    public AssignmentProposalBundleResponse createAssignmentProposalBundle(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long roundId,
+            @RequestBody AssignmentProposalRequest request
+    ) {
+        return service.createAssignmentProposalBundle(principal, roundId, request);
+    }
+
+    @PostMapping("/assignment-proposals/{bundleId}/overrides")
+    public AssignmentOverrideResponse recordAssignmentOverride(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long bundleId,
+            @RequestBody AssignmentOverrideRequest request
+    ) {
+        return service.recordAssignmentOverride(principal, bundleId, request);
+    }
+
+    @PostMapping("/conferences/{conferenceId}/email-templates")
+    public EmailTemplateResponse createEmailTemplate(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long conferenceId,
+            @RequestBody EmailTemplateRequest request
+    ) {
+        return service.createEmailTemplate(principal, conferenceId, request);
+    }
+
+    @PostMapping("/email-templates/{templateId}/preview")
+    public EmailTemplatePreviewResponse previewEmailTemplate(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long templateId,
+            @RequestBody EmailTemplatePreviewRequest request
+    ) {
+        return service.previewEmailTemplate(principal, templateId, request);
+    }
+
+    @PostMapping("/email-templates/{templateId}/test-send")
+    public EmailTemplateTestSendResponse testSendEmailTemplate(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long templateId,
+            @RequestBody EmailTemplateTestSendRequest request
+    ) {
+        return service.testSendEmailTemplate(principal, templateId, request);
+    }
+
+    @PostMapping("/review-assignments/{assignmentId}/offline-review/preview")
+    public OfflineReviewPreviewResponse previewOfflineReview(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long assignmentId,
+            @RequestBody OfflineReviewPreviewRequest request
+    ) {
+        return service.previewOfflineReview(principal, assignmentId, request);
+    }
+
+    @GetMapping("/review-assignments/{assignmentId}/offline-review/template")
+    public OfflineReviewTemplateResponse offlineReviewTemplate(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long assignmentId
+    ) {
+        return service.offlineReviewTemplate(principal, assignmentId);
+    }
+
+    @PostMapping("/offline-review-imports/{batchId}/confirm")
+    public OfflineReviewConfirmResponse confirmOfflineReview(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long batchId
+    ) {
+        return service.confirmOfflineReview(principal, batchId);
+    }
+
+    @PostMapping("/manuscripts/{manuscriptId}/camera-ready-files")
+    public CameraReadyFileResponse submitCameraReadyFile(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long manuscriptId,
+            @RequestBody CameraReadyFileRequest request
+    ) {
+        return service.submitCameraReadyFile(principal, manuscriptId, request);
+    }
+
+    @PostMapping("/camera-ready-files/{fileId}/accept")
+    public CameraReadyFileResponse acceptCameraReadyFile(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long fileId,
+            @RequestBody CameraReadyDecisionRequest request
+    ) {
+        return service.decideCameraReadyFile(principal, fileId, "ACCEPTED", request);
+    }
+
+    @PostMapping("/camera-ready-files/{fileId}/reject")
+    public CameraReadyFileResponse rejectCameraReadyFile(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long fileId,
+            @RequestBody CameraReadyDecisionRequest request
+    ) {
+        return service.decideCameraReadyFile(principal, fileId, "REJECTED", request);
+    }
+
+    @PostMapping("/manuscripts/{manuscriptId}/publication-metadata")
+    public PublicationMetadataResponse upsertPublicationMetadata(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long manuscriptId,
+            @RequestBody PublicationMetadataRequest request
+    ) {
+        return service.upsertPublicationMetadata(principal, manuscriptId, request);
+    }
+
+    @PostMapping("/conferences/{conferenceId}/proceedings/preview")
+    public ProceedingsPreviewResponse previewProceedings(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long conferenceId,
+            @RequestBody ProceedingsPreviewRequest request
+    ) {
+        return service.previewProceedings(principal, conferenceId, request);
+    }
 }

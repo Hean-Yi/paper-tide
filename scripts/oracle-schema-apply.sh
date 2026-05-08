@@ -41,5 +41,6 @@ sqlplus -s ${APP_USER}/${APP_USER_PASSWORD}@localhost/FREEPDB1 @/tmp/review-db/0
 sqlplus -s ${APP_USER}/${APP_USER_PASSWORD}@localhost/FREEPDB1 @/tmp/review-db/022_assignment_coi_maturity.sql &&
 sqlplus -s ${APP_USER}/${APP_USER_PASSWORD}@localhost/FREEPDB1 @/tmp/review-db/023_publication_communication_maturity.sql &&
 sqlplus -s ${APP_USER}/${APP_USER_PASSWORD}@localhost/FREEPDB1 @/tmp/review-db/024_wave8_wave9_slice_b_completion.sql &&
+sqlplus -s ${APP_USER}/${APP_USER_PASSWORD}@localhost/FREEPDB1 @/tmp/review-db/025_wave3_wave6_full_closure.sql &&
 sqlplus -s ${APP_USER}/${APP_USER_PASSWORD}@localhost/FREEPDB1 @/tmp/review-db/verify_schema.sql
 "

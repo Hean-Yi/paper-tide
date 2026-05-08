@@ -125,7 +125,7 @@ class CodeQualityTest {
         assertTrue(verification.contains("IDX_REVIEW_ROUND_STATUS_ID"));
         assertTrue(verification.contains("IDX_REVIEW_ASSIGNMENT_ROUND_ID"));
         assertTrue(verification.contains("IDX_REVIEW_REPORT_ROUND"));
-        assertTrue(verification.contains("Expected 84 indexes"));
+        assertTrue(verification.contains("Expected 87 indexes"));
 
         assertTrue(applyScript.contains("009_execution_job_attempt_count.sql"));
         assertTrue(applyScript.contains("010_database_query_optimization.sql"));
@@ -176,10 +176,10 @@ class CodeQualityTest {
         }
         assertTrue(applyScript.contains("021_real_platform_wave6_wave7.sql"));
         assertTrue(devUp.contains("021_real_platform_wave6_wave7.sql"));
-        assertTrue(verification.contains("Expected 56 tables"));
-        assertTrue(verification.contains("Expected 55 sequences"));
-        assertTrue(verification.contains("Expected 58 triggers"));
-        assertTrue(verification.contains("Expected 84 indexes"));
+        assertTrue(verification.contains("Expected 58 tables"));
+        assertTrue(verification.contains("Expected 57 sequences"));
+        assertTrue(verification.contains("Expected 60 triggers"));
+        assertTrue(verification.contains("Expected 87 indexes"));
     }
 
     @Test
@@ -250,6 +250,28 @@ class CodeQualityTest {
         assertTrue(verification.contains("IDX_IMPORT_BATCH_TYPE_STATUS"));
         assertTrue(verification.contains("MATCHING_SCORES"));
         assertTrue(verification.contains("Wave8/Wave9 SliceB import constraint is missing"));
+    }
+
+    @Test
+    void waveThreeSixFullClosureMigrationIsWiredAndVerified() throws IOException {
+        Path migrationPath = Path.of("..", "..", "database", "oracle", "025_wave3_wave6_full_closure.sql");
+        assertTrue(Files.exists(migrationPath));
+
+        String migration = Files.readString(migrationPath);
+        String verification = Files.readString(Path.of("..", "..", "database", "oracle", "verify_schema.sql"));
+        String applyScript = Files.readString(Path.of("..", "..", "scripts", "oracle-schema-apply.sh"));
+        String devUp = Files.readString(Path.of("..", "..", "scripts", "dev-up.sh"));
+        String testAll = Files.readString(Path.of("..", "..", "scripts", "test-all.sh"));
+
+        assertTrue(migration.contains("WORKFLOW_FORM_RESPONSE"));
+        assertTrue(migration.contains("REVIEW_FORM_RESPONSE_REVISION"));
+        assertTrue(migration.contains("REBUTTAL_CLOSE_AT"));
+        assertTrue(migration.contains("CAMERA_READY_CLOSE_AT"));
+        assertTrue(migration.contains("IDX_CONFERENCE_PHASE_REBUTTAL"));
+        assertTrue(applyScript.contains("025_wave3_wave6_full_closure.sql"));
+        assertTrue(devUp.contains("025_wave3_wave6_full_closure.sql"));
+        assertTrue(testAll.contains("025_wave3_wave6_full_closure.sql"));
+        assertTrue(verification.contains("Wave3/Wave6 full closure schema objects are missing"));
     }
 
     @Test

@@ -28,7 +28,9 @@ class DecisionWorkbenchReadRepositoryTest {
 
     @BeforeEach
     void cleanWorkflowTables() {
+        jdbcTemplate.update("DELETE FROM REVIEW_FORM_RESPONSE_REVISION");
         jdbcTemplate.update("DELETE FROM REVIEW_FORM_RESPONSE");
+        jdbcTemplate.update("DELETE FROM WORKFLOW_FORM_RESPONSE");
         jdbcTemplate.update("DELETE FROM AUTHOR_FEEDBACK");
         jdbcTemplate.update("DELETE FROM PAPER_TAG");
         jdbcTemplate.update("DELETE FROM IMPORT_BATCH");

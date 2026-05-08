@@ -134,6 +134,12 @@ if command -v mvn >/dev/null 2>&1 && command -v java >/dev/null 2>&1; then
       ! oracle_constraint_mentions "CK_IMPORT_BATCH_TYPE" "MATCHING_SCORES"; then
       apply_single_oracle_migration "024_wave8_wave9_slice_b_completion.sql"
     fi
+    if ! oracle_table_exists "WORKFLOW_FORM_RESPONSE" ||
+      ! oracle_table_exists "REVIEW_FORM_RESPONSE_REVISION" ||
+      ! oracle_column_exists "CONFERENCE_PHASE" "REBUTTAL_CLOSE_AT" ||
+      ! oracle_column_exists "CONFERENCE_PHASE" "CAMERA_READY_CLOSE_AT"; then
+      apply_single_oracle_migration "025_wave3_wave6_full_closure.sql"
+    fi
   fi
   if [ -x "$ROOT_DIR/scripts/demo-seed.sh" ] && command -v docker >/dev/null 2>&1; then
     bash "$ROOT_DIR/scripts/demo-seed.sh"

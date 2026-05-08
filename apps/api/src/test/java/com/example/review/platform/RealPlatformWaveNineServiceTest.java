@@ -49,7 +49,9 @@ class RealPlatformWaveNineServiceTest {
         jdbcTemplate.update("DELETE FROM CONFLICT_RELATIONSHIP");
         jdbcTemplate.update("DELETE FROM EXTERNAL_REVIEWER_DELEGATION");
         jdbcTemplate.update("DELETE FROM REVIEWER_INVITATION");
+        jdbcTemplate.update("DELETE FROM REVIEW_FORM_RESPONSE_REVISION");
         jdbcTemplate.update("DELETE FROM REVIEW_FORM_RESPONSE");
+        jdbcTemplate.update("DELETE FROM WORKFLOW_FORM_RESPONSE");
         jdbcTemplate.update("DELETE FROM AUTHOR_FEEDBACK");
         jdbcTemplate.update("DELETE FROM PAPER_TAG");
         jdbcTemplate.update("DELETE FROM IMPORT_BATCH");

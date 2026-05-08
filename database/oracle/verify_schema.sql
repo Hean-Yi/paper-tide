@@ -21,6 +21,7 @@ DECLARE
   v_assignment_coi_maturity_tables NUMBER;
   v_publication_communication_maturity_tables NUMBER;
   v_wave8_wave9_slice_b_constraint NUMBER;
+  v_wave3_wave6_full_closure_objects NUMBER;
 BEGIN
   SELECT COUNT(*)
     INTO v_table_count
@@ -81,7 +82,9 @@ BEGIN
      'OFFLINE_REVIEW_IMPORT_ROW',
      'CAMERA_READY_FILE',
      'PUBLICATION_METADATA',
-     'PROCEEDINGS_EXPORT_BATCH'
+     'PROCEEDINGS_EXPORT_BATCH',
+     'WORKFLOW_FORM_RESPONSE',
+     'REVIEW_FORM_RESPONSE_REVISION'
    );
 
   SELECT COUNT(*)
@@ -142,7 +145,9 @@ BEGIN
      'SEQ_OFFLINE_REVIEW_IMPORT_ROW',
      'SEQ_CAMERA_READY_FILE',
      'SEQ_PUBLICATION_METADATA',
-     'SEQ_PROCEEDINGS_EXPORT_BATCH'
+     'SEQ_PROCEEDINGS_EXPORT_BATCH',
+     'SEQ_WORKFLOW_FORM_RESPONSE',
+     'SEQ_REVIEW_FORM_RESPONSE_REV'
    );
 
   SELECT COUNT(*)
@@ -206,7 +211,9 @@ BEGIN
      'TRG_OFFLINE_REVIEW_ROW_BI',
      'TRG_CAMERA_READY_FILE_BI',
      'TRG_PUBLICATION_METADATA_BI',
-     'TRG_PROCEEDINGS_EXPORT_BATCH_BI'
+     'TRG_PROCEEDINGS_EXPORT_BATCH_BI',
+     'TRG_WORKFLOW_FORM_RESPONSE_BIU',
+     'TRG_REVIEW_FORM_RESPONSE_REV_BI'
    );
 
   SELECT COUNT(*)
@@ -296,7 +303,10 @@ BEGIN
      'IDX_OFFLINE_REVIEW_ROW',
      'IDX_CAMERA_READY_FILE_STATUS',
      'IDX_PUBLICATION_METADATA_STATUS',
-     'IDX_PROCEEDINGS_EXPORT_STATUS'
+     'IDX_PROCEEDINGS_EXPORT_STATUS',
+     'IDX_WORKFLOW_FORM_RESPONSE_SUBJ',
+     'IDX_CONFERENCE_PHASE_REBUTTAL',
+     'IDX_CONFERENCE_PHASE_CAMERA_READY'
    );
 
   SELECT COUNT(*)
@@ -371,6 +381,8 @@ BEGIN
        'TRG_CAMERA_READY_FILE_BI',
        'TRG_PUBLICATION_METADATA_BI',
        'TRG_PROCEEDINGS_EXPORT_BATCH_BI',
+       'TRG_WORKFLOW_FORM_RESPONSE_BIU',
+       'TRG_REVIEW_FORM_RESPONSE_REV_BI',
        'PRC_REVIEW_COMPLETION_STATS',
        'PRC_REVIEW_WORKLOAD_SUMMARY'
      )
@@ -438,6 +450,8 @@ BEGIN
      'TRG_CAMERA_READY_FILE_BI',
      'TRG_PUBLICATION_METADATA_BI',
      'TRG_PROCEEDINGS_EXPORT_BATCH_BI',
+     'TRG_WORKFLOW_FORM_RESPONSE_BIU',
+     'TRG_REVIEW_FORM_RESPONSE_REV_BI',
      'PRC_REVIEW_COMPLETION_STATS',
      'PRC_REVIEW_WORKLOAD_SUMMARY'
    );
@@ -540,28 +554,53 @@ BEGIN
      'PROCEEDINGS_EXPORT_BATCH'
    );
 
-  IF v_table_count <> 56 THEN
-    RAISE_APPLICATION_ERROR(-20001, 'Expected 56 tables, found ' || v_table_count);
+  SELECT COUNT(*)
+    INTO v_wave3_wave6_full_closure_objects
+    FROM (
+      SELECT TABLE_NAME AS OBJECT_NAME
+      FROM USER_TABLES
+      WHERE TABLE_NAME IN ('WORKFLOW_FORM_RESPONSE', 'REVIEW_FORM_RESPONSE_REVISION')
+      UNION ALL
+      SELECT SEQUENCE_NAME AS OBJECT_NAME
+      FROM USER_SEQUENCES
+      WHERE SEQUENCE_NAME IN ('SEQ_WORKFLOW_FORM_RESPONSE', 'SEQ_REVIEW_FORM_RESPONSE_REV')
+      UNION ALL
+      SELECT TRIGGER_NAME AS OBJECT_NAME
+      FROM USER_TRIGGERS
+      WHERE TRIGGER_NAME IN ('TRG_WORKFLOW_FORM_RESPONSE_BIU', 'TRG_REVIEW_FORM_RESPONSE_REV_BI')
+      UNION ALL
+      SELECT COLUMN_NAME AS OBJECT_NAME
+      FROM USER_TAB_COLUMNS
+      WHERE TABLE_NAME = 'CONFERENCE_PHASE'
+        AND COLUMN_NAME IN ('REBUTTAL_OPEN_AT', 'REBUTTAL_CLOSE_AT', 'CAMERA_READY_OPEN_AT', 'CAMERA_READY_CLOSE_AT')
+    );
+
+  IF v_table_count <> 58 THEN
+    RAISE_APPLICATION_ERROR(-20001, 'Expected 58 tables, found ' || v_table_count);
   END IF;
 
-  IF v_sequence_count <> 55 THEN
-    RAISE_APPLICATION_ERROR(-20002, 'Expected 55 sequences, found ' || v_sequence_count);
+  IF v_sequence_count <> 57 THEN
+    RAISE_APPLICATION_ERROR(-20002, 'Expected 57 sequences, found ' || v_sequence_count);
   END IF;
 
-  IF v_trigger_count <> 58 THEN
-    RAISE_APPLICATION_ERROR(-20003, 'Expected 58 triggers, found ' || v_trigger_count);
+  IF v_trigger_count <> 60 THEN
+    RAISE_APPLICATION_ERROR(-20003, 'Expected 60 triggers, found ' || v_trigger_count);
   END IF;
 
   IF v_procedure_count <> 2 THEN
     RAISE_APPLICATION_ERROR(-20004, 'Expected 2 procedures, found ' || v_procedure_count);
   END IF;
 
-  IF v_index_count <> 84 THEN
-    RAISE_APPLICATION_ERROR(-20005, 'Expected 84 indexes, found ' || v_index_count);
+  IF v_index_count <> 87 THEN
+    RAISE_APPLICATION_ERROR(-20005, 'Expected 87 indexes, found ' || v_index_count);
   END IF;
 
   IF v_wave8_wave9_slice_b_constraint <> 1 THEN
     RAISE_APPLICATION_ERROR(-20023, 'Wave8/Wave9 SliceB import constraint is missing');
+  END IF;
+
+  IF v_wave3_wave6_full_closure_objects <> 10 THEN
+    RAISE_APPLICATION_ERROR(-20024, 'Wave3/Wave6 full closure schema objects are missing');
   END IF;
 
   IF v_role_count <> 4 THEN

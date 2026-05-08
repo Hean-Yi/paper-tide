@@ -177,6 +177,13 @@ apply_oracle_wave8_wave9_slice_b_completion_schema() {
     >/dev/null
 }
 
+apply_oracle_wave3_wave6_full_closure_schema() {
+  docker cp "$ROOT_DIR/database/oracle/025_wave3_wave6_full_closure.sql" "$DEFAULT_ORACLE_CONTAINER:/tmp/025_wave3_wave6_full_closure.sql" >/dev/null
+  docker exec "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE} @/tmp/025_wave3_wave6_full_closure.sql" \
+    >/dev/null
+}
+
 oracle_column_exists() {
   local table_name="$1"
   local column_name="$2"
@@ -252,6 +259,13 @@ all_publication_communication_maturity_tables_exist() {
 wave8_wave9_slice_b_completion_exists() {
   oracle_index_exists "IDX_IMPORT_BATCH_TYPE_STATUS" &&
     oracle_constraint_mentions "CK_IMPORT_BATCH_TYPE" "MATCHING_SCORES"
+}
+
+wave3_wave6_full_closure_exists() {
+  oracle_table_exists "WORKFLOW_FORM_RESPONSE" &&
+    oracle_table_exists "REVIEW_FORM_RESPONSE_REVISION" &&
+    oracle_column_exists "CONFERENCE_PHASE" "REBUTTAL_CLOSE_AT" &&
+    oracle_column_exists "CONFERENCE_PHASE" "CAMERA_READY_CLOSE_AT"
 }
 
 oracle_constraint_mentions() {
@@ -373,6 +387,11 @@ ensure_oracle_schema() {
   if ! wave8_wave9_slice_b_completion_exists; then
     echo "Oracle schema detected without 024 Wave8/Wave9 SliceB completion objects. Applying incremental schema..." >&2
     apply_oracle_wave8_wave9_slice_b_completion_schema
+  fi
+
+  if ! wave3_wave6_full_closure_exists; then
+    echo "Oracle schema detected without 025 Wave3/Wave6 full closure objects. Applying incremental schema..." >&2
+    apply_oracle_wave3_wave6_full_closure_schema
   fi
 
   if verify_oracle_schema; then

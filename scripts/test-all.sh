@@ -140,6 +140,18 @@ if command -v mvn >/dev/null 2>&1 && command -v java >/dev/null 2>&1; then
       ! oracle_column_exists "CONFERENCE_PHASE" "CAMERA_READY_CLOSE_AT"; then
       apply_single_oracle_migration "025_wave3_wave6_full_closure.sql"
     fi
+    if ! oracle_table_exists "WORKBENCH_SAVED_FILTER" ||
+      ! oracle_table_exists "WORKBENCH_EXPORT_BATCH" ||
+      ! oracle_table_exists "BULK_OPERATION_BATCH" ||
+      ! oracle_table_exists "BULK_OPERATION_ROW" ||
+      ! oracle_table_exists "ASSIGNMENT_PROPOSAL_CONTEXT" ||
+      ! oracle_table_exists "STORED_FILE" ||
+      ! oracle_table_exists "PROCEEDINGS_EXPORT_FILE" ||
+      ! oracle_table_exists "DOI_INDEX_ADAPTER_SUBMISSION" ||
+      ! oracle_table_exists "COMMUNICATION_COMPOSE_BATCH" ||
+      ! oracle_table_exists "COMMUNICATION_REMINDER"; then
+      apply_single_oracle_migration "026_wave7_wave9_full_closure.sql"
+    fi
   fi
   if [ -x "$ROOT_DIR/scripts/demo-seed.sh" ] && command -v docker >/dev/null 2>&1; then
     bash "$ROOT_DIR/scripts/demo-seed.sh"

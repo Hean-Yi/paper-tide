@@ -184,6 +184,13 @@ apply_oracle_wave3_wave6_full_closure_schema() {
     >/dev/null
 }
 
+apply_oracle_wave7_wave9_full_closure_schema() {
+  docker cp "$ROOT_DIR/database/oracle/026_wave7_wave9_full_closure.sql" "$DEFAULT_ORACLE_CONTAINER:/tmp/026_wave7_wave9_full_closure.sql" >/dev/null
+  docker exec "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE} @/tmp/026_wave7_wave9_full_closure.sql" \
+    >/dev/null
+}
+
 oracle_column_exists() {
   local table_name="$1"
   local column_name="$2"
@@ -266,6 +273,19 @@ wave3_wave6_full_closure_exists() {
     oracle_table_exists "REVIEW_FORM_RESPONSE_REVISION" &&
     oracle_column_exists "CONFERENCE_PHASE" "REBUTTAL_CLOSE_AT" &&
     oracle_column_exists "CONFERENCE_PHASE" "CAMERA_READY_CLOSE_AT"
+}
+
+wave7_wave9_full_closure_exists() {
+  oracle_table_exists "WORKBENCH_SAVED_FILTER" &&
+    oracle_table_exists "WORKBENCH_EXPORT_BATCH" &&
+    oracle_table_exists "BULK_OPERATION_BATCH" &&
+    oracle_table_exists "BULK_OPERATION_ROW" &&
+    oracle_table_exists "ASSIGNMENT_PROPOSAL_CONTEXT" &&
+    oracle_table_exists "STORED_FILE" &&
+    oracle_table_exists "PROCEEDINGS_EXPORT_FILE" &&
+    oracle_table_exists "DOI_INDEX_ADAPTER_SUBMISSION" &&
+    oracle_table_exists "COMMUNICATION_COMPOSE_BATCH" &&
+    oracle_table_exists "COMMUNICATION_REMINDER"
 }
 
 oracle_constraint_mentions() {
@@ -392,6 +412,11 @@ ensure_oracle_schema() {
   if ! wave3_wave6_full_closure_exists; then
     echo "Oracle schema detected without 025 Wave3/Wave6 full closure objects. Applying incremental schema..." >&2
     apply_oracle_wave3_wave6_full_closure_schema
+  fi
+
+  if ! wave7_wave9_full_closure_exists; then
+    echo "Oracle schema detected without 026 Wave7/Wave9 full closure objects. Applying incremental schema..." >&2
+    apply_oracle_wave7_wave9_full_closure_schema
   fi
 
   if verify_oracle_schema; then

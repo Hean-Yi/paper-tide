@@ -125,7 +125,7 @@ class CodeQualityTest {
         assertTrue(verification.contains("IDX_REVIEW_ROUND_STATUS_ID"));
         assertTrue(verification.contains("IDX_REVIEW_ASSIGNMENT_ROUND_ID"));
         assertTrue(verification.contains("IDX_REVIEW_REPORT_ROUND"));
-        assertTrue(verification.contains("Expected 87 indexes"));
+        assertTrue(verification.contains("Expected 97 indexes"));
 
         assertTrue(applyScript.contains("009_execution_job_attempt_count.sql"));
         assertTrue(applyScript.contains("010_database_query_optimization.sql"));
@@ -176,10 +176,10 @@ class CodeQualityTest {
         }
         assertTrue(applyScript.contains("021_real_platform_wave6_wave7.sql"));
         assertTrue(devUp.contains("021_real_platform_wave6_wave7.sql"));
-        assertTrue(verification.contains("Expected 58 tables"));
-        assertTrue(verification.contains("Expected 57 sequences"));
-        assertTrue(verification.contains("Expected 60 triggers"));
-        assertTrue(verification.contains("Expected 87 indexes"));
+        assertTrue(verification.contains("Expected 68 tables"));
+        assertTrue(verification.contains("Expected 67 sequences"));
+        assertTrue(verification.contains("Expected 70 triggers"));
+        assertTrue(verification.contains("Expected 97 indexes"));
     }
 
     @Test
@@ -272,6 +272,37 @@ class CodeQualityTest {
         assertTrue(devUp.contains("025_wave3_wave6_full_closure.sql"));
         assertTrue(testAll.contains("025_wave3_wave6_full_closure.sql"));
         assertTrue(verification.contains("Wave3/Wave6 full closure schema objects are missing"));
+    }
+
+    @Test
+    void waveSevenNineFullClosureMigrationIsWiredAndVerified() throws IOException {
+        Path migrationPath = Path.of("..", "..", "database", "oracle", "026_wave7_wave9_full_closure.sql");
+        assertTrue(Files.exists(migrationPath));
+
+        String migration = Files.readString(migrationPath);
+        String verification = Files.readString(Path.of("..", "..", "database", "oracle", "verify_schema.sql"));
+        String applyScript = Files.readString(Path.of("..", "..", "scripts", "oracle-schema-apply.sh"));
+        String devUp = Files.readString(Path.of("..", "..", "scripts", "dev-up.sh"));
+        String testAll = Files.readString(Path.of("..", "..", "scripts", "test-all.sh"));
+
+        for (String tableName : waveSevenNineFullClosureTables()) {
+            assertTrue(migration.contains("CREATE TABLE " + tableName), "026 migration should create " + tableName);
+            assertTrue(verification.contains(tableName), "verify_schema should verify " + tableName);
+            assertTrue(devUp.contains(tableName), "dev-up should detect " + tableName);
+            assertTrue(testAll.contains(tableName), "test-all should detect " + tableName);
+        }
+        for (String indexName : waveSevenNineFullClosureIndexes()) {
+            assertTrue(migration.contains(indexName), "026 migration should create " + indexName);
+            assertTrue(verification.contains(indexName), "verify_schema should verify " + indexName);
+        }
+        assertTrue(applyScript.contains("026_wave7_wave9_full_closure.sql"));
+        assertTrue(devUp.contains("026_wave7_wave9_full_closure.sql"));
+        assertTrue(testAll.contains("026_wave7_wave9_full_closure.sql"));
+        assertTrue(verification.contains("Expected 68 tables"));
+        assertTrue(verification.contains("Expected 67 sequences"));
+        assertTrue(verification.contains("Expected 70 triggers"));
+        assertTrue(verification.contains("Expected 97 indexes"));
+        assertTrue(verification.contains("Wave7/Wave9 full closure schema objects are missing"));
     }
 
     @Test
@@ -473,6 +504,36 @@ class CodeQualityTest {
                 "IDX_CAMERA_READY_FILE_STATUS",
                 "IDX_PUBLICATION_METADATA_STATUS",
                 "IDX_PROCEEDINGS_EXPORT_STATUS"
+        );
+    }
+
+    private List<String> waveSevenNineFullClosureTables() {
+        return List.of(
+                "WORKBENCH_SAVED_FILTER",
+                "WORKBENCH_EXPORT_BATCH",
+                "BULK_OPERATION_BATCH",
+                "BULK_OPERATION_ROW",
+                "ASSIGNMENT_PROPOSAL_CONTEXT",
+                "STORED_FILE",
+                "PROCEEDINGS_EXPORT_FILE",
+                "DOI_INDEX_ADAPTER_SUBMISSION",
+                "COMMUNICATION_COMPOSE_BATCH",
+                "COMMUNICATION_REMINDER"
+        );
+    }
+
+    private List<String> waveSevenNineFullClosureIndexes() {
+        return List.of(
+                "IDX_WORKBENCH_FILTER_SCOPE",
+                "IDX_WORKBENCH_EXPORT_STATUS",
+                "IDX_BULK_OPERATION_STATUS",
+                "IDX_BULK_OPERATION_ROW_BATCH",
+                "IDX_PROPOSAL_CONTEXT_BUNDLE",
+                "IDX_STORED_FILE_LOOKUP",
+                "IDX_PROCEEDINGS_FILE_EXPORT",
+                "IDX_DOI_INDEX_STATUS",
+                "IDX_COMM_COMPOSE_STATUS",
+                "IDX_COMM_REMINDER_STATUS"
         );
     }
 }

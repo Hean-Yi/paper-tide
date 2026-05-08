@@ -3,6 +3,7 @@ import type {
   AnalysisIntentResponse,
   AssignmentPaper,
   ReviewFormPackage,
+  ReviewFormRevision,
   ReviewerAssignment,
   ReviewerAssistState,
   ReviewerBiddingItem,
@@ -42,6 +43,10 @@ export function submitReviewReport(assignmentId: number, payload: ReviewReportFo
 
 export function getReviewForm(assignmentId: number) {
   return apiRequest<ReviewFormPackage>(`/review-assignments/${assignmentId}/review-form`);
+}
+
+export function listReviewFormRevisions(assignmentId: number) {
+  return apiRequest<ReviewFormRevision[]>(`/review-assignments/${assignmentId}/review-form/revisions`);
 }
 
 export function saveReviewFormResponse(

@@ -426,6 +426,28 @@ export interface ReviewFormPackage {
   currentResponse?: ReviewFormResponse | null;
 }
 
+export interface WorkflowFormResponse {
+  responseId: number;
+  formId: number;
+  subjectType: string;
+  subjectId: number;
+  responseStatus: string;
+  answers: Record<string, unknown>;
+  submittedAt?: string | null;
+}
+
+export interface WorkflowFormPackage {
+  form: DynamicFormDefinition;
+  currentResponse?: WorkflowFormResponse | null;
+}
+
+export interface ReviewFormRevision {
+  revisionId: number;
+  revisionNo: number;
+  answers: Record<string, unknown>;
+  submittedAt?: string | null;
+}
+
 export interface ReviewReportForm {
   noveltyScore: number;
   methodScore: number;

@@ -8,12 +8,15 @@ import { useApiError } from "../../composables/useApiError";
 import { useAsyncAction } from "../../composables/useAsyncAction";
 import {
   createManuscript,
+  getManuscriptForm,
   listPublicCfps,
+  saveManuscriptFormResponse,
   submitVersion,
   uploadPdf,
   type AuthorInput,
   type ConferenceCfpSummary,
-  type ManuscriptSummary
+  type ManuscriptSummary,
+  type WorkflowFormPackage
 } from "../../lib/workflow-api";
 import { formatDateTime, statusTagType, workflowLabel } from "../../lib/workflow-format";
 import { PDF_UPLOAD_LIMIT_ERROR, PDF_UPLOAD_LIMIT_HINT, PDF_UPLOAD_MAX_BYTES } from "../../lib/upload";
@@ -26,6 +29,9 @@ const created = ref<ManuscriptSummary | null>(null);
 const conferences = ref<ConferenceCfpSummary[]>([]);
 const loadingConferences = ref(false);
 const selectedPdf = ref<File | null>(null);
+const submissionChecklist = ref<WorkflowFormPackage | null>(null);
+const checklistSubmitting = ref(false);
+const checklistAnswers = reactive<Record<string, unknown>>({});
 const draftFormRef = ref<FormInstance>();
 const form = reactive({
   conferenceId: undefined as number | undefined,
@@ -120,12 +126,58 @@ async function createDraft() {
       keywords: form.keywords,
       authors: form.authors
     });
+    await loadSubmissionChecklist();
     ElMessage.success("Manuscript created.");
   } catch (error) {
     showApiError(error, "Manuscript could not be created.");
   } finally {
     submitting.value = false;
   }
+}
+
+async function loadSubmissionChecklist() {
+  if (!created.value) {
+    return;
+  }
+  try {
+    submissionChecklist.value = await getManuscriptForm(created.value.manuscriptId, "SUBMISSION");
+    Object.keys(checklistAnswers).forEach((key) => delete checklistAnswers[key]);
+    for (const field of submissionChecklist.value.form.fields) {
+      checklistAnswers[field.fieldKey] = submissionChecklist.value.currentResponse?.answers?.[field.fieldKey] ?? "";
+    }
+  } catch {
+    submissionChecklist.value = null;
+  }
+}
+
+async function submitChecklist() {
+  if (!created.value || !submissionChecklist.value) {
+    return;
+  }
+  if (hasMissingRequiredChecklistAnswer()) {
+    ElMessage.error("Required checklist fields must be completed.");
+    return;
+  }
+  checklistSubmitting.value = true;
+  try {
+    await saveManuscriptFormResponse(created.value.manuscriptId, {
+      formId: submissionChecklist.value.form.formId,
+      responseStatus: "SUBMITTED",
+      answers: { ...checklistAnswers }
+    });
+    ElMessage.success("Submission checklist submitted.");
+    await loadSubmissionChecklist();
+  } catch (error) {
+    showApiError(error, "Submission checklist could not be submitted.");
+  } finally {
+    checklistSubmitting.value = false;
+  }
+}
+
+function hasMissingRequiredChecklistAnswer() {
+  return Boolean(submissionChecklist.value?.form.fields.some((field) =>
+    field.required && !String(checklistAnswers[field.fieldKey] ?? "").trim()
+  ));
 }
 
 async function uploadSelectedPdf() {
@@ -250,6 +302,40 @@ onMounted(() => {
       </template>
       Upload the PDF before final submission.
     </el-alert>
+
+    <section v-if="created && submissionChecklist" class="workflow-form review-form-panel">
+      <div class="subsection-heading">
+        <h2>{{ submissionChecklist.form.formName }}</h2>
+        <el-tag :type="statusTagType(submissionChecklist.currentResponse?.responseStatus)">
+          {{ workflowLabel(submissionChecklist.currentResponse?.responseStatus || "DRAFT") }}
+        </el-tag>
+      </div>
+      <el-form label-position="top" @submit.prevent="submitChecklist">
+        <el-form-item
+          v-for="field in submissionChecklist.form.fields"
+          :key="field.fieldId"
+          :label="field.fieldLabel"
+          :required="field.required"
+          :data-test="`submission-form-${field.fieldKey}`"
+        >
+          <el-input
+            v-if="field.fieldType === 'LONG_TEXT' || field.fieldType === 'TEXT'"
+            v-model="checklistAnswers[field.fieldKey]"
+            type="textarea"
+            :rows="field.fieldType === 'LONG_TEXT' ? 4 : 2"
+          />
+          <el-input-number
+            v-else-if="field.fieldType === 'NUMBER' || field.fieldType === 'SCORE'"
+            v-model="checklistAnswers[field.fieldKey]"
+            :min="field.fieldType === 'SCORE' ? 1 : undefined"
+            :max="field.fieldType === 'SCORE' ? 5 : undefined"
+          />
+          <el-switch v-else-if="field.fieldType === 'BOOLEAN'" v-model="checklistAnswers[field.fieldKey]" />
+          <el-input v-else v-model="checklistAnswers[field.fieldKey]" />
+        </el-form-item>
+        <el-button type="primary" native-type="submit" :loading="checklistSubmitting">Submit checklist</el-button>
+      </el-form>
+    </section>
 
     <div v-if="created" class="upload-actions">
       <p class="body">{{ PDF_UPLOAD_LIMIT_HINT }}</p>

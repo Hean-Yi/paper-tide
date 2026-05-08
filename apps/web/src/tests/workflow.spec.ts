@@ -525,12 +525,39 @@ describe("workflow screens", () => {
           status: "SUBMITTED"
         }));
       }
+      if (path === "/manuscripts/11/forms/CAMERA_READY") {
+        return Promise.resolve(jsonResponse({
+          form: {
+            formId: 91,
+            conferenceId: 501,
+            formType: "CAMERA_READY",
+            formName: "Camera-ready checklist",
+            fields: [
+              { fieldId: 101, fieldKey: "rights", fieldLabel: "Rights cleared", fieldType: "TEXT", required: true, visibility: "AUTHOR_VISIBLE", displayOrder: 1 }
+            ]
+          },
+          currentResponse: null
+        }));
+      }
+      if (path === "/manuscripts/11/form-response" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({
+          responseId: 92,
+          formId: 91,
+          subjectType: "MANUSCRIPT",
+          subjectId: 11,
+          responseStatus: "SUBMITTED",
+          answers: JSON.parse(init.body as string).answers
+        }));
+      }
       return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
     });
     vi.stubGlobal("fetch", fetch);
 
     const wrapper = await mountWithRouter(ManuscriptListView);
     await clickButton(wrapper, "Camera-ready");
+    await flushPromises();
+    expect(wrapper.text()).toContain("Camera-ready checklist");
+    await wrapper.find('[data-test="camera-ready-form-rights"] textarea').setValue("Publisher rights are cleared.");
     const checkbox = document.body.querySelector(".el-checkbox") as HTMLElement;
     checkbox.click();
     await flushPromises();
@@ -543,6 +570,15 @@ describe("workflow screens", () => {
       copyrightConfirmed: true,
       licenseType: "CC-BY"
     }));
+    const checklistCall = fetch.mock.calls.find(([input, init]) =>
+      String(input) === "/api/manuscripts/11/form-response" && init?.method === "POST"
+    );
+    expect(checklistCall).toBeTruthy();
+    expect(JSON.parse(checklistCall?.[1]?.body as string)).toEqual({
+      formId: 91,
+      responseStatus: "SUBMITTED",
+      answers: { rights: "Publisher rights are cleared." }
+    });
   });
 
   it("validates author manuscript form before creating a draft", async () => {
@@ -607,6 +643,88 @@ describe("workflow screens", () => {
       conferenceId: 501,
       title: "Conference Paper"
     }));
+  });
+
+  it("loads and submits the configured submission checklist after creating a manuscript", async () => {
+    installAuth(["AUTHOR"]);
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/conferences/cfp") {
+        return Promise.resolve(jsonResponse([
+          {
+            conferenceId: 501,
+            name: "Review Systems 2026",
+            acronym: "RS",
+            year: 2026,
+            status: "OPEN_FOR_SUBMISSION",
+            blindMode: "SINGLE_BLIND",
+            publicSlug: "review-systems-2026",
+            submissionOpenAt: "2026-06-01T00:00:00Z",
+            submissionCloseAt: "2026-07-01T00:00:00Z"
+          }
+        ]));
+      }
+      if (path === "/manuscripts" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({
+          manuscriptId: 61,
+          conferenceId: 501,
+          currentVersionId: 71,
+          currentStatus: "DRAFT",
+          blindMode: "SINGLE_BLIND"
+        }));
+      }
+      if (path === "/manuscripts/61/forms/SUBMISSION") {
+        return Promise.resolve(jsonResponse({
+          form: {
+            formId: 81,
+            conferenceId: 501,
+            formType: "SUBMISSION",
+            formName: "Submission checklist",
+            fields: [
+              { fieldId: 91, fieldKey: "ethics", fieldLabel: "Ethics statement", fieldType: "LONG_TEXT", required: true, visibility: "AUTHOR_VISIBLE", displayOrder: 1 }
+            ]
+          },
+          currentResponse: null
+        }));
+      }
+      if (path === "/manuscripts/61/form-response" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({
+          responseId: 82,
+          formId: 81,
+          subjectType: "MANUSCRIPT",
+          subjectId: 61,
+          responseStatus: "SUBMITTED",
+          answers: JSON.parse(init.body as string).answers
+        }));
+      }
+      return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(SubmitManuscriptView);
+    await flushPromises();
+
+    await wrapper.get('input[placeholder="Title"]').setValue("Conference Paper");
+    await wrapper.get("textarea").setValue("Conference abstract");
+    await wrapper.get('input[placeholder="comma,separated,keywords"]').setValue("conference,review");
+    await clickButton(wrapper, "Create manuscript");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Submission checklist");
+    const checklistInput = wrapper.find('[data-test="submission-form-ethics"] textarea');
+    await checklistInput.setValue("No human subjects.");
+    await clickButton(wrapper, "Submit checklist");
+    await flushPromises();
+
+    const submitCall = fetch.mock.calls.find(([input, init]) =>
+      String(input) === "/api/manuscripts/61/form-response" && init?.method === "POST"
+    );
+    expect(submitCall).toBeTruthy();
+    expect(JSON.parse(submitCall?.[1]?.body as string)).toEqual({
+      formId: 81,
+      responseStatus: "SUBMITTED",
+      answers: { ethics: "No human subjects." }
+    });
   });
 
   it("shows the configured PDF upload limit on author upload screens", async () => {
@@ -712,6 +830,9 @@ describe("workflow screens", () => {
           }
         }));
       }
+      if (path === "/review-assignments/9/review-form/revisions") {
+        return Promise.resolve(jsonResponse([]));
+      }
       return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
     });
     vi.stubGlobal("fetch", fetch);
@@ -723,6 +844,78 @@ describe("workflow screens", () => {
     expect(wrapper.text()).toContain("Summary");
     expect((wrapper.find('[data-test="dynamic-review-summary"] textarea').element as HTMLTextAreaElement).value)
       .toBe("Saved configurable draft");
+  });
+
+  it("shows configured reviewer form revision history", async () => {
+    installAuth(["REVIEWER"]);
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:reader-page-1"),
+      revokeObjectURL: vi.fn()
+    });
+    const fetch = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/review-assignments/9") {
+        return Promise.resolve(jsonResponse({
+          assignmentId: 9,
+          manuscriptId: 11,
+          versionId: 21,
+          versionNo: 1,
+          title: "Workflow Seed",
+          abstractText: "workflow abstract",
+          keywords: "workflow,pdf",
+          pdfFileName: "workflow.pdf",
+          taskStatus: "SUBMITTED"
+        }));
+      }
+      if (path === "/review-assignments/9/paper") {
+        return Promise.resolve(jsonResponse({
+          assignmentId: 9,
+          manuscriptId: 11,
+          versionId: 21,
+          title: "Workflow Seed",
+          pageCount: 1,
+          pdfFileName: "workflow.pdf",
+          downloadAllowed: false
+        }));
+      }
+      if (path === "/review-assignments/9/paper/pages/1") {
+        return Promise.resolve(blobResponse(new Blob(["page"], { type: "image/png" })));
+      }
+      if (path === "/review-assignments/9/agent-assist") {
+        return Promise.resolve(jsonResponse({ intent: null, projections: [] }));
+      }
+      if (path === "/review-assignments/9/review-form") {
+        return Promise.resolve(jsonResponse({
+          form: {
+            formId: 51,
+            conferenceId: 0,
+            formType: "REVIEW",
+            formName: "Configurable Review",
+            fields: [
+              { fieldId: 61, fieldKey: "summary", fieldLabel: "Summary", fieldType: "LONG_TEXT", required: true, visibility: "AUTHOR_VISIBLE", displayOrder: 1 }
+            ]
+          },
+          currentResponse: null
+        }));
+      }
+      if (path === "/review-assignments/9/review-form/revisions") {
+        return Promise.resolve(jsonResponse([
+          { revisionId: 81, revisionNo: 1, answers: { summary: "Initial summary" }, submittedAt: "2026-05-01T09:00:00Z" },
+          { revisionId: 82, revisionNo: 2, answers: { summary: "Updated summary" }, submittedAt: "2026-05-02T09:00:00Z" }
+        ]));
+      }
+      return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(ReviewEditorView, "/reviewer/reviews/9");
+
+    expect(fetch).toHaveBeenCalledWith("/api/review-assignments/9/review-form/revisions", expect.anything());
+    expect(wrapper.text()).toContain("Review revision history");
+    expect(wrapper.text()).toContain("Revision 1");
+    expect(wrapper.text()).toContain("Initial summary");
+    expect(wrapper.text()).toContain("Revision 2");
+    expect(wrapper.text()).toContain("Updated summary");
   });
 
   it("renders reviewer paper online instead of a PDF download link", async () => {
@@ -1362,6 +1555,87 @@ describe("workflow screens", () => {
       })
     );
     expect(success).toHaveBeenCalledWith("Conflict analysis requested.");
+  });
+
+  it("submits a configured meta-review from the chair decision workbench", async () => {
+    installAuth(["CHAIR"]);
+    const success = vi.spyOn(ElMessage, "success").mockImplementation(() => undefined as never);
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/chair/decision-workbench") {
+        return Promise.resolve(jsonResponse([
+          {
+            roundId: 7,
+            manuscriptId: 11,
+            versionId: 21,
+            versionNo: 1,
+            roundNo: 1,
+            title: "Workflow Seed",
+            currentStatus: "UNDER_REVIEW",
+            roundStatus: "IN_PROGRESS",
+            assignmentCount: 1,
+            submittedReviewCount: 1,
+            conflictCount: 0,
+            assignments: [{ assignmentId: 9, reviewerId: 1002, taskStatus: "SUBMITTED" }],
+            conflictProjections: []
+          }
+        ]));
+      }
+      if (path === "/manuscripts/11/forms/META_REVIEW") {
+        return Promise.resolve(jsonResponse({
+          form: {
+            formId: 51,
+            conferenceId: 0,
+            formType: "META_REVIEW",
+            formName: "Meta Review",
+            fields: [
+              { fieldId: 61, fieldKey: "summary", fieldLabel: "Summary", fieldType: "LONG_TEXT", required: true, visibility: "CHAIR_ONLY", displayOrder: 1 }
+            ]
+          },
+          currentResponse: {
+            responseId: 71,
+            formId: 51,
+            subjectType: "MANUSCRIPT",
+            subjectId: 11,
+            responseStatus: "DRAFT",
+            answers: { summary: "Existing meta review draft" }
+          }
+        }));
+      }
+      if (path === "/manuscripts/11/form-response" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({
+          responseId: 72,
+          formId: 51,
+          subjectType: "MANUSCRIPT",
+          subjectId: 11,
+          responseStatus: "SUBMITTED",
+          answers: JSON.parse(init.body as string).answers
+        }));
+      }
+      return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(DecisionWorkbenchView);
+    await buttonByText(wrapper, "Meta-review").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Meta Review");
+    expect((document.body.querySelector('[data-test="meta-review-summary"] textarea') as HTMLTextAreaElement).value)
+      .toBe("Existing meta review draft");
+
+    await clickBodyButton("Submit meta-review");
+
+    const submitCall = fetch.mock.calls.find(([input, init]) =>
+      String(input) === "/api/manuscripts/11/form-response" && init?.method === "POST"
+    );
+    expect(submitCall).toBeTruthy();
+    expect(JSON.parse(submitCall?.[1]?.body as string)).toEqual({
+      formId: 51,
+      responseStatus: "SUBMITTED",
+      answers: { summary: "Existing meta review draft" }
+    });
+    expect(success).toHaveBeenCalledWith("Meta-review submitted.");
   });
 
   it("does not load legacy raw agent results for conflict analysis on the decision workbench", async () => {

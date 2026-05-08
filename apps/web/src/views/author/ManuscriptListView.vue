@@ -10,13 +10,16 @@ import {
   createRevision,
   downloadPdf,
   getDecisionPackage,
+  getManuscriptForm,
   listManuscripts,
+  saveManuscriptFormResponse,
   submitCameraReady,
   submitVersion,
   uploadPdf,
   type AuthorInput,
   type DecisionPackage,
-  type ManuscriptSummary
+  type ManuscriptSummary,
+  type WorkflowFormPackage
 } from "../../lib/workflow-api";
 import { formatDateTime, statusTagType, workflowLabel } from "../../lib/workflow-format";
 import { PDF_UPLOAD_LIMIT_ERROR, PDF_UPLOAD_LIMIT_HINT, PDF_UPLOAD_MAX_BYTES } from "../../lib/upload";
@@ -32,6 +35,8 @@ const decisionDialogOpen = ref(false);
 const decisionPackage = ref<DecisionPackage | null>(null);
 const cameraReadyDialogOpen = ref(false);
 const cameraReadyManuscript = ref<ManuscriptSummary | null>(null);
+const cameraReadyChecklist = ref<WorkflowFormPackage | null>(null);
+const cameraReadyAnswers = reactive<Record<string, unknown>>({});
 const revisionFormRef = ref<FormInstance>();
 const revisionForm = reactive({
   title: "",
@@ -153,8 +158,10 @@ async function openDecisionPackage(row: ManuscriptSummary) {
   });
 }
 
-function openCameraReady(row: ManuscriptSummary) {
+async function openCameraReady(row: ManuscriptSummary) {
   cameraReadyManuscript.value = row;
+  cameraReadyChecklist.value = null;
+  Object.keys(cameraReadyAnswers).forEach((key) => delete cameraReadyAnswers[key]);
   Object.assign(cameraReadyForm, {
     fileName: `${row.currentVersionTitle || "paper"}-camera-ready.pdf`,
     fileSize: 0,
@@ -162,6 +169,14 @@ function openCameraReady(row: ManuscriptSummary) {
     licenseType: "CC-BY"
   });
   cameraReadyDialogOpen.value = true;
+  try {
+    cameraReadyChecklist.value = await getManuscriptForm(row.manuscriptId, "CAMERA_READY");
+    for (const field of cameraReadyChecklist.value.form.fields) {
+      cameraReadyAnswers[field.fieldKey] = cameraReadyChecklist.value.currentResponse?.answers?.[field.fieldKey] ?? "";
+    }
+  } catch {
+    cameraReadyChecklist.value = null;
+  }
 }
 
 async function submitCameraReadyForm() {
@@ -172,9 +187,20 @@ async function submitCameraReadyForm() {
     ElMessage.error("Camera-ready file name and copyright confirmation are required.");
     return;
   }
+  if (hasMissingCameraReadyAnswer()) {
+    ElMessage.error("Required camera-ready checklist fields must be completed.");
+    return;
+  }
   const manuscriptId = cameraReadyManuscript.value.manuscriptId;
   await actions.run(cameraReadyKey(manuscriptId), async () => {
     try {
+      if (cameraReadyChecklist.value) {
+        await saveManuscriptFormResponse(manuscriptId, {
+          formId: cameraReadyChecklist.value.form.formId,
+          responseStatus: "SUBMITTED",
+          answers: { ...cameraReadyAnswers }
+        });
+      }
       await submitCameraReady(manuscriptId, {
         fileName: cameraReadyForm.fileName.trim(),
         fileSize: cameraReadyForm.fileSize,
@@ -187,6 +213,12 @@ async function submitCameraReadyForm() {
       showApiError(error, "Camera-ready package could not be submitted.");
     }
   });
+}
+
+function hasMissingCameraReadyAnswer() {
+  return Boolean(cameraReadyChecklist.value?.form.fields.some((field) =>
+    field.required && !String(cameraReadyAnswers[field.fieldKey] ?? "").trim()
+  ));
 }
 
 function openRevision(row: ManuscriptSummary) {
@@ -344,6 +376,36 @@ async function submitRevision() {
         <el-checkbox v-model="cameraReadyForm.copyrightConfirmed">
           I confirm the camera-ready package is final and publication rights are cleared.
         </el-checkbox>
+        <section v-if="cameraReadyChecklist" class="workflow-form review-form-panel">
+          <div class="subsection-heading">
+            <h2>{{ cameraReadyChecklist.form.formName }}</h2>
+            <el-tag :type="statusTagType(cameraReadyChecklist.currentResponse?.responseStatus)">
+              {{ workflowLabel(cameraReadyChecklist.currentResponse?.responseStatus || "DRAFT") }}
+            </el-tag>
+          </div>
+          <el-form-item
+            v-for="field in cameraReadyChecklist.form.fields"
+            :key="field.fieldId"
+            :label="field.fieldLabel"
+            :required="field.required"
+            :data-test="`camera-ready-form-${field.fieldKey}`"
+          >
+            <el-input
+              v-if="field.fieldType === 'LONG_TEXT' || field.fieldType === 'TEXT'"
+              v-model="cameraReadyAnswers[field.fieldKey]"
+              type="textarea"
+              :rows="field.fieldType === 'LONG_TEXT' ? 4 : 2"
+            />
+            <el-input-number
+              v-else-if="field.fieldType === 'NUMBER' || field.fieldType === 'SCORE'"
+              v-model="cameraReadyAnswers[field.fieldKey]"
+              :min="field.fieldType === 'SCORE' ? 1 : undefined"
+              :max="field.fieldType === 'SCORE' ? 5 : undefined"
+            />
+            <el-switch v-else-if="field.fieldType === 'BOOLEAN'" v-model="cameraReadyAnswers[field.fieldKey]" />
+            <el-input v-else v-model="cameraReadyAnswers[field.fieldKey]" />
+          </el-form-item>
+        </section>
       </el-form>
       <template #footer>
         <el-button @click="cameraReadyDialogOpen = false">Cancel</el-button>

@@ -11,14 +11,17 @@ import {
   decide,
   generateAssignmentDrafts,
   getAssignmentAssist,
+  getManuscriptForm,
   listDecisionWorkbench,
   markOverdue,
   runAssignmentAssist,
+  saveManuscriptFormResponse,
   triggerConflictAnalysis,
   type AssignmentAssistState,
   type AssignmentDraft,
   type AnalysisProjectionResponse,
-  type DecisionWorkbenchItem
+  type DecisionWorkbenchItem,
+  type WorkflowFormPackage
 } from "../../lib/workflow-api";
 import { formatDateTime, printableTrace, statusTagType, workflowLabel } from "../../lib/workflow-format";
 
@@ -31,6 +34,7 @@ const actions = useAsyncAction();
 const { showApiError } = useApiError();
 const assignDialogOpen = ref(false);
 const decisionDialogOpen = ref(false);
+const metaReviewDialogOpen = ref(false);
 const assignFormRef = ref<FormInstance>();
 const assignForm = reactive({ roundId: 0, reviewerId: 1002, deadlineAt: "" });
 const decisionFormRef = ref<FormInstance>();
@@ -41,6 +45,9 @@ const decisionForm = reactive({
   decisionCode: "MINOR_REVISION",
   decisionReason: ""
 });
+const metaReviewManuscriptId = ref<number | null>(null);
+const metaReviewForm = ref<WorkflowFormPackage | null>(null);
+const metaReviewAnswers = reactive<Record<string, unknown>>({});
 const assignRules: FormRules = {
   reviewerId: [{ required: true, message: "Reviewer id is required", trigger: "blur" }],
   deadlineAt: [{ required: true, message: "Deadline is required", trigger: "change" }]
@@ -195,6 +202,49 @@ async function submitDecision() {
       await loadWorkbench();
     } catch (error) {
       showApiError(error, "Decision could not be submitted.");
+    }
+  });
+}
+
+async function openMetaReview(row: DecisionWorkbenchItem) {
+  metaReviewManuscriptId.value = row.manuscriptId;
+  Object.keys(metaReviewAnswers).forEach((key) => delete metaReviewAnswers[key]);
+  await actions.run(`load-meta-review:${row.manuscriptId}`, async () => {
+    try {
+      metaReviewForm.value = await getManuscriptForm(row.manuscriptId, "META_REVIEW");
+      for (const field of metaReviewForm.value.form.fields) {
+        metaReviewAnswers[field.fieldKey] = metaReviewForm.value.currentResponse?.answers?.[field.fieldKey] ?? "";
+      }
+      metaReviewDialogOpen.value = true;
+    } catch (error) {
+      showApiError(error, "Meta-review form could not be loaded.");
+    }
+  });
+}
+
+async function submitMetaReview() {
+  if (!metaReviewManuscriptId.value || !metaReviewForm.value) {
+    return;
+  }
+  const missingRequired = metaReviewForm.value.form.fields.some((field) =>
+    field.required && !String(metaReviewAnswers[field.fieldKey] ?? "").trim()
+  );
+  if (missingRequired) {
+    ElMessage.error("Required meta-review fields must be completed.");
+    return;
+  }
+  await actions.run(`submit-meta-review:${metaReviewManuscriptId.value}`, async () => {
+    try {
+      await saveManuscriptFormResponse(metaReviewManuscriptId.value!, {
+        formId: metaReviewForm.value!.form.formId,
+        responseStatus: "SUBMITTED",
+        answers: { ...metaReviewAnswers }
+      });
+      metaReviewDialogOpen.value = false;
+      ElMessage.success("Meta-review submitted.");
+      await loadWorkbench();
+    } catch (error) {
+      showApiError(error, "Meta-review could not be submitted.");
     }
   });
 }
@@ -356,6 +406,13 @@ async function submitDecision() {
             >
               Conflict analysis
             </el-button>
+            <el-button
+              size="small"
+              :loading="actions.isPending(`load-meta-review:${row.manuscriptId}`)"
+              @click="openMetaReview(row)"
+            >
+              Meta-review
+            </el-button>
             <el-button size="small" type="primary" @click="openDecision(row)">Submit decision</el-button>
           </div>
         </template>
@@ -435,6 +492,46 @@ async function submitDecision() {
       <template #footer>
         <el-button :disabled="actions.isPending('submit-decision')" @click="decisionDialogOpen = false">Cancel</el-button>
         <el-button type="primary" :loading="actions.isPending('submit-decision')" @click="submitDecision">Submit decision</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="metaReviewDialogOpen" title="Meta-review" width="640px">
+      <template v-if="metaReviewForm">
+        <h2>{{ metaReviewForm.form.formName }}</h2>
+        <el-form label-position="top">
+          <el-form-item
+            v-for="field in metaReviewForm.form.fields"
+            :key="field.fieldId"
+            :label="field.fieldLabel"
+            :required="field.required"
+            :data-test="`meta-review-${field.fieldKey}`"
+          >
+            <el-input
+              v-if="field.fieldType === 'LONG_TEXT' || field.fieldType === 'TEXT'"
+              v-model="metaReviewAnswers[field.fieldKey]"
+              type="textarea"
+              :rows="field.fieldType === 'LONG_TEXT' ? 4 : 2"
+            />
+            <el-input-number
+              v-else-if="field.fieldType === 'NUMBER' || field.fieldType === 'SCORE'"
+              v-model="metaReviewAnswers[field.fieldKey]"
+              :min="field.fieldType === 'SCORE' ? 1 : undefined"
+              :max="field.fieldType === 'SCORE' ? 5 : undefined"
+            />
+            <el-switch v-else-if="field.fieldType === 'BOOLEAN'" v-model="metaReviewAnswers[field.fieldKey]" />
+            <el-input v-else v-model="metaReviewAnswers[field.fieldKey]" />
+          </el-form-item>
+        </el-form>
+      </template>
+      <template #footer>
+        <el-button @click="metaReviewDialogOpen = false">Cancel</el-button>
+        <el-button
+          type="primary"
+          :loading="metaReviewManuscriptId ? actions.isPending(`submit-meta-review:${metaReviewManuscriptId}`) : false"
+          @click="submitMetaReview"
+        >
+          Submit meta-review
+        </el-button>
       </template>
     </el-dialog>
   </section>

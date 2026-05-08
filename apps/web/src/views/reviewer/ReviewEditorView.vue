@@ -9,8 +9,10 @@ import SecurePaperReader from "../../components/reviewer/SecurePaperReader.vue";
 import {
   getReviewerAssignment,
   getReviewForm,
+  listReviewFormRevisions,
   saveReviewFormResponse,
   submitReviewReport,
+  type ReviewFormRevision,
   type ReviewFormPackage,
   type ReviewReportForm,
   type ReviewerAssignment
@@ -27,6 +29,7 @@ const sidePanelCollapsed = ref(false);
 const assignmentPanels = ref<string[]>([]);
 const reviewFormRef = ref<FormInstance>();
 const dynamicReviewForm = ref<ReviewFormPackage | null>(null);
+const reviewFormRevisions = ref<ReviewFormRevision[]>([]);
 const dynamicAnswers = reactive<Record<string, unknown>>({});
 const form = reactive<ReviewReportForm>({
   noveltyScore: 3,
@@ -89,13 +92,19 @@ async function loadAssignment() {
 
 async function loadDynamicReviewForm() {
   try {
-    dynamicReviewForm.value = await getReviewForm(assignmentId.value);
+    const [formPackage, revisions] = await Promise.all([
+      getReviewForm(assignmentId.value),
+      listReviewFormRevisions(assignmentId.value)
+    ]);
+    dynamicReviewForm.value = formPackage;
+    reviewFormRevisions.value = revisions;
     Object.keys(dynamicAnswers).forEach((key) => delete dynamicAnswers[key]);
     for (const field of dynamicReviewForm.value.form.fields) {
       dynamicAnswers[field.fieldKey] = dynamicReviewForm.value.currentResponse?.answers?.[field.fieldKey] ?? "";
     }
   } catch {
     dynamicReviewForm.value = null;
+    reviewFormRevisions.value = [];
   }
 }
 
@@ -119,6 +128,16 @@ async function saveDynamicReview(responseStatus: "DRAFT" | "SUBMITTED") {
   } finally {
     dynamicSubmitting.value = false;
   }
+}
+
+function revisionAnswerPreview(revision: ReviewFormRevision): string {
+  const entries = Object.entries(revision.answers ?? {});
+  if (!entries.length) {
+    return "No answers captured.";
+  }
+  return entries
+    .map(([key, value]) => `${key}: ${String(value ?? "")}`)
+    .join("\n");
 }
 
 async function submitReport() {
@@ -228,6 +247,21 @@ async function submitReport() {
                 <el-button type="primary" native-type="submit" :loading="dynamicSubmitting">Submit configured review</el-button>
               </div>
             </el-form>
+            <section class="revision-history">
+              <div class="subsection-heading">
+                <h3>Review revision history</h3>
+                <el-tag>{{ reviewFormRevisions.length }}</el-tag>
+              </div>
+              <el-empty v-if="!reviewFormRevisions.length" description="No submitted configured reviews yet." />
+              <div v-else class="stacked-list">
+                <el-card v-for="revision in reviewFormRevisions" :key="revision.revisionId" shadow="never">
+                  <template #header>
+                    Revision {{ revision.revisionNo }} · {{ formatDateTime(revision.submittedAt) }}
+                  </template>
+                  <pre class="json-block">{{ revisionAnswerPreview(revision) }}</pre>
+                </el-card>
+              </div>
+            </section>
           </section>
 
           <el-form

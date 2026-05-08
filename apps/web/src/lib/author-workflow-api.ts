@@ -5,7 +5,9 @@ import type {
   ConferenceCfpSummary,
   DecisionPackage,
   ManuscriptSummary,
-  VersionSummary
+  VersionSummary,
+  WorkflowFormPackage,
+  WorkflowFormResponse
 } from "./workflow-types";
 
 export function listManuscripts() {
@@ -59,6 +61,17 @@ export function downloadPdf(manuscriptId: number, versionId: number) {
 
 export function getDecisionPackage(manuscriptId: number) {
   return apiRequest<DecisionPackage>(`/decisions/manuscripts/${manuscriptId}/package`);
+}
+
+export function getManuscriptForm(manuscriptId: number, formType: string) {
+  return apiRequest<WorkflowFormPackage>(`/manuscripts/${manuscriptId}/forms/${formType}`);
+}
+
+export function saveManuscriptFormResponse(
+  manuscriptId: number,
+  payload: { formId: number; responseStatus: string; answers: Record<string, unknown> }
+) {
+  return apiRequest<WorkflowFormResponse>(`/manuscripts/${manuscriptId}/form-response`, { method: "POST", json: payload });
 }
 
 export function submitCameraReady(manuscriptId: number, payload: {

@@ -51,6 +51,37 @@ record PlatformReviewFormResponseRow(
 ) {
 }
 
+record PlatformWorkflowFormResponseRow(
+        long responseId,
+        long formId,
+        String subjectType,
+        long subjectId,
+        String responseStatus,
+        Map<String, Object> answers,
+        Timestamp submittedAt
+) {
+}
+
+record PlatformReviewFormRevisionRow(
+        long revisionId,
+        int revisionNo,
+        Map<String, Object> answers,
+        Timestamp submittedAt
+) {
+}
+
+record PlatformPhaseWindowRow(
+        Timestamp submissionOpenAt,
+        Timestamp submissionCloseAt,
+        Timestamp reviewDeadlineAt,
+        Timestamp decisionReleaseAt,
+        Timestamp rebuttalOpenAt,
+        Timestamp rebuttalCloseAt,
+        Timestamp cameraReadyOpenAt,
+        Timestamp cameraReadyCloseAt
+) {
+}
+
 record PlatformAuthorFeedbackRow(
         long feedbackId,
         long manuscriptId,

@@ -34,7 +34,9 @@ class RealPlatformWorkflowServiceTest {
 
     @BeforeEach
     void cleanRealPlatformTables() {
+        jdbcTemplate.update("DELETE FROM REVIEW_FORM_RESPONSE_REVISION");
         jdbcTemplate.update("DELETE FROM REVIEW_FORM_RESPONSE");
+        jdbcTemplate.update("DELETE FROM WORKFLOW_FORM_RESPONSE");
         jdbcTemplate.update("DELETE FROM AUTHOR_FEEDBACK");
         jdbcTemplate.update("DELETE FROM PAPER_TAG");
         jdbcTemplate.update("DELETE FROM IMPORT_BATCH");
@@ -58,6 +60,7 @@ class RealPlatformWorkflowServiceTest {
         jdbcTemplate.update("DELETE FROM MANUSCRIPT_VERSION");
         jdbcTemplate.update("DELETE FROM MANUSCRIPT");
         seedLegacyConference();
+        resetLegacyConferencePhase();
     }
 
     @Test
@@ -124,6 +127,160 @@ class RealPlatformWorkflowServiceTest {
                 .andExpect(jsonPath("$.form.fields[0].fieldKey").value("summary"))
                 .andExpect(jsonPath("$.currentResponse.responseStatus").value("DRAFT"))
                 .andExpect(jsonPath("$.currentResponse.answers.summary").value("Promising but incomplete."));
+    }
+
+    @Test
+    void chairConfiguresAndActorsLoadNonReviewWorkflowForms() throws Exception {
+        long submissionFormId = createForm("SUBMISSION", "Submission Checklist", "ethics", "Ethics statement", "AUTHOR_VISIBLE");
+        long metaReviewFormId = createForm("META_REVIEW", "Meta Review", "summary", "Meta review summary", "CHAIR_ONLY");
+        long feedbackFormId = createForm("AUTHOR_FEEDBACK", "Author Feedback", "response", "Response", "AUTHOR_VISIBLE");
+        long cameraReadyFormId = createForm("CAMERA_READY", "Camera Ready Checklist", "copyright", "Copyright", "AUTHOR_VISIBLE");
+        AssignmentFixture fixture = seedAcceptedAssignment();
+        String authorToken = loginAndExtractToken("author_demo", "demo123");
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+
+        mockMvc.perform(get("/api/conferences/{conferenceId}/forms/{formType}/active", 0, "SUBMISSION")
+                        .header("Authorization", "Bearer " + authorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.form.formId").value(submissionFormId))
+                .andExpect(jsonPath("$.form.fields[0].fieldKey").value("ethics"));
+
+        mockMvc.perform(get("/api/conferences/{conferenceId}/forms/{formType}/active", 0, "META_REVIEW")
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.form.formId").value(metaReviewFormId));
+
+        mockMvc.perform(get("/api/manuscripts/{manuscriptId}/forms/{formType}", fixture.manuscriptId(), "AUTHOR_FEEDBACK")
+                        .header("Authorization", "Bearer " + authorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.form.formId").value(feedbackFormId));
+
+        mockMvc.perform(get("/api/manuscripts/{manuscriptId}/forms/{formType}", fixture.manuscriptId(), "CAMERA_READY")
+                        .header("Authorization", "Bearer " + authorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.form.formId").value(cameraReadyFormId));
+    }
+
+    @Test
+    void authorWorkflowFormResponseValidatesRequiredFieldsAtSubmitTime() throws Exception {
+        long formId = createForm("SUBMISSION", "Submission Checklist", "ethics", "Ethics statement", "AUTHOR_VISIBLE");
+        AssignmentFixture fixture = seedAcceptedAssignment();
+        String authorToken = loginAndExtractToken("author_demo", "demo123");
+
+        mockMvc.perform(post("/api/manuscripts/{manuscriptId}/form-response", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + authorToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "formId": %d,
+                                  "responseStatus": "SUBMITTED",
+                                  "answers": {}
+                                }
+                                """.formatted(formId)))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/manuscripts/{manuscriptId}/form-response", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + authorToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "formId": %d,
+                                  "responseStatus": "SUBMITTED",
+                                  "answers": { "ethics": "No human subjects." }
+                                }
+                                """.formatted(formId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.responseStatus").value("SUBMITTED"))
+                .andExpect(jsonPath("$.answers.ethics").value("No human subjects."));
+    }
+
+    @Test
+    void chairSubmitsMetaReviewFormForManuscriptAndAuthorCannot() throws Exception {
+        long formId = createForm("META_REVIEW", "Meta Review", "summary", "Meta review summary", "CHAIR_ONLY");
+        AssignmentFixture fixture = seedAcceptedAssignment();
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        String authorToken = loginAndExtractToken("author_demo", "demo123");
+
+        mockMvc.perform(post("/api/manuscripts/{manuscriptId}/form-response", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + authorToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "formId": %d,
+                                  "responseStatus": "SUBMITTED",
+                                  "answers": { "summary": "Author must not write the meta review." }
+                                }
+                                """.formatted(formId)))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/manuscripts/{manuscriptId}/form-response", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "formId": %d,
+                                  "responseStatus": "SUBMITTED",
+                                  "answers": { "summary": "Reviews are consistent enough for acceptance." }
+                                }
+                                """.formatted(formId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.subjectType").value("MANUSCRIPT"))
+                .andExpect(jsonPath("$.responseStatus").value("SUBMITTED"))
+                .andExpect(jsonPath("$.answers.summary").value("Reviews are consistent enough for acceptance."));
+    }
+
+    @Test
+    void submittedReviewFormResponsesKeepRevisionHistory() throws Exception {
+        long formId = createReviewFormWithRequiredField();
+        AssignmentFixture fixture = seedAcceptedAssignment();
+        String reviewerToken = loginAndExtractToken("reviewer_demo", "demo123");
+
+        submitReviewForm(fixture.assignmentId(), formId, reviewerToken, "Initial summary");
+        submitReviewForm(fixture.assignmentId(), formId, reviewerToken, "Updated summary");
+
+        mockMvc.perform(get("/api/review-assignments/{assignmentId}/review-form/revisions", fixture.assignmentId())
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].revisionNo").value(1))
+                .andExpect(jsonPath("$[0].answers.summary").value("Initial summary"))
+                .andExpect(jsonPath("$[1].revisionNo").value(2))
+                .andExpect(jsonPath("$[1].answers.summary").value("Updated summary"));
+    }
+
+    @Test
+    void rebuttalSubmissionClosesAfterDecisionReleaseUntilExplicitWindowIsOpened() throws Exception {
+        AssignmentFixture fixture = seedAcceptedAssignment();
+        String authorToken = loginAndExtractToken("author_demo", "demo123");
+        Instant past = Instant.now().minusSeconds(7200);
+        jdbcTemplate.update(
+                """
+                UPDATE CONFERENCE_PHASE
+                SET SUBMISSION_OPEN_AT = ?,
+                    SUBMISSION_CLOSE_AT = ?,
+                    BIDDING_OPEN_AT = ?,
+                    BIDDING_CLOSE_AT = ?,
+                    REVIEW_DEADLINE_AT = ?,
+                    DECISION_RELEASE_AT = ?
+                WHERE CONFERENCE_ID = 0
+                """,
+                Timestamp.from(past),
+                Timestamp.from(past.plusSeconds(600)),
+                Timestamp.from(past.plusSeconds(1200)),
+                Timestamp.from(past.plusSeconds(1800)),
+                Timestamp.from(past.plusSeconds(2400)),
+                Timestamp.from(past.plusSeconds(3000))
+        );
+
+        mockMvc.perform(post("/api/manuscripts/{manuscriptId}/author-feedback", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + authorToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "feedbackType": "REBUTTAL",
+                                  "feedbackText": "This late rebuttal should be blocked."
+                                }
+                                """))
+                .andExpect(status().isConflict());
     }
 
     @Test
@@ -216,30 +373,48 @@ class RealPlatformWorkflowServiceTest {
     }
 
     private long createReviewFormWithRequiredField() throws Exception {
+        return createForm("REVIEW", "Default Review", "summary", "Summary", "AUTHOR_VISIBLE");
+    }
+
+    private long createForm(String formType, String formName, String fieldKey, String fieldLabel, String visibility) throws Exception {
         String chairToken = loginAndExtractToken("chair_demo", "demo123");
         MvcResult result = mockMvc.perform(post("/api/conferences/{conferenceId}/forms", 0)
                         .header("Authorization", "Bearer " + chairToken)
                         .contentType(APPLICATION_JSON)
                         .content("""
                                 {
-                                  "formType": "REVIEW",
-                                  "formName": "Default Review",
+                                  "formType": "%s",
+                                  "formName": "%s",
                                   "fields": [
                                     {
-                                      "fieldKey": "summary",
-                                      "fieldLabel": "Summary",
+                                      "fieldKey": "%s",
+                                      "fieldLabel": "%s",
                                       "fieldType": "TEXT",
                                       "required": true,
-                                      "visibility": "AUTHOR_VISIBLE",
+                                      "visibility": "%s",
                                       "displayOrder": 1
                                     }
                                   ]
                                 }
-                                """))
+                                """.formatted(formType, formName, fieldKey, fieldLabel, visibility)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.formId").isNumber())
                 .andReturn();
         return objectMapper.readTree(result.getResponse().getContentAsString()).path("formId").asLong();
+    }
+
+    private void submitReviewForm(long assignmentId, long formId, String reviewerToken, String summary) throws Exception {
+        mockMvc.perform(post("/api/review-assignments/{assignmentId}/form-response", assignmentId)
+                        .header("Authorization", "Bearer " + reviewerToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "formId": %d,
+                                  "responseStatus": "SUBMITTED",
+                                  "answers": { "summary": "%s" }
+                                }
+                                """.formatted(formId, summary)))
+                .andExpect(status().isOk());
     }
 
     private AssignmentFixture seedAcceptedAssignment() {
@@ -326,6 +501,43 @@ class RealPlatformWorkflowServiceTest {
                     S.CONFERENCE_STATUS, S.BLIND_MODE, S.CFP_TEXT, S.TOPIC_AREAS_JSON,
                     S.TARGET_REVIEWS_PER_PAPER, S.DEFAULT_REVIEWER_MAX_LOAD, S.PUBLIC_SLUG, S.CFP_PUBLISHED
                   )
+                """
+        );
+    }
+
+    private void resetLegacyConferencePhase() {
+        jdbcTemplate.update(
+                """
+                MERGE INTO CONFERENCE_PHASE P
+                USING (
+                  SELECT 0 AS CONFERENCE_ID,
+                         TIMESTAMP '2099-01-01 00:00:00' AS SUBMISSION_OPEN_AT,
+                         TIMESTAMP '2099-02-01 00:00:00' AS SUBMISSION_CLOSE_AT,
+                         TIMESTAMP '2099-03-01 00:00:00' AS BIDDING_OPEN_AT,
+                         TIMESTAMP '2099-04-01 00:00:00' AS BIDDING_CLOSE_AT,
+                         TIMESTAMP '2099-05-01 00:00:00' AS REVIEW_DEADLINE_AT,
+                         TIMESTAMP '2099-06-01 00:00:00' AS DECISION_RELEASE_AT
+                  FROM DUAL
+                ) S
+                ON (P.CONFERENCE_ID = S.CONFERENCE_ID)
+                WHEN MATCHED THEN UPDATE SET
+                  P.SUBMISSION_OPEN_AT = S.SUBMISSION_OPEN_AT,
+                  P.SUBMISSION_CLOSE_AT = S.SUBMISSION_CLOSE_AT,
+                  P.BIDDING_OPEN_AT = S.BIDDING_OPEN_AT,
+                  P.BIDDING_CLOSE_AT = S.BIDDING_CLOSE_AT,
+                  P.REVIEW_DEADLINE_AT = S.REVIEW_DEADLINE_AT,
+                  P.DECISION_RELEASE_AT = S.DECISION_RELEASE_AT,
+                  P.REBUTTAL_OPEN_AT = NULL,
+                  P.REBUTTAL_CLOSE_AT = NULL,
+                  P.CAMERA_READY_OPEN_AT = NULL,
+                  P.CAMERA_READY_CLOSE_AT = NULL
+                WHEN NOT MATCHED THEN INSERT (
+                  PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, SUBMISSION_CLOSE_AT,
+                  BIDDING_OPEN_AT, BIDDING_CLOSE_AT, REVIEW_DEADLINE_AT, DECISION_RELEASE_AT
+                ) VALUES (
+                  SEQ_CONFERENCE_PHASE.NEXTVAL, S.CONFERENCE_ID, S.SUBMISSION_OPEN_AT, S.SUBMISSION_CLOSE_AT,
+                  S.BIDDING_OPEN_AT, S.BIDDING_CLOSE_AT, S.REVIEW_DEADLINE_AT, S.DECISION_RELEASE_AT
+                )
                 """
         );
     }

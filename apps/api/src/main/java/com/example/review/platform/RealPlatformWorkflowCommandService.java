@@ -5,6 +5,7 @@ import com.example.review.auth.RoleGuard;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -116,6 +117,7 @@ public class RealPlatformWorkflowCommandService {
                 answers
         );
         if ("SUBMITTED".equals(responseStatus)) {
+            repository.insertReviewFormRevision(responseId, answers);
             repository.markAssignmentSubmitted(assignment.assignmentId());
         }
         PlatformReviewFormResponseRow row = repository.findReviewFormResponse(responseId).orElseThrow();
@@ -127,6 +129,55 @@ public class RealPlatformWorkflowCommandService {
                 row.answers(),
                 row.submittedAt()
         );
+    }
+
+    @Transactional
+    public WorkflowFormResponse saveManuscriptFormResponse(
+            CurrentUserPrincipal principal,
+            long manuscriptId,
+            WorkflowFormResponseRequest request
+    ) {
+        PlatformManuscriptRow manuscript = repository.findManuscript(manuscriptId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
+        PlatformFormRow form = repository.findForm(request.formId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Form not found"));
+        if (form.conferenceId() != manuscript.conferenceId()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Form does not match manuscript conference");
+        }
+        requireManuscriptFormWriter(principal, manuscript, form.formType());
+        String responseStatus = requireEnum(request.responseStatus(), "responseStatus", List.of("DRAFT", "SUBMITTED"));
+        Map<String, Object> answers = request.answers() == null ? Map.of() : request.answers();
+        if ("SUBMITTED".equals(responseStatus)) {
+            validateRequiredAnswers(repository.listFormFields(form.formId()), answers);
+            enforceWorkflowFormWindow(manuscript.conferenceId(), form.formType());
+        }
+        long responseId = repository.upsertWorkflowFormResponse(
+                form.formId(),
+                "MANUSCRIPT",
+                manuscript.manuscriptId(),
+                principal.userId(),
+                responseStatus,
+                answers
+        );
+        return toWorkflowFormResponse(repository.findWorkflowFormResponse(responseId).orElseThrow());
+    }
+
+    private void requireManuscriptFormWriter(
+            CurrentUserPrincipal principal,
+            PlatformManuscriptRow manuscript,
+            String formType
+    ) {
+        if ("META_REVIEW".equals(formType)) {
+            accessService.requireManuscriptOperator(principal, manuscript.manuscriptId());
+            return;
+        }
+        if (!List.of("SUBMISSION", "AUTHOR_FEEDBACK", "CAMERA_READY").contains(formType)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Form type is not manuscript-submittable");
+        }
+        RoleGuard.requireRole(principal, "AUTHOR");
+        if (manuscript.submitterId() != principal.userId()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Manuscript form access is not allowed");
+        }
     }
 
     @Transactional
@@ -146,6 +197,9 @@ public class RealPlatformWorkflowCommandService {
                 "AUTHOR_FEEDBACK",
                 "REVISION_NOTE"
         ));
+        if ("REBUTTAL".equals(feedbackType)) {
+            enforceRebuttalWindow(manuscript.conferenceId());
+        }
         long feedbackId = repository.insertAuthorFeedback(
                 manuscript.manuscriptId(),
                 principal.userId(),
@@ -286,6 +340,37 @@ public class RealPlatformWorkflowCommandService {
         }
     }
 
+    private void enforceWorkflowFormWindow(long conferenceId, String formType) {
+        if ("CAMERA_READY".equals(formType)) {
+            PlatformPhaseWindowRow window = repository.findPhaseWindows(conferenceId).orElse(null);
+            if (window == null) {
+                return;
+            }
+            Instant now = Instant.now();
+            if ((window.cameraReadyOpenAt() != null && now.isBefore(window.cameraReadyOpenAt().toInstant()))
+                    || (window.cameraReadyCloseAt() != null && !now.isBefore(window.cameraReadyCloseAt().toInstant()))) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Camera-ready window is closed");
+            }
+        }
+    }
+
+    private void enforceRebuttalWindow(long conferenceId) {
+        PlatformPhaseWindowRow window = repository.findPhaseWindows(conferenceId).orElse(null);
+        if (window == null) {
+            return;
+        }
+        Instant now = Instant.now();
+        Instant closeAt = window.rebuttalCloseAt() != null
+                ? window.rebuttalCloseAt().toInstant()
+                : window.decisionReleaseAt() == null ? null : window.decisionReleaseAt().toInstant();
+        if (window.rebuttalOpenAt() != null && now.isBefore(window.rebuttalOpenAt().toInstant())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Rebuttal window is not open");
+        }
+        if (closeAt != null && !now.isBefore(closeAt)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Rebuttal window is closed");
+        }
+    }
+
     private TagImportPreviewDocument parseTagCsv(String csvText) {
         String text = requireText(csvText, "csvText");
         String[] lines = text.replace("\r\n", "\n").replace('\r', '\n').split("\n");
@@ -355,6 +440,18 @@ public class RealPlatformWorkflowCommandService {
                 row.feedbackType(),
                 row.feedbackText(),
                 row.createdAt()
+        );
+    }
+
+    private WorkflowFormResponse toWorkflowFormResponse(PlatformWorkflowFormResponseRow row) {
+        return new WorkflowFormResponse(
+                row.responseId(),
+                row.formId(),
+                row.subjectType(),
+                row.subjectId(),
+                row.responseStatus(),
+                row.answers(),
+                row.submittedAt()
         );
     }
 }

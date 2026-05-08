@@ -83,6 +83,29 @@ public class RealPlatformWorkflowRepository extends RealPlatformRepository {
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
     }
 
+    public Optional<PlatformFormRow> findActiveForm(long conferenceId, String formType) {
+        List<PlatformFormRow> rows = jdbcTemplate.query(
+                """
+                SELECT FORM_ID, CONFERENCE_ID, FORM_TYPE, FORM_NAME
+                FROM CONFERENCE_FORM_DEFINITION
+                WHERE CONFERENCE_ID = ?
+                  AND FORM_TYPE = ?
+                  AND ACTIVE_FLAG = 1
+                ORDER BY UPDATED_AT DESC, FORM_ID DESC
+                FETCH FIRST 1 ROW ONLY
+                """,
+                (rs, rowNum) -> new PlatformFormRow(
+                        rs.getLong("FORM_ID"),
+                        rs.getLong("CONFERENCE_ID"),
+                        rs.getString("FORM_TYPE"),
+                        rs.getString("FORM_NAME")
+                ),
+                conferenceId,
+                formType
+        );
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
+    }
+
     public List<PlatformFormFieldRow> listFormFields(long formId) {
         return jdbcTemplate.query(
                 """
@@ -177,6 +200,141 @@ public class RealPlatformWorkflowRepository extends RealPlatformRepository {
                         rs.getTimestamp("SUBMITTED_AT")
                 ),
                 responseId
+        );
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
+    }
+
+    public void insertReviewFormRevision(long responseId, Map<String, Object> answers) {
+        Integer nextRevisionNo = jdbcTemplate.queryForObject(
+                """
+                SELECT COALESCE(MAX(REVISION_NO), 0) + 1
+                FROM REVIEW_FORM_RESPONSE_REVISION
+                WHERE RESPONSE_ID = ?
+                """,
+                Integer.class,
+                responseId
+        );
+        long revisionId = jdbcTemplate.queryForObject("SELECT SEQ_REVIEW_FORM_RESPONSE_REV.NEXTVAL FROM DUAL", Long.class);
+        jdbcTemplate.update(
+                """
+                INSERT INTO REVIEW_FORM_RESPONSE_REVISION (
+                  REVISION_ID, RESPONSE_ID, REVISION_NO, ANSWERS_JSON, SUBMITTED_AT
+                ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                revisionId,
+                responseId,
+                nextRevisionNo == null ? 1 : nextRevisionNo,
+                toJson(answers)
+        );
+    }
+
+    public long upsertWorkflowFormResponse(
+            long formId,
+            String subjectType,
+            long subjectId,
+            long submittedBy,
+            String responseStatus,
+            Map<String, Object> answers
+    ) {
+        Long existingId = jdbcTemplate.query(
+                """
+                SELECT RESPONSE_ID
+                FROM WORKFLOW_FORM_RESPONSE
+                WHERE FORM_ID = ?
+                  AND SUBJECT_TYPE = ?
+                  AND SUBJECT_ID = ?
+                """,
+                rs -> rs.next() ? rs.getLong("RESPONSE_ID") : null,
+                formId,
+                subjectType,
+                subjectId
+        );
+        String answersJson = toJson(answers);
+        Timestamp submittedAt = "SUBMITTED".equals(responseStatus) ? new Timestamp(System.currentTimeMillis()) : null;
+        if (existingId != null) {
+            jdbcTemplate.update(
+                    """
+                    UPDATE WORKFLOW_FORM_RESPONSE
+                    SET SUBMITTED_BY = ?,
+                        RESPONSE_STATUS = ?,
+                        ANSWERS_JSON = ?,
+                        SUBMITTED_AT = ?
+                    WHERE RESPONSE_ID = ?
+                    """,
+                    submittedBy,
+                    responseStatus,
+                    answersJson,
+                    submittedAt,
+                    existingId
+            );
+            return existingId;
+        }
+        long responseId = jdbcTemplate.queryForObject("SELECT SEQ_WORKFLOW_FORM_RESPONSE.NEXTVAL FROM DUAL", Long.class);
+        jdbcTemplate.update(
+                """
+                INSERT INTO WORKFLOW_FORM_RESPONSE (
+                  RESPONSE_ID, FORM_ID, SUBJECT_TYPE, SUBJECT_ID, SUBMITTED_BY,
+                  RESPONSE_STATUS, ANSWERS_JSON, CREATED_AT, UPDATED_AT, SUBMITTED_AT
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
+                """,
+                responseId,
+                formId,
+                subjectType,
+                subjectId,
+                submittedBy,
+                responseStatus,
+                answersJson,
+                submittedAt
+        );
+        return responseId;
+    }
+
+    public Optional<PlatformWorkflowFormResponseRow> findWorkflowFormResponse(long responseId) {
+        List<PlatformWorkflowFormResponseRow> rows = jdbcTemplate.query(
+                """
+                SELECT RESPONSE_ID, FORM_ID, SUBJECT_TYPE, SUBJECT_ID, RESPONSE_STATUS, ANSWERS_JSON, SUBMITTED_AT
+                FROM WORKFLOW_FORM_RESPONSE
+                WHERE RESPONSE_ID = ?
+                """,
+                (rs, rowNum) -> new PlatformWorkflowFormResponseRow(
+                        rs.getLong("RESPONSE_ID"),
+                        rs.getLong("FORM_ID"),
+                        rs.getString("SUBJECT_TYPE"),
+                        rs.getLong("SUBJECT_ID"),
+                        rs.getString("RESPONSE_STATUS"),
+                        fromJson(rs.getString("ANSWERS_JSON")),
+                        rs.getTimestamp("SUBMITTED_AT")
+                ),
+                responseId
+        );
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
+    }
+
+    public Optional<PlatformPhaseWindowRow> findPhaseWindows(long conferenceId) {
+        List<PlatformPhaseWindowRow> rows = jdbcTemplate.query(
+                """
+                SELECT SUBMISSION_OPEN_AT,
+                       SUBMISSION_CLOSE_AT,
+                       REVIEW_DEADLINE_AT,
+                       DECISION_RELEASE_AT,
+                       REBUTTAL_OPEN_AT,
+                       REBUTTAL_CLOSE_AT,
+                       CAMERA_READY_OPEN_AT,
+                       CAMERA_READY_CLOSE_AT
+                FROM CONFERENCE_PHASE
+                WHERE CONFERENCE_ID = ?
+                """,
+                (rs, rowNum) -> new PlatformPhaseWindowRow(
+                        rs.getTimestamp("SUBMISSION_OPEN_AT"),
+                        rs.getTimestamp("SUBMISSION_CLOSE_AT"),
+                        rs.getTimestamp("REVIEW_DEADLINE_AT"),
+                        rs.getTimestamp("DECISION_RELEASE_AT"),
+                        rs.getTimestamp("REBUTTAL_OPEN_AT"),
+                        rs.getTimestamp("REBUTTAL_CLOSE_AT"),
+                        rs.getTimestamp("CAMERA_READY_OPEN_AT"),
+                        rs.getTimestamp("CAMERA_READY_CLOSE_AT")
+                ),
+                conferenceId
         );
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
     }

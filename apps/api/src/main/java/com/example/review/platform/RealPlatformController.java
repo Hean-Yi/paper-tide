@@ -45,12 +45,47 @@ public class RealPlatformController {
         return service.saveReviewFormResponse(principal, assignmentId, request);
     }
 
+    @GetMapping("/conferences/{conferenceId}/forms/{formType}/active")
+    public WorkflowFormPackageResponse activeConferenceForm(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long conferenceId,
+            @PathVariable String formType
+    ) {
+        return workflowReadService.activeConferenceForm(principal, conferenceId, formType);
+    }
+
     @GetMapping("/review-assignments/{assignmentId}/review-form")
     public ReviewFormPackageResponse reviewForm(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable long assignmentId
     ) {
         return workflowReadService.reviewForm(principal, assignmentId);
+    }
+
+    @GetMapping("/review-assignments/{assignmentId}/review-form/revisions")
+    public List<ReviewFormRevisionResponse> reviewFormRevisions(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long assignmentId
+    ) {
+        return workflowReadService.reviewFormRevisions(principal, assignmentId);
+    }
+
+    @GetMapping("/manuscripts/{manuscriptId}/forms/{formType}")
+    public WorkflowFormPackageResponse manuscriptForm(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long manuscriptId,
+            @PathVariable String formType
+    ) {
+        return workflowReadService.manuscriptForm(principal, manuscriptId, formType);
+    }
+
+    @PostMapping("/manuscripts/{manuscriptId}/form-response")
+    public WorkflowFormResponse saveManuscriptFormResponse(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long manuscriptId,
+            @RequestBody WorkflowFormResponseRequest request
+    ) {
+        return service.saveManuscriptFormResponse(principal, manuscriptId, request);
     }
 
     @PostMapping("/manuscripts/{manuscriptId}/author-feedback")

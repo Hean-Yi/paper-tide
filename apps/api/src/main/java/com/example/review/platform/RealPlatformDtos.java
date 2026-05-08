@@ -60,6 +60,38 @@ record ReviewFormResponse(
 ) {
 }
 
+record WorkflowFormResponseRequest(
+        long formId,
+        String responseStatus,
+        Map<String, Object> answers
+) {
+}
+
+record WorkflowFormPackageResponse(
+        FormDefinitionResponse form,
+        WorkflowFormResponse currentResponse
+) {
+}
+
+record WorkflowFormResponse(
+        long responseId,
+        long formId,
+        String subjectType,
+        long subjectId,
+        String responseStatus,
+        Map<String, Object> answers,
+        Timestamp submittedAt
+) {
+}
+
+record ReviewFormRevisionResponse(
+        long revisionId,
+        int revisionNo,
+        Map<String, Object> answers,
+        Timestamp submittedAt
+) {
+}
+
 record AuthorFeedbackRequest(
         String feedbackType,
         String feedbackText

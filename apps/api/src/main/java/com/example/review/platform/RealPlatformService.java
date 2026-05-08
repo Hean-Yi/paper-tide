@@ -34,6 +34,13 @@ public class RealPlatformService {
     ) {
         return workflowCommandService.saveReviewFormResponse(principal, assignmentId, request);
     }
+    public WorkflowFormResponse saveManuscriptFormResponse(
+            CurrentUserPrincipal principal,
+            long manuscriptId,
+            WorkflowFormResponseRequest request
+    ) {
+        return workflowCommandService.saveManuscriptFormResponse(principal, manuscriptId, request);
+    }
     public AuthorFeedbackResponse submitAuthorFeedback(
             CurrentUserPrincipal principal,
             long manuscriptId,

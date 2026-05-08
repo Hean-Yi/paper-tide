@@ -222,6 +222,141 @@ class RealPlatformWaveNineServiceTest {
                 .andExpect(jsonPath("$.exportStatus").value("PREVIEWED"));
     }
 
+    @Test
+    void proceedingsExportMetadataMarksPreviewAsExportedWithoutExternalProvider() throws Exception {
+        AssignmentFixture fixture = seedAcceptedAssignment();
+        jdbcTemplate.update("UPDATE MANUSCRIPT SET CURRENT_STATUS = 'ACCEPTED', LAST_DECISION_CODE = 'ACCEPT' WHERE MANUSCRIPT_ID = ?", fixture.manuscriptId());
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        mockMvc.perform(post("/api/manuscripts/{manuscriptId}/publication-metadata", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "doi": "10.5555/wave9-export",
+                                  "indexKeywords": "systems,export",
+                                  "publicationStatus": "READY_FOR_PROCEEDINGS"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        MvcResult previewResult = mockMvc.perform(post("/api/conferences/{conferenceId}/proceedings/preview", 0)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"exportName\":\"Wave 9 Metadata Export\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        long exportBatchId = objectMapper.readTree(previewResult.getResponse().getContentAsString())
+                .path("exportBatchId")
+                .asLong();
+
+        mockMvc.perform(post("/api/proceedings-exports/{exportBatchId}/download-metadata", exportBatchId)
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.exportBatchId").value(exportBatchId))
+                .andExpect(jsonPath("$.downloadFileName").value("wave-9-metadata-export.json"))
+                .andExpect(jsonPath("$.exportStatus").value("EXPORTED"));
+
+        String exportStatus = jdbcTemplate.queryForObject(
+                "SELECT EXPORT_STATUS FROM PROCEEDINGS_EXPORT_BATCH WHERE EXPORT_BATCH_ID = ?",
+                String.class,
+                exportBatchId
+        );
+        String publicationStatus = jdbcTemplate.queryForObject(
+                "SELECT PUBLICATION_STATUS FROM PUBLICATION_METADATA WHERE MANUSCRIPT_ID = ?",
+                String.class,
+                fixture.manuscriptId()
+        );
+        assertThat(exportStatus).isEqualTo("EXPORTED");
+        assertThat(publicationStatus).isEqualTo("EXPORTED");
+    }
+
+    @Test
+    void publicationOperationsReadModelListsTemplatesOfflineImportsCameraReadyAndExports() throws Exception {
+        AssignmentFixture fixture = seedAcceptedAssignment();
+        jdbcTemplate.update("UPDATE MANUSCRIPT SET CURRENT_STATUS = 'ACCEPTED', LAST_DECISION_CODE = 'ACCEPT' WHERE MANUSCRIPT_ID = ?", fixture.manuscriptId());
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        String reviewerToken = loginAndExtractToken("reviewer_demo", "demo123");
+        String authorToken = loginAndExtractToken("author_demo", "demo123");
+
+        MvcResult templateResult = mockMvc.perform(post("/api/conferences/{conferenceId}/email-templates", 0)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "templateKey": "decision_notice",
+                                  "subjectTemplate": "Decision for {{title}}",
+                                  "bodyTemplate": "Dear author, {{decision}}"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn();
+        long templateId = objectMapper.readTree(templateResult.getResponse().getContentAsString()).path("templateId").asLong();
+        mockMvc.perform(post("/api/email-templates/{templateId}/test-send", templateId)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "recipientEmail": "chair@example.com",
+                                  "variables": { "title": "Wave 9 Paper", "decision": "Accept" }
+                                }
+                                """))
+                .andExpect(status().isOk());
+        MvcResult offlinePreviewResult = mockMvc.perform(post("/api/review-assignments/{assignmentId}/offline-review/preview", fixture.assignmentId())
+                        .header("Authorization", "Bearer " + reviewerToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "csvText": "overallScore,recommendation,commentsToAuthor\\n4,ACCEPT,Clear contribution"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn();
+        long offlineBatchId = objectMapper.readTree(offlinePreviewResult.getResponse().getContentAsString()).path("batchId").asLong();
+        mockMvc.perform(post("/api/offline-review-imports/{batchId}/confirm", offlineBatchId)
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/manuscripts/{manuscriptId}/camera-ready-files", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + authorToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fileName": "camera-ready.pdf",
+                                  "fileSize": 2048,
+                                  "checksumSha256": "abc123",
+                                  "copyrightConfirmed": true,
+                                  "licenseType": "CC-BY"
+                                }
+                                """))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/manuscripts/{manuscriptId}/publication-metadata", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "doi": "10.5555/wave9-dashboard",
+                                  "indexKeywords": "systems,dashboard",
+                                  "publicationStatus": "READY_FOR_PROCEEDINGS"
+                                }
+                                """))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/conferences/{conferenceId}/proceedings/preview", 0)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"exportName\":\"Wave 9 Dashboard Export\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/conferences/{conferenceId}/publication-operations", 0)
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conferenceId").value(0))
+                .andExpect(jsonPath("$.emailTemplates[0].templateKey").value("decision_notice"))
+                .andExpect(jsonPath("$.emailHistory[0].recipientEmail").value("chair@example.com"))
+                .andExpect(jsonPath("$.offlineReviewImports[0].batchStatus").value("APPLIED"))
+                .andExpect(jsonPath("$.cameraReadyFiles[0].fileName").value("camera-ready.pdf"))
+                .andExpect(jsonPath("$.publicationMetadata[0].doi").value("10.5555/wave9-dashboard"))
+                .andExpect(jsonPath("$.proceedingsExports[0].exportName").value("Wave 9 Dashboard Export"));
+    }
+
     private AssignmentFixture seedAcceptedAssignment() {
         long manuscriptId = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT.NEXTVAL FROM DUAL", Long.class);
         long versionId = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT_VERSION.NEXTVAL FROM DUAL", Long.class);

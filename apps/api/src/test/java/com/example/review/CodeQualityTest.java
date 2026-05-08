@@ -119,7 +119,7 @@ class CodeQualityTest {
         assertTrue(verification.contains("IDX_REVIEW_ROUND_STATUS_ID"));
         assertTrue(verification.contains("IDX_REVIEW_ASSIGNMENT_ROUND_ID"));
         assertTrue(verification.contains("IDX_REVIEW_REPORT_ROUND"));
-        assertTrue(verification.contains("Expected 83 indexes"));
+        assertTrue(verification.contains("Expected 84 indexes"));
 
         assertTrue(applyScript.contains("009_execution_job_attempt_count.sql"));
         assertTrue(applyScript.contains("010_database_query_optimization.sql"));
@@ -173,7 +173,7 @@ class CodeQualityTest {
         assertTrue(verification.contains("Expected 56 tables"));
         assertTrue(verification.contains("Expected 55 sequences"));
         assertTrue(verification.contains("Expected 58 triggers"));
-        assertTrue(verification.contains("Expected 83 indexes"));
+        assertTrue(verification.contains("Expected 84 indexes"));
     }
 
     @Test
@@ -222,6 +222,28 @@ class CodeQualityTest {
         assertTrue(applyScript.contains("023_publication_communication_maturity.sql"));
         assertTrue(devUp.contains("023_publication_communication_maturity.sql"));
         assertTrue(verification.contains("Expected publication/communication maturity tables to exist"));
+    }
+
+    @Test
+    void waveEightNineSliceBCompletionMigrationIsWiredAndVerified() throws IOException {
+        Path migrationPath = Path.of("..", "..", "database", "oracle", "024_wave8_wave9_slice_b_completion.sql");
+        assertTrue(Files.exists(migrationPath));
+
+        String migration = Files.readString(migrationPath);
+        String verification = Files.readString(Path.of("..", "..", "database", "oracle", "verify_schema.sql"));
+        String applyScript = Files.readString(Path.of("..", "..", "scripts", "oracle-schema-apply.sh"));
+        String devUp = Files.readString(Path.of("..", "..", "scripts", "dev-up.sh"));
+        String testAll = Files.readString(Path.of("..", "..", "scripts", "test-all.sh"));
+
+        assertTrue(migration.contains("REVIEWER_INVITATIONS"));
+        assertTrue(migration.contains("MATCHING_SCORES"));
+        assertTrue(migration.contains("IDX_IMPORT_BATCH_TYPE_STATUS"));
+        assertTrue(applyScript.contains("024_wave8_wave9_slice_b_completion.sql"));
+        assertTrue(devUp.contains("024_wave8_wave9_slice_b_completion.sql"));
+        assertTrue(testAll.contains("024_wave8_wave9_slice_b_completion.sql"));
+        assertTrue(verification.contains("IDX_IMPORT_BATCH_TYPE_STATUS"));
+        assertTrue(verification.contains("MATCHING_SCORES"));
+        assertTrue(verification.contains("Wave8/Wave9 SliceB import constraint is missing"));
     }
 
     @Test

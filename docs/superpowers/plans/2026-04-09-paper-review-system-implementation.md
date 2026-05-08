@@ -2858,7 +2858,7 @@ Expected after implementation: both commands pass.
 
 **Current execution state for Wave8/Wave9:**
 
-- Slice A is active.
+- Slice A is complete.
 - Slice B is planned but must not be marked complete until UI, bulk operations, import/export, and product-depth tests are landed.
 
 **Slice A execution result on 2026-05-08:**
@@ -2882,3 +2882,30 @@ Expected after implementation: both commands pass.
 - Current completion state:
   - Wave 8/Wave 9 Slice A backend/schema/API foundation is complete.
   - Slice B remains open for UI, bulk preview-confirm flows, real import/export/download surfaces, richer Agent proposal context, communication console, offline review UI, publication workbench, and provider adapters.
+
+**Slice B execution started on 2026-05-08:**
+
+- Active scope: complete Wave 6 through Wave 9 as actor-usable business workflows, not a minimum closure. Wave 10 production operations remain out of this slice. Real SMTP, DOI registration, and external indexing stay behind fake/local adapters, but API/UI/read-model/audit/download-metadata loops must be usable end to end.
+- Architecture target: stop growing `RealPlatformService` and `RealPlatformRepository` as catch-all classes. New read/query behavior must go into page-shaped read services and repositories, and new workflow slices should be split by business boundary: configurable workflow/forms, chair assignment/COI operations, import/export operations, and publication/communication operations. Keep existing endpoints compatible while moving behavior behind smaller services.
+- Backend target: add preview-confirm bulk reviewer invitations and matching-score imports, confirm assignment proposal bundles into `ASSIGNMENT_DRAFT` rows with confirm-time COI/load/duplicate checks, expose proceedings export/download metadata, and add page-shaped read endpoints for assignment operations and publication/communication operations so operator UI can render current state without manual database knowledge.
+- Frontend target: add chair workbenches for reviewer operations and publication/communication, dynamic reviewer/author configurable workflow affordances where API support exists, reviewer offline-review/delegation controls, and author camera-ready checklist affordances using the existing Element Plus workflow patterns.
+- Verification target: use RED tests first for new backend and frontend behavior, then run target tests, schema verification, API/web/agent verification, `git diff --check`, and full `RUN_ANALYSIS_E2E_SMOKE=1 bash scripts/test-all.sh` before marking Slice B complete.
+
+**Slice B execution result on 2026-05-08:**
+
+- Backend/UI completion added:
+  - Added page-shaped read endpoints for `/api/conferences/{conferenceId}/assignment-operations` and `/api/conferences/{conferenceId}/publication-operations`, backed by new `RealPlatformOperationsReadService` and `RealPlatformOperationsReadRepository` so operator UI no longer depends on manual database knowledge.
+  - Added reviewer dynamic form read endpoint `/api/review-assignments/{assignmentId}/review-form`, backed by new `RealPlatformWorkflowReadService` and `RealPlatformWorkflowReadRepository`, with assignment-scoped reviewer authorization and saved draft hydration.
+  - Added chair Assignment Operations and Publication Operations views, route/nav entries, frontend API clients, bulk invitation/TPMS preview controls, proposal confirm-to-draft action, proceedings export metadata action, and dashboard tables for invitations, delegations, imports, proposals, matching scores, templates, email history, offline imports, camera-ready files, publication metadata, and proceedings exports.
+  - Extended `ReviewEditorView` to render configured dynamic review fields with saved answers while preserving the existing fixed review report flow as a compatibility path.
+  - Added `024_wave8_wave9_slice_b_completion.sql` to extend `IMPORT_BATCH` supported types and add the import type/status polling index; wired it into full apply, incremental dev bootstrap, test bootstrap, and schema verification.
+- Engineering cleanup added:
+  - Stopped adding read-model logic to the already-large `RealPlatformService`/`RealPlatformRepository` pair by introducing separate read services/repositories for workflow forms and operator dashboards.
+  - Updated `AGENTS.md` with reusable rules about broad wave completion and catch-all service/repository bloat.
+- Verification run:
+  - RED/GREEN target tests: `mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=RealPlatformWorkflowServiceTest test`, `mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=RealPlatformWaveEightServiceTest,RealPlatformWaveNineServiceTest test`, and `npm run test -- --run src/tests/workflow.spec.ts`.
+  - Target aggregate: `mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=CodeQualityTest,RealPlatformWorkflowServiceTest,RealPlatformWaveEightServiceTest,RealPlatformWaveNineServiceTest test`.
+  - Full verification: `mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test`, `cd apps/web && npm run test -- --run && npm run typecheck && npm run build`, Oracle `verify_schema.sql`, `git diff --check`, and `RUN_ANALYSIS_E2E_SMOKE=1 bash scripts/test-all.sh`.
+- Current completion state:
+  - Wave 6 through Wave 9 now have actor-facing API/UI loops for dynamic reviewer forms, assignment/COI operations, bulk assignment imports, proposal confirmation to drafts, publication/communication dashboards, and proceedings export metadata.
+  - Remaining product-depth items are kept explicit in `TODO.md`: configurable submission/meta-review/camera-ready form coverage, review revision history, rebuttal window enforcement, saved search/formula filters, CSV export files, bulk decision/user/conflict/preference confirms, Agent proposal context enrichment, audited override UI, real file/proceedings downloads, DOI/index adapters, and richer communication compose/reminder workflows.

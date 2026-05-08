@@ -170,6 +170,13 @@ apply_oracle_publication_communication_maturity_schema() {
     >/dev/null
 }
 
+apply_oracle_wave8_wave9_slice_b_completion_schema() {
+  docker cp "$ROOT_DIR/database/oracle/024_wave8_wave9_slice_b_completion.sql" "$DEFAULT_ORACLE_CONTAINER:/tmp/024_wave8_wave9_slice_b_completion.sql" >/dev/null
+  docker exec "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE} @/tmp/024_wave8_wave9_slice_b_completion.sql" \
+    >/dev/null
+}
+
 oracle_column_exists() {
   local table_name="$1"
   local column_name="$2"
@@ -240,6 +247,11 @@ all_publication_communication_maturity_tables_exist() {
     oracle_table_exists "CAMERA_READY_FILE" &&
     oracle_table_exists "PUBLICATION_METADATA" &&
     oracle_table_exists "PROCEEDINGS_EXPORT_BATCH"
+}
+
+wave8_wave9_slice_b_completion_exists() {
+  oracle_index_exists "IDX_IMPORT_BATCH_TYPE_STATUS" &&
+    oracle_constraint_mentions "CK_IMPORT_BATCH_TYPE" "MATCHING_SCORES"
 }
 
 oracle_constraint_mentions() {
@@ -356,6 +368,11 @@ ensure_oracle_schema() {
   if ! all_publication_communication_maturity_tables_exist; then
     echo "Oracle schema detected without 023 publication/communication maturity objects. Applying incremental schema..." >&2
     apply_oracle_publication_communication_maturity_schema
+  fi
+
+  if ! wave8_wave9_slice_b_completion_exists; then
+    echo "Oracle schema detected without 024 Wave8/Wave9 SliceB completion objects. Applying incremental schema..." >&2
+    apply_oracle_wave8_wave9_slice_b_completion_schema
   fi
 
   if verify_oracle_schema; then

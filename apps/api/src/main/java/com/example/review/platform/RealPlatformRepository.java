@@ -67,6 +67,15 @@ public class RealPlatformRepository {
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
     }
 
+    public boolean userExists(long userId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM SYS_USER WHERE USER_ID = ?",
+                Integer.class,
+                userId
+        );
+        return count != null && count > 0;
+    }
+
     public Optional<PlatformAssignmentRow> findAssignment(long assignmentId) {
         List<PlatformAssignmentRow> rows = jdbcTemplate.query(
                 """
@@ -705,6 +714,73 @@ public class RealPlatformRepository {
         return batchId;
     }
 
+    public long insertReviewerInvitationImportBatch(
+            long conferenceId,
+            long submittedBy,
+            int rowCount,
+            int validRowCount,
+            int errorCount,
+            BulkReviewerInvitationImportDocument previewDocument
+    ) {
+        return insertGenericImportBatch(
+                conferenceId,
+                "REVIEWER_INVITATIONS",
+                submittedBy,
+                rowCount,
+                validRowCount,
+                errorCount,
+                previewDocument
+        );
+    }
+
+    public long insertMatchingScoreImportBatch(
+            long conferenceId,
+            long submittedBy,
+            int rowCount,
+            int validRowCount,
+            int errorCount,
+            BulkMatchingScoreImportDocument previewDocument
+    ) {
+        return insertGenericImportBatch(
+                conferenceId,
+                "MATCHING_SCORES",
+                submittedBy,
+                rowCount,
+                validRowCount,
+                errorCount,
+                previewDocument
+        );
+    }
+
+    private long insertGenericImportBatch(
+            long conferenceId,
+            String importType,
+            long submittedBy,
+            int rowCount,
+            int validRowCount,
+            int errorCount,
+            Object previewDocument
+    ) {
+        long batchId = jdbcTemplate.queryForObject("SELECT SEQ_IMPORT_BATCH.NEXTVAL FROM DUAL", Long.class);
+        jdbcTemplate.update(
+                """
+                INSERT INTO IMPORT_BATCH (
+                  IMPORT_BATCH_ID, CONFERENCE_ID, IMPORT_TYPE, SUBMITTED_BY, BATCH_STATUS,
+                  ROW_COUNT, VALID_ROW_COUNT, ERROR_COUNT, PREVIEW_JSON, CREATED_AT, APPLIED_AT
+                ) VALUES (?, ?, ?, ?, 'PREVIEWED', ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL)
+                """,
+                batchId,
+                conferenceId,
+                importType,
+                submittedBy,
+                rowCount,
+                validRowCount,
+                errorCount,
+                toJson(previewDocument)
+        );
+        return batchId;
+    }
+
     public Optional<PlatformImportBatchRow> findImportBatch(long batchId) {
         List<PlatformImportBatchRow> rows = jdbcTemplate.query(
                 """
@@ -719,6 +795,46 @@ public class RealPlatformRepository {
                         rs.getLong("SUBMITTED_BY"),
                         rs.getString("BATCH_STATUS"),
                         fromJson(rs.getString("PREVIEW_JSON"), TagImportPreviewDocument.class)
+                ),
+                batchId
+        );
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
+    }
+
+    public Optional<PlatformReviewerInvitationImportBatchRow> findReviewerInvitationImportBatch(long batchId) {
+        List<PlatformReviewerInvitationImportBatchRow> rows = jdbcTemplate.query(
+                """
+                SELECT IMPORT_BATCH_ID, CONFERENCE_ID, IMPORT_TYPE, SUBMITTED_BY, BATCH_STATUS, PREVIEW_JSON
+                FROM IMPORT_BATCH
+                WHERE IMPORT_BATCH_ID = ?
+                """,
+                (rs, rowNum) -> new PlatformReviewerInvitationImportBatchRow(
+                        rs.getLong("IMPORT_BATCH_ID"),
+                        rs.getLong("CONFERENCE_ID"),
+                        rs.getString("IMPORT_TYPE"),
+                        rs.getLong("SUBMITTED_BY"),
+                        rs.getString("BATCH_STATUS"),
+                        fromJson(rs.getString("PREVIEW_JSON"), BulkReviewerInvitationImportDocument.class)
+                ),
+                batchId
+        );
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
+    }
+
+    public Optional<PlatformMatchingScoreImportBatchRow> findMatchingScoreImportBatch(long batchId) {
+        List<PlatformMatchingScoreImportBatchRow> rows = jdbcTemplate.query(
+                """
+                SELECT IMPORT_BATCH_ID, CONFERENCE_ID, IMPORT_TYPE, SUBMITTED_BY, BATCH_STATUS, PREVIEW_JSON
+                FROM IMPORT_BATCH
+                WHERE IMPORT_BATCH_ID = ?
+                """,
+                (rs, rowNum) -> new PlatformMatchingScoreImportBatchRow(
+                        rs.getLong("IMPORT_BATCH_ID"),
+                        rs.getLong("CONFERENCE_ID"),
+                        rs.getString("IMPORT_TYPE"),
+                        rs.getLong("SUBMITTED_BY"),
+                        rs.getString("BATCH_STATUS"),
+                        fromJson(rs.getString("PREVIEW_JSON"), BulkMatchingScoreImportDocument.class)
                 ),
                 batchId
         );
@@ -1008,6 +1124,124 @@ public class RealPlatformRepository {
                 bundleId
         );
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
+    }
+
+    public List<PlatformAssignmentProposalRow> listAssignmentProposalsForBundle(long bundleId) {
+        return jdbcTemplate.query(
+                """
+                SELECT PROPOSAL_ID, BUNDLE_ID, REVIEWER_ID, RANK_ORDER, MATCHING_SCORE, ELIGIBILITY_STATUS, RATIONALE
+                FROM ASSIGNMENT_PROPOSAL
+                WHERE BUNDLE_ID = ?
+                ORDER BY RANK_ORDER, PROPOSAL_ID
+                """,
+                (rs, rowNum) -> new PlatformAssignmentProposalRow(
+                        rs.getLong("PROPOSAL_ID"),
+                        rs.getLong("BUNDLE_ID"),
+                        rs.getLong("REVIEWER_ID"),
+                        rs.getInt("RANK_ORDER"),
+                        rs.getDouble("MATCHING_SCORE"),
+                        rs.getString("ELIGIBILITY_STATUS"),
+                        rs.getString("RATIONALE")
+                ),
+                bundleId
+        );
+    }
+
+    public PlatformProposalReviewerValidationRow validateProposalReviewer(long manuscriptId, long roundId, long reviewerId) {
+        return jdbcTemplate.queryForObject(
+                """
+                SELECT CR.REVIEWER_ID,
+                       CR.MAX_LOAD,
+                       COALESCE((
+                         SELECT COUNT(*)
+                         FROM REVIEW_ASSIGNMENT A
+                         WHERE A.REVIEWER_ID = CR.REVIEWER_ID
+                           AND A.TASK_STATUS IN ('ASSIGNED', 'ACCEPTED', 'IN_REVIEW', 'SUBMITTED', 'OVERDUE')
+                       ), 0) AS CURRENT_LOAD,
+                       COALESCE((
+                         SELECT COUNT(*)
+                         FROM CONFLICT_RELATIONSHIP C
+                         WHERE C.MANUSCRIPT_ID = ?
+                           AND C.REVIEWER_ID = CR.REVIEWER_ID
+                           AND C.SEVERITY = 'HARD'
+                       ), 0) AS HARD_CONFLICT_COUNT,
+                       COALESCE((
+                         SELECT COUNT(*)
+                         FROM REVIEW_ASSIGNMENT A
+                         WHERE A.ROUND_ID = ?
+                           AND A.REVIEWER_ID = CR.REVIEWER_ID
+                           AND A.TASK_STATUS <> 'CANCELLED'
+                       ), 0) AS ROUND_ASSIGNMENT_COUNT,
+                       COALESCE((
+                         SELECT COUNT(*)
+                         FROM ASSIGNMENT_DRAFT D
+                         WHERE D.ROUND_ID = ?
+                           AND D.REVIEWER_ID = CR.REVIEWER_ID
+                           AND D.DRAFT_STATUS <> 'DISMISSED'
+                       ), 0) AS OPEN_DRAFT_COUNT
+                FROM MANUSCRIPT M
+                JOIN CONFERENCE_REVIEWER CR
+                  ON CR.CONFERENCE_ID = M.CONFERENCE_ID
+                 AND CR.REVIEWER_ID = ?
+                 AND CR.MEMBERSHIP_STATUS = 'ACTIVE'
+                WHERE M.MANUSCRIPT_ID = ?
+                FOR UPDATE
+                """,
+                (rs, rowNum) -> new PlatformProposalReviewerValidationRow(
+                        rs.getLong("REVIEWER_ID"),
+                        rs.getInt("CURRENT_LOAD"),
+                        rs.getInt("MAX_LOAD"),
+                        rs.getInt("HARD_CONFLICT_COUNT"),
+                        rs.getInt("ROUND_ASSIGNMENT_COUNT"),
+                        rs.getInt("OPEN_DRAFT_COUNT")
+                ),
+                manuscriptId,
+                roundId,
+                roundId,
+                reviewerId,
+                manuscriptId
+        );
+    }
+
+    public void insertAssignmentDraftFromProposal(
+            PlatformAssignmentProposalBundleRow bundle,
+            PlatformAssignmentProposalRow proposal,
+            PlatformProposalReviewerValidationRow validation,
+            long createdBy
+    ) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO ASSIGNMENT_DRAFT (
+                  ASSIGNMENT_DRAFT_ID, ROUND_ID, MANUSCRIPT_ID, VERSION_ID, REVIEWER_ID,
+                  RANK_ORDER, SCORE, CURRENT_LOAD, MAX_LOAD, BID_VALUE, REASON, DRAFT_STATUS,
+                  CREATED_BY, CREATED_AT, UPDATED_AT
+                )
+                SELECT SEQ_ASSIGNMENT_DRAFT.NEXTVAL, B.ROUND_ID, B.MANUSCRIPT_ID, R.VERSION_ID, ?,
+                       ?, ?, ?, ?, NULL, ?, 'PROPOSED', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                FROM ASSIGNMENT_PROPOSAL_BUNDLE B
+                JOIN REVIEW_ROUND R ON R.ROUND_ID = B.ROUND_ID
+                WHERE B.BUNDLE_ID = ?
+                """,
+                proposal.reviewerId(),
+                proposal.rankOrder(),
+                Math.round(proposal.matchingScore() * 100),
+                validation.currentLoad(),
+                validation.maxLoad(),
+                "proposal=" + bundle.proposalName() + "; eligibility=" + proposal.eligibilityStatus(),
+                createdBy,
+                bundle.bundleId()
+        );
+    }
+
+    public void markAssignmentProposalBundleConfirmed(long bundleId) {
+        jdbcTemplate.update(
+                """
+                UPDATE ASSIGNMENT_PROPOSAL_BUNDLE
+                SET BUNDLE_STATUS = 'CONFIRMED'
+                WHERE BUNDLE_ID = ?
+                """,
+                bundleId
+        );
     }
 
     public long insertAssignmentOverrideAudit(long bundleId, long reviewerId, String overrideReason, long overriddenBy) {
@@ -1423,6 +1657,52 @@ public class RealPlatformRepository {
         return exportBatchId;
     }
 
+    public Optional<PlatformProceedingsExportBatchRow> findProceedingsExportBatch(long exportBatchId) {
+        List<PlatformProceedingsExportBatchRow> rows = jdbcTemplate.query(
+                """
+                SELECT E.EXPORT_BATCH_ID, E.CONFERENCE_ID, E.EXPORT_NAME, E.EXPORT_STATUS, E.PAPER_COUNT, C.ORGANIZER_USER_ID
+                FROM PROCEEDINGS_EXPORT_BATCH E
+                LEFT JOIN CONFERENCE C ON C.CONFERENCE_ID = E.CONFERENCE_ID
+                WHERE E.EXPORT_BATCH_ID = ?
+                """,
+                (rs, rowNum) -> new PlatformProceedingsExportBatchRow(
+                        rs.getLong("EXPORT_BATCH_ID"),
+                        rs.getLong("CONFERENCE_ID"),
+                        rs.getString("EXPORT_NAME"),
+                        rs.getString("EXPORT_STATUS"),
+                        rs.getInt("PAPER_COUNT"),
+                        rs.getObject("ORGANIZER_USER_ID", Long.class)
+                ),
+                exportBatchId
+        );
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
+    }
+
+    public void markProceedingsExported(long exportBatchId) {
+        jdbcTemplate.update(
+                """
+                UPDATE PROCEEDINGS_EXPORT_BATCH
+                SET EXPORT_STATUS = 'EXPORTED'
+                WHERE EXPORT_BATCH_ID = ?
+                  AND EXPORT_STATUS = 'PREVIEWED'
+                """,
+                exportBatchId
+        );
+    }
+
+    public void markProceedingsPublicationMetadataExported(long conferenceId) {
+        jdbcTemplate.update(
+                """
+                UPDATE PUBLICATION_METADATA
+                SET PUBLICATION_STATUS = 'EXPORTED',
+                    UPDATED_AT = CURRENT_TIMESTAMP
+                WHERE CONFERENCE_ID = ?
+                  AND PUBLICATION_STATUS = 'READY_FOR_PROCEEDINGS'
+                """,
+                conferenceId
+        );
+    }
+
     private PlatformAuthorFeedbackRow mapAuthorFeedback(ResultSet rs, int rowNum) throws SQLException {
         return new PlatformAuthorFeedbackRow(
                 rs.getLong("FEEDBACK_ID"),
@@ -1533,6 +1813,26 @@ record PlatformImportBatchRow(
 ) {
 }
 
+record PlatformReviewerInvitationImportBatchRow(
+        long batchId,
+        long conferenceId,
+        String importType,
+        long submittedBy,
+        String batchStatus,
+        BulkReviewerInvitationImportDocument previewDocument
+) {
+}
+
+record PlatformMatchingScoreImportBatchRow(
+        long batchId,
+        long conferenceId,
+        String importType,
+        long submittedBy,
+        String batchStatus,
+        BulkMatchingScoreImportDocument previewDocument
+) {
+}
+
 record PlatformReviewRoundRow(long roundId, long manuscriptId, long versionId, long conferenceId, Long organizerUserId) {
 }
 
@@ -1589,6 +1889,27 @@ record PlatformAssignmentProposalBundleRow(
 ) {
 }
 
+record PlatformAssignmentProposalRow(
+        long proposalId,
+        long bundleId,
+        long reviewerId,
+        int rankOrder,
+        double matchingScore,
+        String eligibilityStatus,
+        String rationale
+) {
+}
+
+record PlatformProposalReviewerValidationRow(
+        long reviewerId,
+        int currentLoad,
+        int maxLoad,
+        int hardConflictCount,
+        int roundAssignmentCount,
+        int openDraftCount
+) {
+}
+
 record PlatformEmailTemplateRow(
         long templateId,
         long conferenceId,
@@ -1621,6 +1942,16 @@ record PlatformCameraReadyFileRow(
         long submittedBy,
         String fileStatus,
         long conferenceId,
+        Long organizerUserId
+) {
+}
+
+record PlatformProceedingsExportBatchRow(
+        long exportBatchId,
+        long conferenceId,
+        String exportName,
+        String exportStatus,
+        int paperCount,
         Long organizerUserId
 ) {
 }

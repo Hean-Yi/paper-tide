@@ -26,6 +26,49 @@ SQL
   [[ "$table_count" == "1" ]]
 }
 
+oracle_index_exists() {
+  local index_name="$1"
+  local container_name="${ORACLE_CONTAINER_NAME:-review-oracle}"
+  local app_user="${APP_USER:-review_app}"
+  local app_password="${APP_USER_PASSWORD:-ReviewApp12345}"
+  local oracle_service="${ORACLE_SERVICE:-FREEPDB1}"
+  local index_count
+
+  if ! docker ps --format '{{.Names}}' | grep -qx "$container_name"; then
+    return 1
+  fi
+  index_count="$(docker exec -i "$container_name" bash -lc \
+    "sqlplus -s ${app_user}/${app_password}@localhost/${oracle_service}" <<SQL | tr -d '[:space:]'
+SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF
+SELECT COUNT(*) FROM USER_INDEXES WHERE INDEX_NAME = UPPER('${index_name}');
+EXIT;
+SQL
+)"
+  [[ "$index_count" == "1" ]]
+}
+
+oracle_constraint_mentions() {
+  local constraint_name="$1"
+  local expected_text="$2"
+  local container_name="${ORACLE_CONTAINER_NAME:-review-oracle}"
+  local app_user="${APP_USER:-review_app}"
+  local app_password="${APP_USER_PASSWORD:-ReviewApp12345}"
+  local oracle_service="${ORACLE_SERVICE:-FREEPDB1}"
+  local constraint_count
+
+  if ! docker ps --format '{{.Names}}' | grep -qx "$container_name"; then
+    return 1
+  fi
+  constraint_count="$(docker exec -i "$container_name" bash -lc \
+    "sqlplus -s ${app_user}/${app_password}@localhost/${oracle_service}" <<SQL | tr -d '[:space:]'
+SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF
+SELECT COUNT(*) FROM USER_CONSTRAINTS WHERE CONSTRAINT_NAME = UPPER('${constraint_name}') AND SEARCH_CONDITION_VC LIKE '%' || '${expected_text}' || '%';
+EXIT;
+SQL
+)"
+  [[ "$constraint_count" == "1" ]]
+}
+
 apply_single_oracle_migration() {
   local migration_file="$1"
   local container_name="${ORACLE_CONTAINER_NAME:-review-oracle}"
@@ -86,6 +129,10 @@ if command -v mvn >/dev/null 2>&1 && command -v java >/dev/null 2>&1; then
       ! oracle_table_exists "PUBLICATION_METADATA" ||
       ! oracle_table_exists "PROCEEDINGS_EXPORT_BATCH"; then
       apply_single_oracle_migration "023_publication_communication_maturity.sql"
+    fi
+    if ! oracle_index_exists "IDX_IMPORT_BATCH_TYPE_STATUS" ||
+      ! oracle_constraint_mentions "CK_IMPORT_BATCH_TYPE" "MATCHING_SCORES"; then
+      apply_single_oracle_migration "024_wave8_wave9_slice_b_completion.sql"
     fi
   fi
   if [ -x "$ROOT_DIR/scripts/demo-seed.sh" ] && command -v docker >/dev/null 2>&1; then

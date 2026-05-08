@@ -3,10 +3,15 @@ import type {
   AnalysisIntentResponse,
   AssignmentAssistState,
   AssignmentDraft,
+  AssignmentOperations,
+  AssignmentProposalConfirmDraftsResponse,
   ConferenceDetail,
   ConferencePhaseInput,
   DecisionWorkbenchItem,
+  ImportPreviewResponse,
   ManuscriptSummary,
+  ProceedingsExportDownloadMetadataResponse,
+  PublicationOperations,
   ScreeningQueueItem
 } from "./workflow-types";
 
@@ -117,4 +122,44 @@ export function decide(payload: {
   decisionReason: string;
 }) {
   return apiRequest("/decisions", { method: "POST", json: payload });
+}
+
+export function getAssignmentOperations(conferenceId: number) {
+  return apiRequest<AssignmentOperations>(`/conferences/${conferenceId}/assignment-operations`);
+}
+
+export function previewReviewerInvitationImport(conferenceId: number, csvText: string) {
+  return apiRequest<ImportPreviewResponse>(`/conferences/${conferenceId}/reviewer-invitations/imports/preview`, {
+    method: "POST",
+    json: { csvText }
+  });
+}
+
+export function previewMatchingScoreImport(manuscriptId: number, csvText: string) {
+  return apiRequest<ImportPreviewResponse>(`/manuscripts/${manuscriptId}/matching-scores/imports/preview`, {
+    method: "POST",
+    json: { csvText }
+  });
+}
+
+export function confirmReviewerInvitationImport(batchId: number) {
+  return apiRequest(`/reviewer-invitation-imports/${batchId}/confirm`, { method: "POST" });
+}
+
+export function confirmMatchingScoreImport(batchId: number) {
+  return apiRequest(`/matching-score-imports/${batchId}/confirm`, { method: "POST" });
+}
+
+export function confirmAssignmentProposalDrafts(bundleId: number) {
+  return apiRequest<AssignmentProposalConfirmDraftsResponse>(`/assignment-proposals/${bundleId}/confirm-drafts`, { method: "POST" });
+}
+
+export function getPublicationOperations(conferenceId: number) {
+  return apiRequest<PublicationOperations>(`/conferences/${conferenceId}/publication-operations`);
+}
+
+export function proceedingsExportDownloadMetadata(exportBatchId: number) {
+  return apiRequest<ProceedingsExportDownloadMetadataResponse>(`/proceedings-exports/${exportBatchId}/download-metadata`, {
+    method: "POST"
+  });
 }

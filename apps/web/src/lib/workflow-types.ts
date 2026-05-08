@@ -250,6 +250,182 @@ export interface AssignmentAssistState {
   projections: AnalysisProjectionResponse[];
 }
 
+export interface ReviewerInvitationOperationRow {
+  invitationId: number;
+  reviewerId: number;
+  invitationStatus: string;
+  invitedAt?: string | null;
+  expiresAt?: string | null;
+}
+
+export interface ExternalDelegationOperationRow {
+  delegationId: number;
+  assignmentId: number;
+  manuscriptId: number;
+  externalName?: string | null;
+  externalEmail: string;
+  delegationStatus: string;
+  requestedAt?: string | null;
+}
+
+export interface ImportBatchOperationRow {
+  batchId: number;
+  importType: string;
+  batchStatus: string;
+  rowCount: number;
+  validRowCount: number;
+  errorCount: number;
+  createdAt?: string | null;
+}
+
+export interface AssignmentProposalOperationRow {
+  bundleId: number;
+  roundId: number;
+  manuscriptId: number;
+  proposalName: string;
+  bundleStatus: string;
+  proposalCount: number;
+  createdAt?: string | null;
+}
+
+export interface MatchingScoreOperationRow {
+  matchingScoreId: number;
+  manuscriptId: number;
+  reviewerId: number;
+  scoreSource: string;
+  matchingScore: number;
+  rationale?: string | null;
+  importedAt?: string | null;
+}
+
+export interface AssignmentOperations {
+  conferenceId: number;
+  reviewerInvitations: ReviewerInvitationOperationRow[];
+  externalDelegations: ExternalDelegationOperationRow[];
+  importBatches: ImportBatchOperationRow[];
+  assignmentProposals: AssignmentProposalOperationRow[];
+  matchingScores: MatchingScoreOperationRow[];
+}
+
+export interface ImportPreviewResponse {
+  batchId: number;
+  rowCount: number;
+  validRowCount: number;
+  errorCount: number;
+}
+
+export interface ImportConfirmResponse {
+  batchId: number;
+  appliedCount: number;
+}
+
+export interface AssignmentProposalConfirmDraftsResponse {
+  bundleId: number;
+  createdCount: number;
+}
+
+export interface EmailTemplateOperationRow {
+  templateId: number;
+  activeVersionId?: number | null;
+  templateKey: string;
+  createdAt?: string | null;
+}
+
+export interface EmailHistoryOperationRow {
+  emailHistoryId: number;
+  templateKey: string;
+  recipientEmail: string;
+  deliveryStatus: string;
+  createdAt?: string | null;
+}
+
+export interface OfflineReviewImportOperationRow {
+  batchId: number;
+  assignmentId: number;
+  reviewerId: number;
+  batchStatus: string;
+  rowCount: number;
+  validRowCount: number;
+  errorCount: number;
+  createdAt?: string | null;
+}
+
+export interface CameraReadyFileOperationRow {
+  cameraReadyFileId: number;
+  manuscriptId: number;
+  fileName: string;
+  fileSize: number;
+  fileStatus: string;
+  submittedAt?: string | null;
+}
+
+export interface PublicationMetadataOperationRow {
+  publicationMetadataId: number;
+  manuscriptId: number;
+  doi?: string | null;
+  indexKeywords?: string | null;
+  publicationStatus: string;
+  updatedAt?: string | null;
+}
+
+export interface ProceedingsExportOperationRow {
+  exportBatchId: number;
+  exportName: string;
+  exportStatus: string;
+  paperCount: number;
+  createdAt?: string | null;
+}
+
+export interface PublicationOperations {
+  conferenceId: number;
+  emailTemplates: EmailTemplateOperationRow[];
+  emailHistory: EmailHistoryOperationRow[];
+  offlineReviewImports: OfflineReviewImportOperationRow[];
+  cameraReadyFiles: CameraReadyFileOperationRow[];
+  publicationMetadata: PublicationMetadataOperationRow[];
+  proceedingsExports: ProceedingsExportOperationRow[];
+}
+
+export interface ProceedingsExportDownloadMetadataResponse {
+  exportBatchId: number;
+  exportStatus: string;
+  downloadFileName: string;
+  downloadUrl: string;
+  paperCount: number;
+}
+
+export interface DynamicFormField {
+  fieldId: number;
+  fieldKey: string;
+  fieldLabel: string;
+  fieldType: string;
+  required: boolean;
+  visibility: string;
+  displayOrder: number;
+}
+
+export interface DynamicFormDefinition {
+  formId: number;
+  conferenceId: number;
+  formType: string;
+  formName: string;
+  fields: DynamicFormField[];
+}
+
+export interface ReviewFormResponse {
+  responseId: number;
+  formId: number;
+  assignmentId: number;
+  responseStatus: string;
+  answers: Record<string, unknown>;
+  submittedAt?: string | null;
+}
+
+export interface ReviewFormPackage {
+  form: DynamicFormDefinition;
+  currentResponse?: ReviewFormResponse | null;
+}
+
 export interface ReviewReportForm {
   noveltyScore: number;
   methodScore: number;

@@ -5,6 +5,7 @@ import com.example.review.auth.RoleGuard;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -270,6 +271,52 @@ public class RealPlatformService {
     }
 
     @Transactional
+    public ImportPreviewResponse previewReviewerInvitationImport(
+            CurrentUserPrincipal principal,
+            long conferenceId,
+            BulkReviewerInvitationImportPreviewRequest request
+    ) {
+        PlatformConferenceRow conference = requireConferenceOperator(principal, conferenceId);
+        BulkReviewerInvitationImportDocument preview = parseReviewerInvitationCsv(request.csvText());
+        int rowCount = preview.validRows().size() + preview.errorRows().size();
+        long batchId = repository.insertReviewerInvitationImportBatch(
+                conference.conferenceId(),
+                principal.userId(),
+                rowCount,
+                preview.validRows().size(),
+                preview.errorRows().size(),
+                preview
+        );
+        return new ImportPreviewResponse(batchId, rowCount, preview.validRows().size(), preview.errorRows().size());
+    }
+
+    @Transactional
+    public ImportConfirmResponse confirmReviewerInvitationImport(CurrentUserPrincipal principal, long batchId) {
+        PlatformReviewerInvitationImportBatchRow batch = repository.findReviewerInvitationImportBatch(batchId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Reviewer invitation import batch not found"));
+        requireConferenceOperator(principal, batch.conferenceId());
+        if (!"REVIEWER_INVITATIONS".equals(batch.importType())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported import type");
+        }
+        if (!"PREVIEWED".equals(batch.batchStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Import batch is not confirmable");
+        }
+        int appliedCount = 0;
+        for (BulkReviewerInvitationValidRow row : batch.previewDocument().validRows()) {
+            repository.upsertReviewerInvitation(
+                    batch.conferenceId(),
+                    row.reviewerId(),
+                    row.invitationMessage(),
+                    principal.userId(),
+                    row.expiresAt() == null ? null : Timestamp.from(row.expiresAt())
+            );
+            appliedCount++;
+        }
+        repository.markImportApplied(batch.batchId());
+        return new ImportConfirmResponse(batch.batchId(), appliedCount);
+    }
+
+    @Transactional
     public ReviewerInvitationResponse createReviewerInvitation(
             CurrentUserPrincipal principal,
             long conferenceId,
@@ -395,6 +442,59 @@ public class RealPlatformService {
     }
 
     @Transactional
+    public ImportPreviewResponse previewMatchingScoreImport(
+            CurrentUserPrincipal principal,
+            long manuscriptId,
+            BulkMatchingScoreImportPreviewRequest request
+    ) {
+        PlatformManuscriptRow manuscript = requireManuscriptOperator(principal, manuscriptId);
+        BulkMatchingScoreImportDocument preview = parseMatchingScoreCsv(manuscript.manuscriptId(), request.csvText());
+        int rowCount = preview.validRows().size() + preview.errorRows().size();
+        long batchId = repository.insertMatchingScoreImportBatch(
+                manuscript.conferenceId(),
+                principal.userId(),
+                rowCount,
+                preview.validRows().size(),
+                preview.errorRows().size(),
+                preview
+        );
+        return new ImportPreviewResponse(batchId, rowCount, preview.validRows().size(), preview.errorRows().size());
+    }
+
+    @Transactional
+    public ImportConfirmResponse confirmMatchingScoreImport(CurrentUserPrincipal principal, long batchId) {
+        PlatformMatchingScoreImportBatchRow batch = repository.findMatchingScoreImportBatch(batchId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Matching score import batch not found"));
+        requireConferenceOperator(principal, batch.conferenceId());
+        if (!"MATCHING_SCORES".equals(batch.importType())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported import type");
+        }
+        if (!"PREVIEWED".equals(batch.batchStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Import batch is not confirmable");
+        }
+        int appliedCount = 0;
+        for (BulkMatchingScoreValidRow row : batch.previewDocument().validRows()) {
+            PlatformManuscriptRow manuscript = repository.findManuscript(batch.previewDocument().manuscriptId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Previewed manuscript no longer exists"));
+            if (manuscript.conferenceId() != batch.conferenceId()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Previewed manuscript does not belong to batch conference");
+            }
+            repository.upsertReviewerMatchingScore(
+                    batch.conferenceId(),
+                    manuscript.manuscriptId(),
+                    row.reviewerId(),
+                    row.scoreSource(),
+                    row.matchingScore(),
+                    row.rationale(),
+                    principal.userId()
+            );
+            appliedCount++;
+        }
+        repository.markImportApplied(batch.batchId());
+        return new ImportConfirmResponse(batch.batchId(), appliedCount);
+    }
+
+    @Transactional
     public AssignmentProposalBundleResponse createAssignmentProposalBundle(
             CurrentUserPrincipal principal,
             long roundId,
@@ -442,6 +542,40 @@ public class RealPlatformService {
                 principal.userId()
         );
         return new AssignmentOverrideResponse(overrideId, bundle.bundleId(), request.reviewerId());
+    }
+
+    @Transactional
+    public AssignmentProposalConfirmDraftsResponse confirmAssignmentProposalDrafts(CurrentUserPrincipal principal, long bundleId) {
+        PlatformAssignmentProposalBundleRow bundle = repository.findAssignmentProposalBundle(bundleId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment proposal bundle not found"));
+        requireConferenceOperator(principal, bundle.conferenceId());
+        if (!"PROPOSED".equals(bundle.bundleStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Assignment proposal bundle is not confirmable");
+        }
+        int createdCount = 0;
+        for (PlatformAssignmentProposalRow proposal : repository.listAssignmentProposalsForBundle(bundle.bundleId())) {
+            if (!List.of("ELIGIBLE", "OVERRIDDEN").contains(proposal.eligibilityStatus())) {
+                continue;
+            }
+            PlatformProposalReviewerValidationRow validation = repository.validateProposalReviewer(
+                    bundle.manuscriptId(),
+                    bundle.roundId(),
+                    proposal.reviewerId()
+            );
+            if (validation.hardConflictCount() > 0) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Hard conflict blocks proposal confirmation");
+            }
+            if (validation.currentLoad() >= validation.maxLoad()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Reviewer max load would be exceeded");
+            }
+            if (validation.roundAssignmentCount() > 0 || validation.openDraftCount() > 0) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Reviewer already has assignment or draft for this round");
+            }
+            repository.insertAssignmentDraftFromProposal(bundle, proposal, validation, principal.userId());
+            createdCount++;
+        }
+        repository.markAssignmentProposalBundleConfirmed(bundle.bundleId());
+        return new AssignmentProposalConfirmDraftsResponse(bundle.bundleId(), createdCount);
     }
 
     @Transactional
@@ -643,6 +777,29 @@ public class RealPlatformService {
         return new ProceedingsPreviewResponse(exportBatchId, conference.conferenceId(), paperCount, "PREVIEWED");
     }
 
+    @Transactional
+    public ProceedingsExportDownloadMetadataResponse proceedingsExportDownloadMetadata(
+            CurrentUserPrincipal principal,
+            long exportBatchId
+    ) {
+        PlatformProceedingsExportBatchRow batch = repository.findProceedingsExportBatch(exportBatchId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Proceedings export batch not found"));
+        requireConferenceOperator(principal, batch.conferenceId());
+        if (!"PREVIEWED".equals(batch.exportStatus()) && !"EXPORTED".equals(batch.exportStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Proceedings export batch is not downloadable");
+        }
+        repository.markProceedingsExported(batch.exportBatchId());
+        repository.markProceedingsPublicationMetadataExported(batch.conferenceId());
+        String fileName = slugify(batch.exportName()) + ".json";
+        return new ProceedingsExportDownloadMetadataResponse(
+                batch.exportBatchId(),
+                "EXPORTED",
+                fileName,
+                "/api/proceedings-exports/" + batch.exportBatchId() + "/files/" + fileName,
+                batch.paperCount()
+        );
+    }
+
     private PlatformConferenceRow requireConferenceOperator(CurrentUserPrincipal principal, long conferenceId) {
         RoleGuard.requireChairOrAdmin(principal);
         PlatformConferenceRow conference = repository.findConference(conferenceId)
@@ -745,6 +902,82 @@ public class RealPlatformService {
         return new TagImportPreviewDocument(validRows, errorRows);
     }
 
+    private BulkReviewerInvitationImportDocument parseReviewerInvitationCsv(String csvText) {
+        String text = requireText(csvText, "csvText");
+        String[] lines = text.replace("\r\n", "\n").replace('\r', '\n').split("\n");
+        if (lines.length == 0 || !"reviewerId,invitationMessage,expiresAt".equals(lines[0].strip())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CSV header must be reviewerId,invitationMessage,expiresAt");
+        }
+        List<BulkReviewerInvitationValidRow> validRows = new ArrayList<>();
+        List<ImportErrorRow> errorRows = new ArrayList<>();
+        for (int i = 1; i < lines.length; i++) {
+            String line = lines[i];
+            if (line.isBlank()) {
+                continue;
+            }
+            String[] columns = line.split(",", -1);
+            int rowNumber = i + 1;
+            if (columns.length != 3) {
+                errorRows.add(new ImportErrorRow(rowNumber, line, "Expected 3 columns"));
+                continue;
+            }
+            try {
+                long reviewerId = Long.parseLong(columns[0].strip());
+                if (!repository.userExists(reviewerId)) {
+                    throw new IllegalArgumentException("reviewerId does not exist");
+                }
+                validRows.add(new BulkReviewerInvitationValidRow(
+                        rowNumber,
+                        reviewerId,
+                        requireCsvText(columns[1], "invitationMessage"),
+                        Instant.parse(requireCsvText(columns[2], "expiresAt"))
+                ));
+            } catch (RuntimeException ex) {
+                errorRows.add(new ImportErrorRow(rowNumber, line, ex.getMessage()));
+            }
+        }
+        return new BulkReviewerInvitationImportDocument(validRows, errorRows);
+    }
+
+    private BulkMatchingScoreImportDocument parseMatchingScoreCsv(long manuscriptId, String csvText) {
+        String text = requireText(csvText, "csvText");
+        String[] lines = text.replace("\r\n", "\n").replace('\r', '\n').split("\n");
+        if (lines.length == 0 || !"reviewerId,scoreSource,matchingScore,rationale".equals(lines[0].strip())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CSV header must be reviewerId,scoreSource,matchingScore,rationale");
+        }
+        List<BulkMatchingScoreValidRow> validRows = new ArrayList<>();
+        List<ImportErrorRow> errorRows = new ArrayList<>();
+        for (int i = 1; i < lines.length; i++) {
+            String line = lines[i];
+            if (line.isBlank()) {
+                continue;
+            }
+            String[] columns = line.split(",", -1);
+            int rowNumber = i + 1;
+            if (columns.length != 4) {
+                errorRows.add(new ImportErrorRow(rowNumber, line, "Expected 4 columns"));
+                continue;
+            }
+            try {
+                long reviewerId = Long.parseLong(columns[0].strip());
+                double score = Double.parseDouble(columns[2].strip());
+                if (score < 0 || score > 1) {
+                    throw new IllegalArgumentException("matchingScore is invalid");
+                }
+                validRows.add(new BulkMatchingScoreValidRow(
+                        rowNumber,
+                        reviewerId,
+                        requireCsvText(columns[1], "scoreSource"),
+                        score,
+                        columns[3].strip()
+                ));
+            } catch (RuntimeException ex) {
+                errorRows.add(new ImportErrorRow(rowNumber, line, ex.getMessage()));
+            }
+        }
+        return new BulkMatchingScoreImportDocument(manuscriptId, validRows, errorRows);
+    }
+
     private List<OfflineReviewValidRow> parseOfflineReviewCsv(String csvText) {
         String text = requireText(csvText, "csvText");
         String[] lines = text.replace("\r\n", "\n").replace('\r', '\n').split("\n");
@@ -817,6 +1050,13 @@ public class RealPlatformService {
             rendered = rendered.replace("{{" + entry.getKey() + "}}", String.valueOf(entry.getValue()));
         }
         return rendered;
+    }
+
+    private String slugify(String value) {
+        String slug = value.toLowerCase()
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("(^-|-$)", "");
+        return slug.isBlank() ? "proceedings-export" : slug;
     }
 
     private String toJson(Object value) {

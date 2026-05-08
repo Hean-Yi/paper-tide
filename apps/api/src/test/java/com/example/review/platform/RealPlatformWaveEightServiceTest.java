@@ -18,6 +18,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+
 @SpringBootTest
 @AutoConfigureMockMvc
 class RealPlatformWaveEightServiceTest {
@@ -222,6 +224,212 @@ class RealPlatformWaveEightServiceTest {
         assertThat(auditCount).isEqualTo(1);
     }
 
+    @Test
+    void bulkInvitationPreviewDoesNotMutateUntilConfirmAndSkipsInvalidRows() throws Exception {
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+
+        MvcResult previewResult = mockMvc.perform(post("/api/conferences/{conferenceId}/reviewer-invitations/imports/preview", 0)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "csvText": "reviewerId,invitationMessage,expiresAt\\n1002,Please join,2099-01-01T00:00:00Z\\n999999,Missing user,2099-01-01T00:00:00Z"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rowCount").value(2))
+                .andExpect(jsonPath("$.validRowCount").value(1))
+                .andExpect(jsonPath("$.errorCount").value(1))
+                .andReturn();
+
+        Integer invitationsBeforeConfirm = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM REVIEWER_INVITATION",
+                Integer.class
+        );
+        assertThat(invitationsBeforeConfirm).isZero();
+
+        long batchId = objectMapper.readTree(previewResult.getResponse().getContentAsString())
+                .path("batchId")
+                .asLong();
+        mockMvc.perform(post("/api/reviewer-invitation-imports/{batchId}/confirm", batchId)
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.appliedCount").value(1));
+
+        Integer invitationsAfterConfirm = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM REVIEWER_INVITATION WHERE CONFERENCE_ID = 0 AND REVIEWER_ID = 1002",
+                Integer.class
+        );
+        assertThat(invitationsAfterConfirm).isEqualTo(1);
+    }
+
+    @Test
+    void bulkMatchingScoreImportPreviewConfirmsOnlyValidRows() throws Exception {
+        AssignmentFixture fixture = seedAcceptedAssignment();
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        addConferenceReviewer(1004, 3);
+
+        MvcResult previewResult = mockMvc.perform(post("/api/manuscripts/{manuscriptId}/matching-scores/imports/preview", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "csvText": "reviewerId,scoreSource,matchingScore,rationale\\n1004,TPMS_IMPORT,0.91,Strong subject match\\n1002,TPMS_IMPORT,1.50,Out of range"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rowCount").value(2))
+                .andExpect(jsonPath("$.validRowCount").value(1))
+                .andExpect(jsonPath("$.errorCount").value(1))
+                .andReturn();
+
+        Integer scoresBeforeConfirm = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM REVIEWER_MATCHING_SCORE WHERE MANUSCRIPT_ID = ?",
+                Integer.class,
+                fixture.manuscriptId()
+        );
+        assertThat(scoresBeforeConfirm).isZero();
+
+        long batchId = objectMapper.readTree(previewResult.getResponse().getContentAsString())
+                .path("batchId")
+                .asLong();
+        mockMvc.perform(post("/api/matching-score-imports/{batchId}/confirm", batchId)
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.appliedCount").value(1));
+
+        Double matchingScore = jdbcTemplate.queryForObject(
+                "SELECT MATCHING_SCORE FROM REVIEWER_MATCHING_SCORE WHERE MANUSCRIPT_ID = ? AND REVIEWER_ID = 1004",
+                Double.class,
+                fixture.manuscriptId()
+        );
+        assertThat(matchingScore).isEqualTo(0.91);
+    }
+
+    @Test
+    void proposalConfirmWritesAssignmentDraftsAndRevalidatesHardConflictAtConfirmTime() throws Exception {
+        AssignmentFixture fixture = seedAcceptedAssignment();
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        addConferenceReviewer(1004, 3);
+        mockMvc.perform(post("/api/manuscripts/{manuscriptId}/matching-scores", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "reviewerId": 1004,
+                                  "scoreSource": "TPMS_IMPORT",
+                                  "matchingScore": 0.88,
+                                  "rationale": "Good match"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        MvcResult proposalResult = mockMvc.perform(post("/api/review-rounds/{roundId}/assignment-proposals", fixture.roundId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"proposalName\":\"Confirmable proposal\",\"limit\":1}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.proposalCount").value(1))
+                .andReturn();
+
+        long bundleId = objectMapper.readTree(proposalResult.getResponse().getContentAsString())
+                .path("bundleId")
+                .asLong();
+        mockMvc.perform(post("/api/assignment-proposals/{bundleId}/confirm-drafts", bundleId)
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.createdCount").value(1));
+
+        Integer draftCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ASSIGNMENT_DRAFT WHERE ROUND_ID = ? AND REVIEWER_ID = 1004 AND DRAFT_STATUS = 'PROPOSED'",
+                Integer.class,
+                fixture.roundId()
+        );
+        Integer finalAssignmentCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM REVIEW_ASSIGNMENT WHERE ROUND_ID = ? AND REVIEWER_ID = 1004",
+                Integer.class,
+                fixture.roundId()
+        );
+        assertThat(draftCount).isEqualTo(1);
+        assertThat(finalAssignmentCount).isZero();
+
+        long blockedBundleId = createProposalBundleForReviewer(chairToken, fixture, 1004);
+        mockMvc.perform(post("/api/manuscripts/{manuscriptId}/conflicts", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "reviewerId": 1004,
+                                  "conflictType": "EMPLOYMENT",
+                                  "conflictSource": "MANUAL",
+                                  "severity": "HARD",
+                                  "note": "Detected before confirmation"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/assignment-proposals/{bundleId}/confirm-drafts", blockedBundleId)
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void assignmentOperationsReadModelListsInvitationsDelegationsImportsAndProposals() throws Exception {
+        AssignmentFixture fixture = seedAcceptedAssignment();
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        String reviewerToken = loginAndExtractToken("reviewer_demo", "demo123");
+        addConferenceReviewer(1004, 3);
+
+        createReviewerInvitation(chairToken, 1004);
+        mockMvc.perform(post("/api/review-assignments/{assignmentId}/external-delegations", fixture.assignmentId())
+                        .header("Authorization", "Bearer " + reviewerToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "externalName": "External Reader",
+                                  "externalEmail": "external.reader@example.com",
+                                  "rationale": "Needs a systems specialist"
+                                }
+                                """))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/manuscripts/{manuscriptId}/matching-scores/imports/preview", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "csvText": "reviewerId,scoreSource,matchingScore,rationale\\n1004,TPMS_IMPORT,0.91,Strong subject match"
+                                }
+                                """))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/manuscripts/{manuscriptId}/matching-scores", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "reviewerId": 1004,
+                                  "scoreSource": "TPMS_IMPORT",
+                                  "matchingScore": 0.88,
+                                  "rationale": "Good match"
+                                }
+                                """))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/review-rounds/{roundId}/assignment-proposals", fixture.roundId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"proposalName\":\"Workbench proposal\",\"limit\":1}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/conferences/{conferenceId}/assignment-operations", 0)
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conferenceId").value(0))
+                .andExpect(jsonPath("$.reviewerInvitations[0].reviewerId").value(1004))
+                .andExpect(jsonPath("$.externalDelegations[0].externalEmail").value("external.reader@example.com"))
+                .andExpect(jsonPath("$.importBatches[0].importType").value("MATCHING_SCORES"))
+                .andExpect(jsonPath("$.assignmentProposals[0].proposalName").value("Workbench proposal"))
+                .andExpect(jsonPath("$.matchingScores[0].reviewerId").value(1004));
+    }
+
     private long createReviewerInvitation(String chairToken, long reviewerId) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/conferences/{conferenceId}/reviewer-invitations", 0)
                         .header("Authorization", "Bearer " + chairToken)
@@ -237,6 +445,34 @@ class RealPlatformWaveEightServiceTest {
                 .andExpect(jsonPath("$.invitationStatus").value("PENDING"))
                 .andReturn();
         return objectMapper.readTree(result.getResponse().getContentAsString()).path("invitationId").asLong();
+    }
+
+    private long createProposalBundleForReviewer(String chairToken, AssignmentFixture fixture, long reviewerId) {
+        long bundleId = jdbcTemplate.queryForObject("SELECT SEQ_ASSIGNMENT_PROPOSAL_BUNDLE.NEXTVAL FROM DUAL", Long.class);
+        long proposalId = jdbcTemplate.queryForObject("SELECT SEQ_ASSIGNMENT_PROPOSAL.NEXTVAL FROM DUAL", Long.class);
+        jdbcTemplate.update(
+                """
+                INSERT INTO ASSIGNMENT_PROPOSAL_BUNDLE (
+                  BUNDLE_ID, ROUND_ID, CONFERENCE_ID, MANUSCRIPT_ID, PROPOSAL_NAME,
+                  BUNDLE_STATUS, CREATED_BY, CREATED_AT
+                ) VALUES (?, ?, 0, ?, 'Manual bundle', 'PROPOSED', 1003, CURRENT_TIMESTAMP)
+                """,
+                bundleId,
+                fixture.roundId(),
+                fixture.manuscriptId()
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO ASSIGNMENT_PROPOSAL (
+                  PROPOSAL_ID, BUNDLE_ID, REVIEWER_ID, RANK_ORDER, MATCHING_SCORE,
+                  ELIGIBILITY_STATUS, RATIONALE, CREATED_AT
+                ) VALUES (?, ?, ?, 1, 0.77, 'ELIGIBLE', 'seeded confirm-time revalidation candidate', CURRENT_TIMESTAMP)
+                """,
+                proposalId,
+                bundleId,
+                reviewerId
+        );
+        return bundleId;
     }
 
     private AssignmentFixture seedAcceptedAssignment() {

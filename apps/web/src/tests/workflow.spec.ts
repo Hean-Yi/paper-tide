@@ -12,6 +12,8 @@ import ManuscriptListView from "../views/author/ManuscriptListView.vue";
 import SubmitManuscriptView from "../views/author/SubmitManuscriptView.vue";
 import ScreeningQueueView from "../views/chair/ScreeningQueueView.vue";
 import DecisionWorkbenchView from "../views/chair/DecisionWorkbenchView.vue";
+import AssignmentOperationsView from "../views/chair/AssignmentOperationsView.vue";
+import PublicationOperationsView from "../views/chair/PublicationOperationsView.vue";
 import AgentMonitorView from "../views/admin/AgentMonitorView.vue";
 import AssignmentListView from "../views/reviewer/AssignmentListView.vue";
 import ReviewEditorView from "../views/reviewer/ReviewEditorView.vue";
@@ -650,6 +652,77 @@ describe("workflow screens", () => {
       expect.stringContaining("/review-assignments/9/review-report"),
       expect.anything()
     );
+  });
+
+  it("renders configured reviewer form fields with saved draft answers", async () => {
+    installAuth(["REVIEWER"]);
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:reader-page-1"),
+      revokeObjectURL: vi.fn()
+    });
+    const fetch = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/review-assignments/9") {
+        return Promise.resolve(jsonResponse({
+          assignmentId: 9,
+          manuscriptId: 11,
+          versionId: 21,
+          versionNo: 1,
+          title: "Workflow Seed",
+          abstractText: "workflow abstract",
+          keywords: "workflow,pdf",
+          pdfFileName: "workflow.pdf",
+          taskStatus: "ACCEPTED"
+        }));
+      }
+      if (path === "/review-assignments/9/paper") {
+        return Promise.resolve(jsonResponse({
+          assignmentId: 9,
+          manuscriptId: 11,
+          versionId: 21,
+          title: "Workflow Seed",
+          pageCount: 1,
+          pdfFileName: "workflow.pdf",
+          downloadAllowed: false
+        }));
+      }
+      if (path === "/review-assignments/9/paper/pages/1") {
+        return Promise.resolve(blobResponse(new Blob(["page"], { type: "image/png" })));
+      }
+      if (path === "/review-assignments/9/agent-assist") {
+        return Promise.resolve(jsonResponse({ intent: null, projections: [] }));
+      }
+      if (path === "/review-assignments/9/review-form") {
+        return Promise.resolve(jsonResponse({
+          form: {
+            formId: 51,
+            conferenceId: 0,
+            formType: "REVIEW",
+            formName: "Configurable Review",
+            fields: [
+              { fieldId: 61, fieldKey: "summary", fieldLabel: "Summary", fieldType: "LONG_TEXT", required: true, visibility: "AUTHOR_VISIBLE", displayOrder: 1 }
+            ]
+          },
+          currentResponse: {
+            responseId: 71,
+            formId: 51,
+            assignmentId: 9,
+            responseStatus: "DRAFT",
+            answers: { summary: "Saved configurable draft" }
+          }
+        }));
+      }
+      return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(ReviewEditorView, "/reviewer/reviews/9");
+
+    expect(fetch).toHaveBeenCalledWith("/api/review-assignments/9/review-form", expect.anything());
+    expect(wrapper.text()).toContain("Configurable Review");
+    expect(wrapper.text()).toContain("Summary");
+    expect((wrapper.find('[data-test="dynamic-review-summary"] textarea').element as HTMLTextAreaElement).value)
+      .toBe("Saved configurable draft");
   });
 
   it("renders reviewer paper online instead of a PDF download link", async () => {
@@ -1369,6 +1442,86 @@ describe("workflow screens", () => {
     expect(buttonByText(wrapper, "Mark overdue").classes()).toContain("is-loading");
 
     resolveOverdue?.(jsonResponse({}));
+  });
+
+  it("renders chair assignment operations and confirms proposal drafts", async () => {
+    installAuth(["CHAIR"]);
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/conferences/0/assignment-operations") {
+        return Promise.resolve(jsonResponse({
+          conferenceId: 0,
+          reviewerInvitations: [{ invitationId: 1, reviewerId: 1004, invitationStatus: "PENDING" }],
+          externalDelegations: [{ delegationId: 2, assignmentId: 9, manuscriptId: 11, externalEmail: "external@example.com", delegationStatus: "REQUESTED" }],
+          importBatches: [{ batchId: 3, importType: "MATCHING_SCORES", batchStatus: "PREVIEWED", rowCount: 2, validRowCount: 1, errorCount: 1 }],
+          assignmentProposals: [{ bundleId: 4, roundId: 7, manuscriptId: 11, proposalName: "TPMS proposal", bundleStatus: "PROPOSED", proposalCount: 3 }],
+          matchingScores: [{ matchingScoreId: 5, manuscriptId: 11, reviewerId: 1004, scoreSource: "TPMS_IMPORT", matchingScore: 0.91, rationale: "Strong match" }]
+        }));
+      }
+      if (path === "/assignment-proposals/4/confirm-drafts" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({ bundleId: 4, createdCount: 3 }));
+      }
+      if (path === "/conferences/0/reviewer-invitations/imports/preview" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({ batchId: 6, rowCount: 1, validRowCount: 1, errorCount: 0 }));
+      }
+      return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(AssignmentOperationsView);
+
+    expect(wrapper.text()).toContain("TPMS proposal");
+    expect(wrapper.text()).toContain("external@example.com");
+    await clickButton(wrapper, "Confirm drafts");
+    await clickButton(wrapper, "Preview invitations");
+
+    expect(fetch).toHaveBeenCalledWith("/api/assignment-proposals/4/confirm-drafts", expect.objectContaining({ method: "POST" }));
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/conferences/0/reviewer-invitations/imports/preview",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("renders chair publication operations and exports proceedings metadata", async () => {
+    installAuth(["CHAIR"]);
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/conferences/0/publication-operations") {
+        return Promise.resolve(jsonResponse({
+          conferenceId: 0,
+          emailTemplates: [{ templateId: 10, activeVersionId: 11, templateKey: "decision_notice" }],
+          emailHistory: [{ emailHistoryId: 12, templateKey: "decision_notice", recipientEmail: "chair@example.com", deliveryStatus: "RECORDED" }],
+          offlineReviewImports: [{ batchId: 13, assignmentId: 9, reviewerId: 1002, batchStatus: "APPLIED", rowCount: 1, validRowCount: 1, errorCount: 0 }],
+          cameraReadyFiles: [{ cameraReadyFileId: 14, manuscriptId: 11, fileName: "camera-ready.pdf", fileSize: 2048, fileStatus: "SUBMITTED" }],
+          publicationMetadata: [{ publicationMetadataId: 15, manuscriptId: 11, doi: "10.5555/wave9", publicationStatus: "READY_FOR_PROCEEDINGS" }],
+          proceedingsExports: [{ exportBatchId: 16, exportName: "Wave 9 Export", exportStatus: "PREVIEWED", paperCount: 1 }]
+        }));
+      }
+      if (path === "/proceedings-exports/16/download-metadata" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({
+          exportBatchId: 16,
+          exportStatus: "EXPORTED",
+          downloadFileName: "wave-9-export.json",
+          downloadUrl: "/api/proceedings-exports/16/files/wave-9-export.json",
+          paperCount: 1
+        }));
+      }
+      return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(PublicationOperationsView);
+
+    expect(wrapper.text()).toContain("decision_notice");
+    expect(wrapper.text()).toContain("camera-ready.pdf");
+    expect(wrapper.text()).toContain("Wave 9 Export");
+    await clickButton(wrapper, "Export metadata");
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/proceedings-exports/16/download-metadata",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(wrapper.text()).toContain("wave-9-export.json");
   });
 });
 

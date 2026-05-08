@@ -20,6 +20,7 @@ DECLARE
   v_real_platform_wave6_wave7_tables NUMBER;
   v_assignment_coi_maturity_tables NUMBER;
   v_publication_communication_maturity_tables NUMBER;
+  v_wave8_wave9_slice_b_constraint NUMBER;
 BEGIN
   SELECT COUNT(*)
     INTO v_table_count
@@ -276,6 +277,7 @@ BEGIN
      'IDX_AUTHOR_FEEDBACK_MANUSCRIPT',
      'IDX_PAPER_TAG_LOOKUP',
      'IDX_IMPORT_BATCH_CONFERENCE',
+     'IDX_IMPORT_BATCH_TYPE_STATUS',
      'IDX_PAPER_ROLE_ASSIGNMENT_USER',
      'IDX_PAPER_ROLE_ASSIGNMENT_MANUSCRIPT',
      'IDX_PAPER_TAG_VALUE',
@@ -441,6 +443,12 @@ BEGIN
    );
 
   SELECT COUNT(*)
+    INTO v_wave8_wave9_slice_b_constraint
+    FROM USER_CONSTRAINTS
+   WHERE CONSTRAINT_NAME = 'CK_IMPORT_BATCH_TYPE'
+     AND SEARCH_CONDITION_VC LIKE '%MATCHING_SCORES%';
+
+  SELECT COUNT(*)
     INTO v_role_count
     FROM SYS_ROLE;
 
@@ -548,8 +556,12 @@ BEGIN
     RAISE_APPLICATION_ERROR(-20004, 'Expected 2 procedures, found ' || v_procedure_count);
   END IF;
 
-  IF v_index_count <> 83 THEN
-    RAISE_APPLICATION_ERROR(-20005, 'Expected 83 indexes, found ' || v_index_count);
+  IF v_index_count <> 84 THEN
+    RAISE_APPLICATION_ERROR(-20005, 'Expected 84 indexes, found ' || v_index_count);
+  END IF;
+
+  IF v_wave8_wave9_slice_b_constraint <> 1 THEN
+    RAISE_APPLICATION_ERROR(-20023, 'Wave8/Wave9 SliceB import constraint is missing');
   END IF;
 
   IF v_role_count <> 4 THEN

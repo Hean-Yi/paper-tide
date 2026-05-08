@@ -103,6 +103,18 @@ export function createAppRouter() {
             meta: { requiresAuth: true, roles: ["CHAIR", "ADMIN"] }
           },
           {
+            path: "chair/assignment-operations",
+            name: "chair-assignment-operations",
+            component: () => import("../views/chair/AssignmentOperationsView.vue"),
+            meta: { requiresAuth: true, roles: ["CHAIR", "ADMIN"] }
+          },
+          {
+            path: "chair/publication-operations",
+            name: "chair-publication-operations",
+            component: () => import("../views/chair/PublicationOperationsView.vue"),
+            meta: { requiresAuth: true, roles: ["CHAIR", "ADMIN"] }
+          },
+          {
             path: "admin/agents",
             name: "admin-agent-monitor",
             component: () => import("../views/admin/AgentMonitorView.vue"),

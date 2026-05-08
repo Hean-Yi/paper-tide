@@ -26,6 +26,8 @@ const navItems = computed(() => {
     items.push({ label: "Conferences", target: "/chair/conferences" });
     items.push({ label: "Screening", target: "/chair/screening" });
     items.push({ label: "Decisions", target: "/chair/decisions" });
+    items.push({ label: "Assignment ops", target: "/chair/assignment-operations" });
+    items.push({ label: "Publication ops", target: "/chair/publication-operations" });
   }
   if (roles.has("ADMIN")) {
     items.push({ label: "Agent monitor", target: "/admin/agents" });

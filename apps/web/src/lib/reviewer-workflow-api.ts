@@ -2,6 +2,7 @@ import { apiBlob, apiRequest } from "./api";
 import type {
   AnalysisIntentResponse,
   AssignmentPaper,
+  ReviewFormPackage,
   ReviewerAssignment,
   ReviewerAssistState,
   ReviewerBiddingItem,
@@ -37,6 +38,17 @@ export function declineAssignment(assignmentId: number, reason: string, conflict
 
 export function submitReviewReport(assignmentId: number, payload: ReviewReportForm) {
   return apiRequest(`/review-assignments/${assignmentId}/review-report`, { method: "POST", json: payload });
+}
+
+export function getReviewForm(assignmentId: number) {
+  return apiRequest<ReviewFormPackage>(`/review-assignments/${assignmentId}/review-form`);
+}
+
+export function saveReviewFormResponse(
+  assignmentId: number,
+  payload: { formId: number; responseStatus: string; answers: Record<string, unknown> }
+) {
+  return apiRequest(`/review-assignments/${assignmentId}/form-response`, { method: "POST", json: payload });
 }
 
 export function runReviewerAssist(assignmentId: number, force = false) {

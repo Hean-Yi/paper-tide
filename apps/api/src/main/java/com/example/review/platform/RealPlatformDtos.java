@@ -109,6 +109,12 @@ record PaperRoleResponse(
 record TagImportPreviewRequest(String csvText) {
 }
 
+record BulkReviewerInvitationImportPreviewRequest(String csvText) {
+}
+
+record BulkMatchingScoreImportPreviewRequest(String csvText) {
+}
+
 record ImportPreviewResponse(
         long batchId,
         int rowCount,
@@ -129,6 +135,19 @@ record TagImportPreviewDocument(
 ) {
 }
 
+record BulkReviewerInvitationImportDocument(
+        List<BulkReviewerInvitationValidRow> validRows,
+        List<ImportErrorRow> errorRows
+) {
+}
+
+record BulkMatchingScoreImportDocument(
+        long manuscriptId,
+        List<BulkMatchingScoreValidRow> validRows,
+        List<ImportErrorRow> errorRows
+) {
+}
+
 record TagImportValidRow(
         int rowNumber,
         long manuscriptId,
@@ -141,6 +160,30 @@ record TagImportErrorRow(
         int rowNumber,
         String rawLine,
         String error
+) {
+}
+
+record ImportErrorRow(
+        int rowNumber,
+        String rawLine,
+        String error
+) {
+}
+
+record BulkReviewerInvitationValidRow(
+        int rowNumber,
+        long reviewerId,
+        String invitationMessage,
+        Instant expiresAt
+) {
+}
+
+record BulkMatchingScoreValidRow(
+        int rowNumber,
+        long reviewerId,
+        String scoreSource,
+        double matchingScore,
+        String rationale
 ) {
 }
 
@@ -222,6 +265,12 @@ record AssignmentProposalBundleResponse(
         long roundId,
         long manuscriptId,
         int proposalCount
+) {
+}
+
+record AssignmentProposalConfirmDraftsResponse(
+        long bundleId,
+        int createdCount
 ) {
 }
 
@@ -344,5 +393,14 @@ record ProceedingsPreviewResponse(
         long conferenceId,
         int paperCount,
         String exportStatus
+) {
+}
+
+record ProceedingsExportDownloadMetadataResponse(
+        long exportBatchId,
+        String exportStatus,
+        String downloadFileName,
+        String downloadUrl,
+        int paperCount
 ) {
 }

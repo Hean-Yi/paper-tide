@@ -8,7 +8,10 @@ import ReviewerAgentPanel from "../../components/reviewer/ReviewerAgentPanel.vue
 import SecurePaperReader from "../../components/reviewer/SecurePaperReader.vue";
 import {
   getReviewerAssignment,
+  getReviewForm,
+  saveReviewFormResponse,
   submitReviewReport,
+  type ReviewFormPackage,
   type ReviewReportForm,
   type ReviewerAssignment
 } from "../../lib/workflow-api";
@@ -19,9 +22,12 @@ const router = useRouter();
 const assignment = ref<ReviewerAssignment | null>(null);
 const loading = ref(false);
 const submitting = ref(false);
+const dynamicSubmitting = ref(false);
 const sidePanelCollapsed = ref(false);
 const assignmentPanels = ref<string[]>([]);
 const reviewFormRef = ref<FormInstance>();
+const dynamicReviewForm = ref<ReviewFormPackage | null>(null);
+const dynamicAnswers = reactive<Record<string, unknown>>({});
 const form = reactive<ReviewReportForm>({
   noveltyScore: 3,
   methodScore: 3,
@@ -75,8 +81,43 @@ async function loadAssignment() {
   loading.value = true;
   try {
     assignment.value = await getReviewerAssignment(assignmentId.value);
+    await loadDynamicReviewForm();
   } finally {
     loading.value = false;
+  }
+}
+
+async function loadDynamicReviewForm() {
+  try {
+    dynamicReviewForm.value = await getReviewForm(assignmentId.value);
+    Object.keys(dynamicAnswers).forEach((key) => delete dynamicAnswers[key]);
+    for (const field of dynamicReviewForm.value.form.fields) {
+      dynamicAnswers[field.fieldKey] = dynamicReviewForm.value.currentResponse?.answers?.[field.fieldKey] ?? "";
+    }
+  } catch {
+    dynamicReviewForm.value = null;
+  }
+}
+
+function dynamicFieldComponentType(fieldType: string) {
+  return fieldType === "NUMBER" || fieldType === "SCORE" ? "number" : "text";
+}
+
+async function saveDynamicReview(responseStatus: "DRAFT" | "SUBMITTED") {
+  if (!dynamicReviewForm.value) {
+    return;
+  }
+  dynamicSubmitting.value = true;
+  try {
+    await saveReviewFormResponse(assignmentId.value, {
+      formId: dynamicReviewForm.value.form.formId,
+      responseStatus,
+      answers: { ...dynamicAnswers }
+    });
+    ElMessage.success(responseStatus === "DRAFT" ? "Review draft saved." : "Configured review submitted.");
+    await loadDynamicReviewForm();
+  } finally {
+    dynamicSubmitting.value = false;
   }
 }
 
@@ -151,6 +192,43 @@ async function submitReport() {
           </el-collapse>
 
           <ReviewerAgentPanel :assignment-id="assignmentId" />
+
+          <section v-if="dynamicReviewForm" class="workflow-form review-form-panel">
+            <div class="subsection-heading">
+              <h2>{{ dynamicReviewForm.form.formName }}</h2>
+              <el-tag :type="statusTagType(dynamicReviewForm.currentResponse?.responseStatus)">
+                {{ workflowLabel(dynamicReviewForm.currentResponse?.responseStatus || "DRAFT") }}
+              </el-tag>
+            </div>
+            <el-form label-position="top" @submit.prevent="saveDynamicReview('SUBMITTED')">
+              <el-form-item
+                v-for="field in dynamicReviewForm.form.fields"
+                :key="field.fieldId"
+                :label="field.fieldLabel"
+                :required="field.required"
+                :data-test="`dynamic-review-${field.fieldKey}`"
+              >
+                <el-input
+                  v-if="field.fieldType === 'LONG_TEXT' || field.fieldType === 'TEXT'"
+                  v-model="dynamicAnswers[field.fieldKey]"
+                  type="textarea"
+                  :rows="field.fieldType === 'LONG_TEXT' ? 4 : 2"
+                />
+                <el-input-number
+                  v-else-if="dynamicFieldComponentType(field.fieldType) === 'number'"
+                  v-model="dynamicAnswers[field.fieldKey]"
+                  :min="field.fieldType === 'SCORE' ? 1 : undefined"
+                  :max="field.fieldType === 'SCORE' ? 5 : undefined"
+                />
+                <el-switch v-else-if="field.fieldType === 'BOOLEAN'" v-model="dynamicAnswers[field.fieldKey]" />
+                <el-input v-else v-model="dynamicAnswers[field.fieldKey]" />
+              </el-form-item>
+              <div class="action-row">
+                <el-button :loading="dynamicSubmitting" @click="saveDynamicReview('DRAFT')">Save draft</el-button>
+                <el-button type="primary" native-type="submit" :loading="dynamicSubmitting">Submit configured review</el-button>
+              </div>
+            </el-form>
+          </section>
 
           <el-form
             ref="reviewFormRef"

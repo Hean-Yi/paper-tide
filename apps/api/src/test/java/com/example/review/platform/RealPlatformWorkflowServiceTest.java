@@ -100,6 +100,33 @@ class RealPlatformWorkflowServiceTest {
     }
 
     @Test
+    void reviewerLoadsActiveDynamicReviewFormWithSavedDraftAnswers() throws Exception {
+        long formId = createReviewFormWithRequiredField();
+        AssignmentFixture fixture = seedAcceptedAssignment();
+        String reviewerToken = loginAndExtractToken("reviewer_demo", "demo123");
+
+        mockMvc.perform(post("/api/review-assignments/{assignmentId}/form-response", fixture.assignmentId())
+                        .header("Authorization", "Bearer " + reviewerToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "formId": %d,
+                                  "responseStatus": "DRAFT",
+                                  "answers": { "summary": "Promising but incomplete." }
+                                }
+                                """.formatted(formId)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/review-assignments/{assignmentId}/review-form", fixture.assignmentId())
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.form.formId").value(formId))
+                .andExpect(jsonPath("$.form.fields[0].fieldKey").value("summary"))
+                .andExpect(jsonPath("$.currentResponse.responseStatus").value("DRAFT"))
+                .andExpect(jsonPath("$.currentResponse.answers.summary").value("Promising but incomplete."));
+    }
+
+    @Test
     void authorSubmitsRebuttalAndChairCanReadIt() throws Exception {
         AssignmentFixture fixture = seedAcceptedAssignment();
         String authorToken = loginAndExtractToken("author_demo", "demo123");

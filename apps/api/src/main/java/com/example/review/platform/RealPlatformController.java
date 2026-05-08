@@ -14,9 +14,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 public class RealPlatformController {
     private final RealPlatformService service;
+    private final RealPlatformOperationsReadService operationsReadService;
+    private final RealPlatformWorkflowReadService workflowReadService;
 
-    public RealPlatformController(RealPlatformService service) {
+    public RealPlatformController(
+            RealPlatformService service,
+            RealPlatformOperationsReadService operationsReadService,
+            RealPlatformWorkflowReadService workflowReadService
+    ) {
         this.service = service;
+        this.operationsReadService = operationsReadService;
+        this.workflowReadService = workflowReadService;
     }
 
     @PostMapping("/conferences/{conferenceId}/forms")
@@ -35,6 +43,14 @@ public class RealPlatformController {
             @RequestBody ReviewFormResponseRequest request
     ) {
         return service.saveReviewFormResponse(principal, assignmentId, request);
+    }
+
+    @GetMapping("/review-assignments/{assignmentId}/review-form")
+    public ReviewFormPackageResponse reviewForm(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long assignmentId
+    ) {
+        return workflowReadService.reviewForm(principal, assignmentId);
     }
 
     @PostMapping("/manuscripts/{manuscriptId}/author-feedback")
@@ -87,6 +103,31 @@ public class RealPlatformController {
             @PathVariable long batchId
     ) {
         return service.confirmImport(principal, batchId);
+    }
+
+    @PostMapping("/conferences/{conferenceId}/reviewer-invitations/imports/preview")
+    public ImportPreviewResponse previewReviewerInvitationImport(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long conferenceId,
+            @RequestBody BulkReviewerInvitationImportPreviewRequest request
+    ) {
+        return service.previewReviewerInvitationImport(principal, conferenceId, request);
+    }
+
+    @PostMapping("/reviewer-invitation-imports/{batchId}/confirm")
+    public ImportConfirmResponse confirmReviewerInvitationImport(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long batchId
+    ) {
+        return service.confirmReviewerInvitationImport(principal, batchId);
+    }
+
+    @GetMapping("/conferences/{conferenceId}/assignment-operations")
+    public AssignmentOperationsResponse assignmentOperations(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long conferenceId
+    ) {
+        return operationsReadService.assignmentOperations(principal, conferenceId);
     }
 
     @PostMapping("/conferences/{conferenceId}/reviewer-invitations")
@@ -159,6 +200,23 @@ public class RealPlatformController {
         return service.recordReviewerMatchingScore(principal, manuscriptId, request);
     }
 
+    @PostMapping("/manuscripts/{manuscriptId}/matching-scores/imports/preview")
+    public ImportPreviewResponse previewMatchingScoreImport(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long manuscriptId,
+            @RequestBody BulkMatchingScoreImportPreviewRequest request
+    ) {
+        return service.previewMatchingScoreImport(principal, manuscriptId, request);
+    }
+
+    @PostMapping("/matching-score-imports/{batchId}/confirm")
+    public ImportConfirmResponse confirmMatchingScoreImport(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long batchId
+    ) {
+        return service.confirmMatchingScoreImport(principal, batchId);
+    }
+
     @PostMapping("/review-rounds/{roundId}/assignment-proposals")
     public AssignmentProposalBundleResponse createAssignmentProposalBundle(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
@@ -175,6 +233,14 @@ public class RealPlatformController {
             @RequestBody AssignmentOverrideRequest request
     ) {
         return service.recordAssignmentOverride(principal, bundleId, request);
+    }
+
+    @PostMapping("/assignment-proposals/{bundleId}/confirm-drafts")
+    public AssignmentProposalConfirmDraftsResponse confirmAssignmentProposalDrafts(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long bundleId
+    ) {
+        return service.confirmAssignmentProposalDrafts(principal, bundleId);
     }
 
     @PostMapping("/conferences/{conferenceId}/email-templates")
@@ -272,5 +338,21 @@ public class RealPlatformController {
             @RequestBody ProceedingsPreviewRequest request
     ) {
         return service.previewProceedings(principal, conferenceId, request);
+    }
+
+    @PostMapping("/proceedings-exports/{exportBatchId}/download-metadata")
+    public ProceedingsExportDownloadMetadataResponse proceedingsExportDownloadMetadata(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long exportBatchId
+    ) {
+        return service.proceedingsExportDownloadMetadata(principal, exportBatchId);
+    }
+
+    @GetMapping("/conferences/{conferenceId}/publication-operations")
+    public PublicationOperationsResponse publicationOperations(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long conferenceId
+    ) {
+        return operationsReadService.publicationOperations(principal, conferenceId);
     }
 }

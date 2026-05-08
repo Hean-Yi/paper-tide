@@ -1,4 +1,4 @@
-import { authState } from "../stores/auth";
+import { AUTH_TOKEN_KEY, authState } from "../stores/auth";
 
 const DEFAULT_API_BASE_URL = "/api";
 
@@ -95,8 +95,20 @@ async function apiError(response: Response): Promise<ApiError> {
     const message = typeof body?.message === "string" ? body.message : "Request failed";
     const code = typeof body?.code === "string" ? body.code : undefined;
     const traceId = typeof body?.traceId === "string" ? body.traceId : undefined;
+    clearSessionOnUnauthorized(response.status);
     return new ApiError(response.status, message, code, traceId);
   } catch {
+    clearSessionOnUnauthorized(response.status);
     return new ApiError(response.status, "Request failed");
   }
+}
+
+function clearSessionOnUnauthorized(status: number): void {
+  if (status !== 401) {
+    return;
+  }
+  authState.token = null;
+  authState.user = null;
+  authState.error = null;
+  localStorage.removeItem(AUTH_TOKEN_KEY);
 }

@@ -177,6 +177,30 @@ describe("frontend authentication", () => {
     expect(new Headers(options.headers).get("Authorization")).toBe(`Bearer ${authToken}`);
   });
 
+  it("clears the local session when an authenticated API request returns 401", async () => {
+    const authToken = futureToken(["AUTHOR"]);
+    localStorage.setItem("review.auth.token", authToken);
+    initializeAuth();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: () => Promise.resolve({
+        status: 401,
+        code: "UNAUTHORIZED",
+        message: "Token expired",
+        traceId: "trace-expired"
+      })
+    }));
+
+    await expect(apiRequest("/manuscripts")).rejects.toMatchObject({
+      status: 401,
+      code: "UNAUTHORIZED"
+    });
+
+    expect(localStorage.getItem("review.auth.token")).toBeNull();
+    expect(isAuthenticated.value).toBe(false);
+  });
+
   it("treats successful empty response bodies as undefined", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,

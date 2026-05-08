@@ -34,6 +34,16 @@ class RealPlatformWaveEightServiceTest {
 
     @BeforeEach
     void cleanWaveEightTables() {
+        jdbcTemplate.update("DELETE FROM COMMUNICATION_REMINDER");
+        jdbcTemplate.update("DELETE FROM COMMUNICATION_COMPOSE_BATCH");
+        jdbcTemplate.update("DELETE FROM DOI_INDEX_ADAPTER_SUBMISSION");
+        jdbcTemplate.update("DELETE FROM PROCEEDINGS_EXPORT_FILE");
+        jdbcTemplate.update("DELETE FROM STORED_FILE");
+        jdbcTemplate.update("DELETE FROM ASSIGNMENT_PROPOSAL_CONTEXT");
+        jdbcTemplate.update("DELETE FROM BULK_OPERATION_ROW");
+        jdbcTemplate.update("DELETE FROM BULK_OPERATION_BATCH");
+        jdbcTemplate.update("DELETE FROM WORKBENCH_EXPORT_BATCH");
+        jdbcTemplate.update("DELETE FROM WORKBENCH_SAVED_FILTER");
         jdbcTemplate.update("DELETE FROM ASSIGNMENT_OVERRIDE_AUDIT");
         jdbcTemplate.update("DELETE FROM ASSIGNMENT_PROPOSAL");
         jdbcTemplate.update("DELETE FROM ASSIGNMENT_PROPOSAL_BUNDLE");
@@ -430,6 +440,151 @@ class RealPlatformWaveEightServiceTest {
                 .andExpect(jsonPath("$.importBatches[0].importType").value("MATCHING_SCORES"))
                 .andExpect(jsonPath("$.assignmentProposals[0].proposalName").value("Workbench proposal"))
                 .andExpect(jsonPath("$.matchingScores[0].reviewerId").value(1004));
+    }
+
+    @Test
+    void chairSavesFormulaFilterExportsFilteredCsvAndConfirmsBulkConflictPreview() throws Exception {
+        AssignmentFixture fixture = seedAcceptedAssignment();
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        addConferenceReviewer(1004, 3);
+        mockMvc.perform(post("/api/manuscripts/{manuscriptId}/tags", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"tagName\":\"needs-shepherd\",\"tagValue\":\"yes\"}"))
+                .andExpect(status().isOk());
+
+        MvcResult filterResult = mockMvc.perform(post("/api/conferences/{conferenceId}/workbench-filters", 0)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "filterScope": "ASSIGNMENT",
+                                  "filterName": "High risk shepherd papers",
+                                  "filterFormula": "tag:needs-shepherd=yes AND status:UNDER_REVIEW",
+                                  "criteria": {
+                                    "tagName": "needs-shepherd",
+                                    "tagValue": "yes",
+                                    "status": "UNDER_REVIEW"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.filterScope").value("ASSIGNMENT"))
+                .andExpect(jsonPath("$.filterFormula").value("tag:needs-shepherd=yes AND status:UNDER_REVIEW"))
+                .andReturn();
+        long savedFilterId = objectMapper.readTree(filterResult.getResponse().getContentAsString())
+                .path("savedFilterId")
+                .asLong();
+
+        mockMvc.perform(get("/api/conferences/{conferenceId}/assignment-operations", 0)
+                        .queryParam("savedFilterId", String.valueOf(savedFilterId))
+                        .queryParam("formula", "tag:needs-shepherd=yes AND status:UNDER_REVIEW")
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.savedFilters[0].filterName").value("High risk shepherd papers"))
+                .andExpect(jsonPath("$.filteredPapers[0].manuscriptId").value(fixture.manuscriptId()));
+
+        MvcResult exportResult = mockMvc.perform(post("/api/conferences/{conferenceId}/workbench-exports", 0)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "exportScope": "PAPERS",
+                                  "exportFormat": "CSV",
+                                  "savedFilterId": %d
+                                }
+                                """.formatted(savedFilterId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.exportStatus").value("GENERATED"))
+                .andExpect(jsonPath("$.downloadFileName").value("papers-high-risk-shepherd-papers.csv"))
+                .andReturn();
+        long exportBatchId = objectMapper.readTree(exportResult.getResponse().getContentAsString())
+                .path("exportBatchId")
+                .asLong();
+
+        mockMvc.perform(get("/api/workbench-exports/{exportBatchId}/download", exportBatchId)
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contentType").value("text/csv"))
+                .andExpect(jsonPath("$.fileContents").value(org.hamcrest.Matchers.containsString("manuscriptId,title,status,tags")));
+
+        MvcResult bulkPreviewResult = mockMvc.perform(post("/api/conferences/{conferenceId}/bulk-operations/conflicts/preview", 0)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "csvText": "manuscriptId,reviewerId,conflictType,severity,note\\n%d,1004,INSTITUTION,HARD,Same institution\\n999999,1004,INSTITUTION,HARD,Missing manuscript"
+                                }
+                                """.formatted(fixture.manuscriptId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rowCount").value(2))
+                .andExpect(jsonPath("$.validRowCount").value(1))
+                .andExpect(jsonPath("$.errorCount").value(1))
+                .andReturn();
+        Integer conflictsBeforeConfirm = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM CONFLICT_RELATIONSHIP", Integer.class);
+        assertThat(conflictsBeforeConfirm).isZero();
+
+        long bulkBatchId = objectMapper.readTree(bulkPreviewResult.getResponse().getContentAsString())
+                .path("bulkBatchId")
+                .asLong();
+        mockMvc.perform(post("/api/bulk-operations/{bulkBatchId}/confirm", bulkBatchId)
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.appliedCount").value(1));
+
+        Integer conflictsAfterConfirm = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM CONFLICT_RELATIONSHIP WHERE MANUSCRIPT_ID = ? AND REVIEWER_ID = 1004 AND SEVERITY = 'HARD'",
+                Integer.class,
+                fixture.manuscriptId()
+        );
+        assertThat(conflictsAfterConfirm).isEqualTo(1);
+    }
+
+    @Test
+    void proposalOperationsExposeMatchingContextAndOverrideAuditHistory() throws Exception {
+        AssignmentFixture fixture = seedAcceptedAssignment();
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        addConferenceReviewer(1004, 3);
+        mockMvc.perform(post("/api/manuscripts/{manuscriptId}/matching-scores", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "reviewerId": 1004,
+                                  "scoreSource": "TPMS_IMPORT",
+                                  "matchingScore": 0.94,
+                                  "rationale": "Machine learning and systems subject-area overlap"
+                                }
+                                """))
+                .andExpect(status().isOk());
+        MvcResult proposalResult = mockMvc.perform(post("/api/review-rounds/{roundId}/assignment-proposals", fixture.roundId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"proposalName\":\"Context-rich proposal\",\"limit\":1}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        long bundleId = objectMapper.readTree(proposalResult.getResponse().getContentAsString()).path("bundleId").asLong();
+
+        mockMvc.perform(post("/api/assignment-proposals/{bundleId}/overrides", bundleId)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "reviewerId": 1004,
+                                  "overrideReason": "Chair reviewed soft constraints and approved context"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/assignment-proposals/{bundleId}/context", bundleId)
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bundleId").value(bundleId))
+                .andExpect(jsonPath("$.candidates[0].reviewerId").value(1004))
+                .andExpect(jsonPath("$.candidates[0].matchingRationale").value("Machine learning and systems subject-area overlap"))
+                .andExpect(jsonPath("$.candidates[0].subjectAreas[0]").value("machine learning"))
+                .andExpect(jsonPath("$.candidates[0].agentContext.matchingScore").value(0.94))
+                .andExpect(jsonPath("$.overrideAudits[0].overrideReason").value("Chair reviewed soft constraints and approved context"));
     }
 
     private long createReviewerInvitation(String chairToken, long reviewerId) throws Exception {

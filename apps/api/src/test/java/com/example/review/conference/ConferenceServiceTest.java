@@ -95,6 +95,71 @@ class ConferenceServiceTest {
         );
     }
 
+    @Test
+    void chairsCanListAndOpenOnlyTheirManageableConferences() {
+        ConferenceDetail owned = service.createDraft(chairPrincipal(), validDraftRequest());
+        ConferenceDetail other = service.createDraft(
+                new CurrentUserPrincipal(2003L, "other_chair", List.of("CHAIR")),
+                new ConferenceDraftRequest(
+                        "Other Conference",
+                        "OC",
+                        2026,
+                        "DOUBLE_BLIND",
+                        "Other call",
+                        List.of("Systems"),
+                        3,
+                        4,
+                        "other-conference-2026",
+                        new ConferencePhaseRequest(
+                                Instant.parse("2026-06-01T00:00:00Z"),
+                                Instant.parse("2026-07-01T00:00:00Z"),
+                                Instant.parse("2026-07-10T00:00:00Z"),
+                                Instant.parse("2026-07-20T00:00:00Z"),
+                                Instant.parse("2026-08-20T00:00:00Z"),
+                                Instant.parse("2026-09-01T00:00:00Z")
+                        )
+                )
+        );
+
+        List<ConferenceSummary> chairConferences = service.listManageableConferences(chairPrincipal());
+
+        assertEquals(1, chairConferences.size());
+        assertEquals(owned.conferenceId(), chairConferences.getFirst().conferenceId());
+        assertEquals(owned.conferenceId(), service.getManageableConference(owned.conferenceId(), chairPrincipal()).conferenceId());
+        assertThrows(ConferenceAccessException.class, () ->
+                service.getManageableConference(other.conferenceId(), chairPrincipal())
+        );
+    }
+
+    @Test
+    void adminsCanListEveryManageableConference() {
+        service.createDraft(chairPrincipal(), validDraftRequest());
+        service.createDraft(
+                new CurrentUserPrincipal(2003L, "other_chair", List.of("CHAIR")),
+                new ConferenceDraftRequest(
+                        "Other Conference",
+                        "OC",
+                        2026,
+                        "DOUBLE_BLIND",
+                        "Other call",
+                        List.of("Systems"),
+                        3,
+                        4,
+                        "other-conference-2026",
+                        new ConferencePhaseRequest(
+                                Instant.parse("2026-06-01T00:00:00Z"),
+                                Instant.parse("2026-07-01T00:00:00Z"),
+                                Instant.parse("2026-07-10T00:00:00Z"),
+                                Instant.parse("2026-07-20T00:00:00Z"),
+                                Instant.parse("2026-08-20T00:00:00Z"),
+                                Instant.parse("2026-09-01T00:00:00Z")
+                        )
+                )
+        );
+
+        assertEquals(2, service.listManageableConferences(adminPrincipal()).size());
+    }
+
     private ConferenceDraftRequest validDraftRequest() {
         return new ConferenceDraftRequest(
                 "Review Systems 2026",
@@ -216,6 +281,24 @@ class ConferenceServiceTest {
         public List<ConferenceSummary> listPendingApproval() {
             return conferences.values().stream()
                     .filter(conference -> conference.status().equals("PENDING_APPROVAL"))
+                    .map(conference -> new ConferenceSummary(
+                            conference.conferenceId(),
+                            conference.name(),
+                            conference.acronym(),
+                            conference.year(),
+                            conference.status(),
+                            conference.blindMode(),
+                            conference.publicSlug(),
+                            phases.get(conference.conferenceId()).submissionOpenAt(),
+                            phases.get(conference.conferenceId()).submissionCloseAt()
+                    ))
+                    .toList();
+        }
+
+        @Override
+        public List<ConferenceSummary> listManageable(Long organizerUserId) {
+            return conferences.values().stream()
+                    .filter(conference -> organizerUserId == null || conference.organizerUserId() == organizerUserId)
                     .map(conference -> new ConferenceSummary(
                             conference.conferenceId(),
                             conference.name(),

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.example.review.analysis.infrastructure.AnalysisIntentRepository;
 import com.example.review.analysis.infrastructure.AnalysisProjectionRepository;
 import com.example.review.auth.CurrentUserPrincipal;
+import com.example.review.conference.ConferenceService;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
@@ -22,6 +23,8 @@ import org.springframework.web.server.ResponseStatusException;
 class AdminAnalysisMonitorQueryTest {
     private final ReviewerAssignmentReadRepository reviewerAssignmentReadRepository = Mockito.mock(ReviewerAssignmentReadRepository.class);
     private final ScreeningQueueReadRepository screeningQueueReadRepository = Mockito.mock(ScreeningQueueReadRepository.class);
+    private final ConferencePaperReadRepository conferencePaperReadRepository = Mockito.mock(ConferencePaperReadRepository.class);
+    private final ConferenceService conferenceService = Mockito.mock(ConferenceService.class);
     private final NamedParameterJdbcTemplate namedJdbcTemplate = Mockito.mock(NamedParameterJdbcTemplate.class);
     private final AnalysisIntentRepository intentRepository = Mockito.mock(AnalysisIntentRepository.class);
     private final AnalysisProjectionRepository projectionRepository = Mockito.mock(AnalysisProjectionRepository.class);
@@ -29,6 +32,8 @@ class AdminAnalysisMonitorQueryTest {
     private final WorkflowQueryService service = new WorkflowQueryService(
             reviewerAssignmentReadRepository,
             screeningQueueReadRepository,
+            conferencePaperReadRepository,
+            conferenceService,
             repository,
             intentRepository,
             projectionRepository

@@ -40,13 +40,16 @@ class ReviewWorkflowServiceTest {
         jdbcTemplate.update("DELETE FROM REVIEW_FORM_RESPONSE");
         jdbcTemplate.update("DELETE FROM WORKFLOW_FORM_RESPONSE");
         jdbcTemplate.update("DELETE FROM AUTHOR_FEEDBACK");
+        jdbcTemplate.update("DELETE FROM PROCEEDINGS_EXPORT_BATCH");
+        jdbcTemplate.update("DELETE FROM PUBLICATION_METADATA");
+        jdbcTemplate.update("DELETE FROM CAMERA_READY_FILE");
+        jdbcTemplate.update("DELETE FROM CAMERA_READY_SUBMISSION");
         jdbcTemplate.update("DELETE FROM PAPER_TAG");
         jdbcTemplate.update("DELETE FROM IMPORT_BATCH");
         jdbcTemplate.update("DELETE FROM PAPER_ROLE_ASSIGNMENT");
         jdbcTemplate.update("DELETE FROM CONFERENCE_FORM_FIELD");
         jdbcTemplate.update("DELETE FROM CONFERENCE_FORM_DEFINITION");
         jdbcTemplate.update("DELETE FROM REVIEW_DISCUSSION_MESSAGE");
-        jdbcTemplate.update("DELETE FROM CAMERA_READY_SUBMISSION");
         jdbcTemplate.update("DELETE FROM COMMUNICATION_LOG");
         jdbcTemplate.update("DELETE FROM CONFLICT_CHECK_RECORD");
         jdbcTemplate.update("DELETE FROM REVIEW_REPORT");
@@ -109,6 +112,63 @@ class ReviewWorkflowServiceTest {
         org.junit.jupiter.api.Assertions.assertEquals(manuscript.manuscriptId(), ((Number) assignmentRow.get("MANUSCRIPT_ID")).longValue());
         org.junit.jupiter.api.Assertions.assertEquals(manuscript.versionId(), ((Number) assignmentRow.get("VERSION_ID")).longValue());
         org.junit.jupiter.api.Assertions.assertEquals(1002L, ((Number) assignmentRow.get("REVIEWER_ID")).longValue());
+    }
+
+    @Test
+    void chairListsEligibleAssignmentCandidatesWithReviewerDetails() throws Exception {
+        TestManuscript manuscript = seedSubmittedManuscript();
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        long roundId = createRound(chairToken, manuscript.manuscriptId(), manuscript.versionId(), 1);
+        seedBid(0L, manuscript.manuscriptId(), 1002L, "WANT_TO_REVIEW");
+        seedBid(0L, manuscript.manuscriptId(), 1012L, "DECLINE");
+
+        mockMvc.perform(get("/api/review-rounds/{roundId}/assignment-candidates", roundId)
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].reviewerId").value(1002))
+                .andExpect(jsonPath("$[0].reviewerName").value("Reviewer Demo"))
+                .andExpect(jsonPath("$[0].institution").value("Nanjing University"))
+                .andExpect(jsonPath("$[0].currentLoad").value(0))
+                .andExpect(jsonPath("$[0].maxLoad").value(3))
+                .andExpect(jsonPath("$[0].bidValue").value("WANT_TO_REVIEW"));
+    }
+
+    @Test
+    void chairAutoAssignsEligibleReviewersToActiveConferenceRounds() throws Exception {
+        TestManuscript first = seedSubmittedManuscript();
+        TestManuscript second = seedSubmittedManuscript();
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        long firstRoundId = createRound(chairToken, first.manuscriptId(), first.versionId(), 1);
+        long secondRoundId = createRound(chairToken, second.manuscriptId(), second.versionId(), 1);
+        seedBid(0L, first.manuscriptId(), 1002L, "WANT_TO_REVIEW");
+        seedBid(0L, second.manuscriptId(), 1012L, "WANT_TO_REVIEW");
+
+        mockMvc.perform(post("/api/conferences/0/auto-assignments")
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "reviewsPerPaper": 1,
+                                  "deadlineAt": "2099-05-01T12:00:00Z"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.createdCount").value(2))
+                .andExpect(jsonPath("$.assignments", hasSize(2)));
+
+        Integer firstCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM REVIEW_ASSIGNMENT WHERE ROUND_ID = ?",
+                Integer.class,
+                firstRoundId
+        );
+        Integer secondCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM REVIEW_ASSIGNMENT WHERE ROUND_ID = ?",
+                Integer.class,
+                secondRoundId
+        );
+        org.junit.jupiter.api.Assertions.assertEquals(1, firstCount);
+        org.junit.jupiter.api.Assertions.assertEquals(1, secondCount);
     }
 
     @Test
@@ -464,7 +524,13 @@ class ReviewWorkflowServiceTest {
                 ) S
                 ON (P.CONFERENCE_ID = S.CONFERENCE_ID)
                 WHEN MATCHED THEN
-                  UPDATE SET P.SUBMISSION_CLOSE_AT = S.SUBMISSION_CLOSE_AT
+                  UPDATE SET
+                    P.SUBMISSION_OPEN_AT = S.SUBMISSION_OPEN_AT,
+                    P.SUBMISSION_CLOSE_AT = S.SUBMISSION_CLOSE_AT,
+                    P.BIDDING_OPEN_AT = S.BIDDING_OPEN_AT,
+                    P.BIDDING_CLOSE_AT = S.BIDDING_CLOSE_AT,
+                    P.REVIEW_DEADLINE_AT = S.REVIEW_DEADLINE_AT,
+                    P.DECISION_RELEASE_AT = S.DECISION_RELEASE_AT
                 WHEN NOT MATCHED THEN
                   INSERT (
                     PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, SUBMISSION_CLOSE_AT,
@@ -495,6 +561,20 @@ class ReviewWorkflowServiceTest {
                 conferenceId,
                 reviewerId,
                 maxLoad
+        );
+    }
+
+    private void seedBid(long conferenceId, long manuscriptId, long reviewerId, String bidValue) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO REVIEWER_BID (
+                  BID_ID, CONFERENCE_ID, MANUSCRIPT_ID, REVIEWER_ID, BID_VALUE, CONFLICT_DECLARED, BID_AT
+                ) VALUES (SEQ_REVIEWER_BID.NEXTVAL, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+                """,
+                conferenceId,
+                manuscriptId,
+                reviewerId,
+                bidValue
         );
     }
 

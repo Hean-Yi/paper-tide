@@ -48,41 +48,32 @@ class RegistrationServiceTest {
     }
 
     @Test
-    void authorRegistersAsPendingEmailVerificationAndReceivesSingleUseToken() {
+    void authorRegistersAsActiveAndReceivesAuthorRoleWithoutEmailVerification() {
         RegistrationResponse response = service.register(authorRequest("new_author", "new_author@example.com"));
 
         assertEquals(1L, response.userId());
         assertEquals("AUTHOR", response.registrationType());
-        assertEquals("PENDING_EMAIL_VERIFICATION", response.applicationStatus());
-        assertEquals("PENDING_EMAIL_VERIFICATION", repository.users.get(1L).status());
-        assertFalse(repository.users.get(1L).passwordHash().contains("demo123"));
-        assertTrue(repository.rolesByUser.getOrDefault(1L, List.of()).isEmpty());
-        assertEquals(1, emailGateway.messages().size());
-        assertEquals(1, repository.tokens.size());
-        assertFalse(repository.tokens.getFirst().tokenHash().contains(emailGateway.messages().getFirst().rawToken()));
-    }
-
-    @Test
-    void verifyingAuthorEmailActivatesUserAndGrantsAuthorRole() {
-        service.register(authorRequest("new_author", "new_author@example.com"));
-        String rawToken = emailGateway.messages().getFirst().rawToken();
-
-        EmailVerificationResponse response = service.verifyEmail(rawToken);
-
-        assertEquals("ACTIVE", response.userStatus());
         assertEquals("APPROVED", response.applicationStatus());
-        assertTrue(repository.tokens.getFirst().consumed());
+        assertFalse(response.emailVerificationRequired());
+        assertEquals("ACTIVE", repository.users.get(1L).status());
+        assertFalse(repository.users.get(1L).passwordHash().contains("demo123"));
         assertEquals(List.of("AUTHOR"), repository.rolesByUser.get(1L));
+        assertTrue(emailGateway.messages().isEmpty());
+        assertTrue(repository.tokens.isEmpty());
     }
 
     @Test
-    void reviewerApprovalRequiresAdminAndGrantsReviewerAfterEmailVerification() {
+    void reviewerRegistersActiveAndPendingAdminApprovalWithoutEmailVerification() {
         RegistrationResponse registration = service.register(reviewerRequest("new_reviewer", "new_reviewer@example.com"));
-        service.verifyEmail(emailGateway.messages().getFirst().rawToken());
 
         RoleApplicationRecord application = repository.applications.get(registration.applicationId());
+        assertEquals("PENDING_ADMIN_APPROVAL", registration.applicationStatus());
+        assertFalse(registration.emailVerificationRequired());
+        assertEquals("ACTIVE", repository.users.get(1L).status());
         assertEquals("PENDING_ADMIN_APPROVAL", application.status());
         assertTrue(repository.rolesByUser.getOrDefault(1L, List.of()).isEmpty());
+        assertTrue(emailGateway.messages().isEmpty());
+        assertTrue(repository.tokens.isEmpty());
 
         assertThrows(RegistrationAccessException.class, () ->
                 service.approveApplication(application.applicationId(), chairPrincipal(), null)
@@ -98,7 +89,11 @@ class RegistrationServiceTest {
     @Test
     void organizerApprovalGrantsExistingChairRoleNotOrganizerRole() {
         RegistrationResponse registration = service.register(organizerRequest("new_org", "new_org@example.com"));
-        service.verifyEmail(emailGateway.messages().getFirst().rawToken());
+
+        assertEquals("PENDING_ADMIN_APPROVAL", registration.applicationStatus());
+        assertFalse(registration.emailVerificationRequired());
+        assertEquals("ACTIVE", repository.users.get(1L).status());
+        assertTrue(emailGateway.messages().isEmpty());
 
         ApplicationReviewResponse response = service.approveApplication(registration.applicationId(), adminPrincipal(), null);
 
@@ -110,7 +105,6 @@ class RegistrationServiceTest {
     @Test
     void approvalAndRejectionWriteAuditLogEntries() {
         RegistrationResponse registration = service.register(reviewerRequest("audited_reviewer", "audited@example.com"));
-        service.verifyEmail(emailGateway.messages().getFirst().rawToken());
 
         service.approveApplication(registration.applicationId(), adminPrincipal(), null);
         verify(auditLogService).recordRoleApproval(
@@ -123,7 +117,6 @@ class RegistrationServiceTest {
         );
 
         RegistrationResponse second = service.register(organizerRequest("audited_org", "audited_org@example.com"));
-        service.verifyEmail(emailGateway.messages().getLast().rawToken());
         service.rejectApplication(second.applicationId(), adminPrincipal(), "Insufficient organizing experience");
         verify(auditLogService).recordRoleApproval(
                 eq(1004L),
@@ -140,24 +133,23 @@ class RegistrationServiceTest {
     @Test
     void rejectedReviewerMayResubmitSameApplicationRow() {
         RegistrationResponse first = service.register(reviewerRequest("retry_reviewer", "retry@example.com"));
-        service.verifyEmail(emailGateway.messages().getFirst().rawToken());
         service.rejectApplication(first.applicationId(), adminPrincipal(), "Evidence too thin");
 
         RegistrationResponse second = service.register(reviewerRequest("retry_reviewer", "retry@example.com"));
 
         assertEquals(first.userId(), second.userId());
         assertEquals(first.applicationId(), second.applicationId());
-        assertEquals("PENDING_EMAIL_VERIFICATION", second.applicationStatus());
-        assertEquals(2, emailGateway.messages().size());
+        assertEquals("PENDING_ADMIN_APPROVAL", second.applicationStatus());
+        assertFalse(second.emailVerificationRequired());
+        assertTrue(emailGateway.messages().isEmpty());
         RoleApplicationRecord application = repository.applications.get(first.applicationId());
-        assertEquals("PENDING_EMAIL_VERIFICATION", application.status());
+        assertEquals("PENDING_ADMIN_APPROVAL", application.status());
         assertTrue(application.rejectionReason() == null);
     }
 
     @Test
     void resubmitIsRejectedWhenUsernameDoesNotMatch() {
         RegistrationResponse first = service.register(reviewerRequest("original_user", "dupe@example.com"));
-        service.verifyEmail(emailGateway.messages().getFirst().rawToken());
         service.rejectApplication(first.applicationId(), adminPrincipal(), "Evidence too thin");
 
         RegistrationRequest mismatched = new RegistrationRequest(
@@ -405,7 +397,7 @@ class RegistrationServiceTest {
         public void resetUserForResubmit(long userId, String passwordHash, String realName, String institution) {
             FakeUser user = users.get(userId);
             users.put(userId, new FakeUser(user.userId(), user.username(), passwordHash, realName,
-                    user.email(), institution, "PENDING_EMAIL_VERIFICATION"));
+                    user.email(), institution, "ACTIVE"));
         }
 
         @Override

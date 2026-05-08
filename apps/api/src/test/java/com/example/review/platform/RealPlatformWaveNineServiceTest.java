@@ -33,6 +33,16 @@ class RealPlatformWaveNineServiceTest {
 
     @BeforeEach
     void cleanWaveNineTables() {
+        jdbcTemplate.update("DELETE FROM COMMUNICATION_REMINDER");
+        jdbcTemplate.update("DELETE FROM COMMUNICATION_COMPOSE_BATCH");
+        jdbcTemplate.update("DELETE FROM DOI_INDEX_ADAPTER_SUBMISSION");
+        jdbcTemplate.update("DELETE FROM PROCEEDINGS_EXPORT_FILE");
+        jdbcTemplate.update("DELETE FROM STORED_FILE");
+        jdbcTemplate.update("DELETE FROM ASSIGNMENT_PROPOSAL_CONTEXT");
+        jdbcTemplate.update("DELETE FROM BULK_OPERATION_ROW");
+        jdbcTemplate.update("DELETE FROM BULK_OPERATION_BATCH");
+        jdbcTemplate.update("DELETE FROM WORKBENCH_EXPORT_BATCH");
+        jdbcTemplate.update("DELETE FROM WORKBENCH_SAVED_FILTER");
         jdbcTemplate.update("DELETE FROM PROCEEDINGS_EXPORT_BATCH");
         jdbcTemplate.update("DELETE FROM PUBLICATION_METADATA");
         jdbcTemplate.update("DELETE FROM CAMERA_READY_FILE");
@@ -357,6 +367,155 @@ class RealPlatformWaveNineServiceTest {
                 .andExpect(jsonPath("$.cameraReadyFiles[0].fileName").value("camera-ready.pdf"))
                 .andExpect(jsonPath("$.publicationMetadata[0].doi").value("10.5555/wave9-dashboard"))
                 .andExpect(jsonPath("$.proceedingsExports[0].exportName").value("Wave 9 Dashboard Export"));
+    }
+
+    @Test
+    void cameraReadyFileStoresDownloadableContentAndProceedingsExportCreatesDownloadableManifest() throws Exception {
+        AssignmentFixture fixture = seedAcceptedAssignment();
+        jdbcTemplate.update("UPDATE MANUSCRIPT SET CURRENT_STATUS = 'ACCEPTED', LAST_DECISION_CODE = 'ACCEPT' WHERE MANUSCRIPT_ID = ?", fixture.manuscriptId());
+        String authorToken = loginAndExtractToken("author_demo", "demo123");
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+
+        MvcResult fileResult = mockMvc.perform(post("/api/manuscripts/{manuscriptId}/camera-ready-files", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + authorToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fileName": "camera-ready.pdf",
+                                  "fileSize": 31,
+                                  "checksumSha256": "abc123",
+                                  "copyrightConfirmed": true,
+                                  "licenseType": "CC-BY",
+                                  "fileContentsBase64": "JVBERi1XQVZFOQpDYW1lcmEgcmVhZHkgY29udGVudA=="
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fileStatus").value("SUBMITTED"))
+                .andExpect(jsonPath("$.storedFileId").isNumber())
+                .andReturn();
+        long storedFileId = objectMapper.readTree(fileResult.getResponse().getContentAsString()).path("storedFileId").asLong();
+
+        mockMvc.perform(get("/api/stored-files/{storedFileId}/download", storedFileId)
+                        .header("Authorization", "Bearer " + authorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fileName").value("camera-ready.pdf"))
+                .andExpect(jsonPath("$.contentType").value("application/pdf"))
+                .andExpect(jsonPath("$.fileContentsBase64").value("JVBERi1XQVZFOQpDYW1lcmEgcmVhZHkgY29udGVudA=="));
+
+        mockMvc.perform(post("/api/manuscripts/{manuscriptId}/publication-metadata", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "doi": "10.5555/wave9-file",
+                                  "indexKeywords": "systems,file",
+                                  "publicationStatus": "READY_FOR_PROCEEDINGS"
+                                }
+                                """))
+                .andExpect(status().isOk());
+        MvcResult previewResult = mockMvc.perform(post("/api/conferences/{conferenceId}/proceedings/preview", 0)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"exportName\":\"Wave 9 File Manifest\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        long exportBatchId = objectMapper.readTree(previewResult.getResponse().getContentAsString()).path("exportBatchId").asLong();
+
+        mockMvc.perform(post("/api/proceedings-exports/{exportBatchId}/generate-files", exportBatchId)
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.files[0].fileKind").value("MANIFEST_JSON"))
+                .andExpect(jsonPath("$.files[0].downloadUrl").value(org.hamcrest.Matchers.containsString("/api/proceedings-export-files/")));
+
+        mockMvc.perform(get("/api/proceedings-exports/{exportBatchId}/download", exportBatchId)
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fileName").value("wave-9-file-manifest-manifest.json"))
+                .andExpect(jsonPath("$.fileContents").value(org.hamcrest.Matchers.containsString("10.5555/wave9-file")));
+    }
+
+    @Test
+    void doiIndexAdapterAndCommunicationConsoleRecordLocalProviderSubmissions() throws Exception {
+        AssignmentFixture fixture = seedAcceptedAssignment();
+        jdbcTemplate.update("UPDATE MANUSCRIPT SET CURRENT_STATUS = 'ACCEPTED', LAST_DECISION_CODE = 'ACCEPT' WHERE MANUSCRIPT_ID = ?", fixture.manuscriptId());
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        mockMvc.perform(post("/api/manuscripts/{manuscriptId}/publication-metadata", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "doi": "10.5555/wave9-adapter",
+                                  "indexKeywords": "systems,index",
+                                  "publicationStatus": "READY_FOR_PROCEEDINGS"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/manuscripts/{manuscriptId}/doi-index-submissions", fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "adapterType": "DOI",
+                                  "providerName": "LOCAL_DOI",
+                                  "submitNow": true
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.adapterStatus").value("RECORDED"))
+                .andExpect(jsonPath("$.providerName").value("LOCAL_DOI"));
+
+        MvcResult templateResult = mockMvc.perform(post("/api/conferences/{conferenceId}/email-templates", 0)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "templateKey": "review.reminder",
+                                  "subjectTemplate": "Review reminder for {{title}}",
+                                  "bodyTemplate": "Please submit review for {{title}}."
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn();
+        long templateId = objectMapper.readTree(templateResult.getResponse().getContentAsString()).path("templateId").asLong();
+        MvcResult composeResult = mockMvc.perform(post("/api/conferences/{conferenceId}/communications/compose", 0)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "templateId": %d,
+                                  "composeScope": "REVIEWERS",
+                                  "recipientFilter": { "assignmentStatus": "ACCEPTED" },
+                                  "variables": { "title": "Wave 9 Paper" },
+                                  "recordSend": true
+                                }
+                                """.formatted(templateId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deliveryStatus").value("RECORDED"))
+                .andExpect(jsonPath("$.recipientCount").value(1))
+                .andReturn();
+        long composeBatchId = objectMapper.readTree(composeResult.getResponse().getContentAsString()).path("composeBatchId").asLong();
+
+        mockMvc.perform(post("/api/conferences/{conferenceId}/communications/reminders", 0)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "reminderType": "REVIEW_DUE",
+                                  "targetStatus": "ACCEPTED",
+                                  "scheduledFor": "2099-01-01T00:00:00Z",
+                                  "composeBatchId": %d
+                                }
+                                """.formatted(composeBatchId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reminderStatus").value("SCHEDULED"));
+
+        mockMvc.perform(get("/api/conferences/{conferenceId}/publication-operations", 0)
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.doiIndexSubmissions[0].adapterStatus").value("RECORDED"))
+                .andExpect(jsonPath("$.communicationBatches[0].deliveryStatus").value("RECORDED"))
+                .andExpect(jsonPath("$.communicationReminders[0].reminderType").value("REVIEW_DUE"));
     }
 
     private AssignmentFixture seedAcceptedAssignment() {

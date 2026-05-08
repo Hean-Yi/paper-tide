@@ -2941,3 +2941,54 @@ Expected after implementation: both commands pass.
   - Repository-level: `git diff --check` and `RUN_ANALYSIS_E2E_SMOKE=1 bash scripts/test-all.sh`.
 - Current completion state:
   - The split is behavior-preserving at the repository verification boundary. Temporary backups were eligible for deletion before the final split commit.
+
+**Registration email-verification bypass fix on 2026-05-08:**
+
+- Active feedback scope: local/demo registration must not block authors on a non-delivered email verification link, and reviewer/organizer applications must not fail or remain hidden behind the email-verification step.
+- Execution result:
+  - Changed `RegistrationService` so new Author registrations create an active user, approve the role application, and grant `AUTHOR` immediately.
+  - Changed new Reviewer and Organizer registrations to create active users and put applications directly into `PENDING_ADMIN_APPROVAL` for Admin review.
+  - Kept the legacy `/api/auth/verify-email` path and email-token schema in place for compatibility, but new registrations now return `emailVerificationRequired = false`.
+  - Updated resubmission behavior, frontend registration success copy, registration tests, workflow docs, architecture/code-structure docs, and `AGENTS.md` with the reusable rule that fake/local email gateways must not be a hard runtime dependency for public registration.
+- Verification run:
+  - RED: `cd apps/api && mvn -Dtest=RegistrationServiceTest test` failed against the old `PENDING_EMAIL_VERIFICATION` behavior.
+  - GREEN target: `cd apps/api && mvn -Dtest=RegistrationServiceTest,RegistrationSchemaTest test` passed with 8 tests.
+  - Frontend target: `cd apps/web && npm run test -- --run src/tests/registration.spec.ts` passed with 4 tests.
+- Current completion state:
+  - Public registration no longer requires inbox access. Authors can log in after registration; reviewers and organizers can proceed to Admin approval immediately.
+
+**Registration-to-login repair on 2026-05-08:**
+
+- Active feedback scope: registration success must mean the created `SYS_USER` can authenticate through `/api/auth/login`; existing users stranded in `PENDING_EMAIL_VERIFICATION` by the previous flow must not remain permanently blocked.
+- Execution result:
+  - Added real HTTP registration-to-login coverage for Author, Reviewer, and Organizer in `AuthControllerTest`.
+  - Fixed Reviewer/Organizer registration 500s caused by Oracle `ORA-17004` when nullable academic-profile fields were bound without explicit SQL types.
+  - Changed login lookup to be case-insensitive and added a transitional activation path for `PENDING_EMAIL_VERIFICATION` registration users after password verification: Authors become `APPROVED` with `AUTHOR`; Reviewers/Organizers become active users with applications moved to `PENDING_ADMIN_APPROVAL`.
+  - Updated `AGENTS.md` with the rule that registration changes must be verified through the real login path for all public registration roles.
+- Verification run:
+  - RED: `cd apps/api && mvn -Dtest=AuthControllerTest#registeredAuthorCanLoginImmediatelyWithAuthorRole,AuthControllerTest#registeredReviewerCanLoginImmediatelyWhileRoleApplicationAwaitsApproval,AuthControllerTest#registeredOrganizerCanLoginImmediatelyWhileChairRoleAwaitsApproval test` exposed Reviewer/Organizer registration 500s.
+  - RED: `cd apps/api && mvn -Dtest=AuthControllerTest#legacyPendingEmailAuthorIsActivatedOnFirstSuccessfulLogin,AuthControllerTest#legacyPendingEmailReviewerIsActivatedOnFirstSuccessfulLoginAndQueuedForApproval,AuthControllerTest#legacyPendingEmailOrganizerIsActivatedOnFirstSuccessfulLoginAndQueuedForApproval test` exposed existing pending-email users still failing login with 401.
+  - GREEN target: combined six-test `AuthControllerTest` registration/login command passed.
+- Current completion state:
+  - New registrations and old pending-email registrations both authenticate through the normal login endpoint with role/application status aligned to the bypassed-email design.
+
+**Reviewer assignment UX repair on 2026-05-08:**
+
+- Active feedback scope: chair users should not have to blind-enter reviewer IDs during assignment, and they need a one-click assignment strategy that fills papers with missing reviewers while letting the chair choose the target reviewer count per paper.
+- Execution result:
+  - Added `GET /api/review-rounds/{roundId}/assignment-candidates` so the decision workbench can display eligible reviewers with name, institution, current load, max load, bid value, score, and reason.
+  - Added `POST /api/conferences/{conferenceId}/auto-assignments` with `reviewsPerPaper` and optional `deadlineAt`; it fills only `PENDING`/`IN_PROGRESS` review rounds below the requested target and reuses conference membership, author exclusion, conflict, declined-bid, duplicate, and load eligibility rules.
+  - Refactored manual assignment creation through a shared helper so manual assignment and automatic assignment insert tasks consistently update round status and trigger same-institution conflict detection.
+  - Updated the chair decision workbench assignment dialog from numeric ID entry to an eligible-reviewer selector plus a visible candidate table.
+  - Added a chair assignment-operations one-click assignment panel with configurable reviews-per-paper and deadline controls.
+  - Updated frontend workflow types/API helpers and added frontend tests for candidate display and one-click assignment submission.
+  - Updated `AGENTS.md` with reusable assignment-UX and Oracle phase seed lessons from this execution.
+- Verification run:
+  - `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts -t "eligible reviewer details|one-click reviewer assignment"` passed with 2 tests.
+  - `cd apps/web && npm run typecheck` passed.
+  - `cd apps/api && mvn -Dtest=ReviewWorkflowServiceTest#chairListsEligibleAssignmentCandidatesWithReviewerDetails,ReviewWorkflowServiceTest#chairAutoAssignsEligibleReviewersToActiveConferenceRounds test` passed with 2 tests.
+  - `cd apps/api && mvn -Dtest=ReviewWorkflowServiceTest,AssignmentDraftServiceTest test` passed with 11 tests.
+  - `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts` was run and exposed pre-existing localization drift in the broader workflow spec: many old tests still assert English labels/placeholders while the current UI renders Chinese text. The two new assignment tests pass when targeted.
+  - A later exploratory Maven method-target command for an unimplemented extra duplicate-assignment edge test exposed an unrelated current workspace compile failure in `ConferenceServiceTest` references to removed `ConferenceService` methods; no assignment files were changed for that exploratory check.
+- Current completion state:
+  - The requested reviewer assignment UX is implemented and covered by focused API/Web tests. Broader repository verification is currently blocked by unrelated dirty-worktree test drift noted above.

@@ -43,7 +43,7 @@ PaperTide Review 当前采用三应用服务 + Oracle + 本地可选 RabbitMQ �
 ### 3.1 API（Spring Boot）
 
 - 账号认证与 JWT 鉴权
-- 公开注册、邮箱验证、角色申请和 Admin 审批
+- 公开注册、角色申请和 Admin 审批；邮箱验证端点仅保留为兼容旧链接，新注册不依赖真实邮件投递
 - Conference/CFP 生命周期、会议范围投稿、reviewer pool、bidding
 - 投稿与版本管理（创建版本、上传 PDF、提交）
 - 评审轮次、确定性 assignment draft、Chair 确认分配、评审报告、冲突检查

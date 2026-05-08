@@ -27,7 +27,7 @@ docs/
 ### 2.2 包级模块
 
 - `auth`：登录、JWT、当前用户、角色守卫
-- `registration`：公开注册、邮箱验证、角色申请审批与 profile 持久化
+- `registration`：公开注册、角色申请审批、兼容旧邮箱验证链接与 profile 持久化
 - `conference`：Conference/CFP 生命周期、reviewer pool、bidding
 - `manuscript`：稿件、版本、作者归属、PDF 上传
 - `review`：轮次、assignment draft、分配确认、评审报告、Reviewer 论文阅读

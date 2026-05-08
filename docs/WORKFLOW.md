@@ -4,7 +4,7 @@
 
 ### Author
 
-1. 公开注册并完成邮箱验证
+1. 公开注册后直接激活账号
 2. 登录后浏览公开 CFP
 3. 选择会议创建稿件与上传版本 PDF
 3. 提交版本进入评审流程
@@ -12,7 +12,7 @@
 
 ### Reviewer
 
-1. 公开注册、邮箱验证，并等待 Admin 审批进入平台 reviewer pool
+1. 公开注册后等待 Admin 审批进入平台 reviewer pool
 2. 在会议 bidding 窗口提交偏好或声明冲突
 3. 登录后查看被分配任务
 4. 接受/拒绝任务
@@ -56,7 +56,7 @@ Author selects CFP + submits manuscript
 - Auth
   - `POST /api/auth/login`
   - `POST /api/auth/register`
-  - `POST /api/auth/verify-email`
+  - `POST /api/auth/verify-email`（兼容旧验证链接；新注册默认不要求邮箱验证）
 
 - Conference / registration admin
   - `GET /api/conferences/cfp`

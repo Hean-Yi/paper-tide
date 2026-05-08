@@ -2907,8 +2907,22 @@ Expected after implementation: both commands pass.
   - Target aggregate: `mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -Dtest=CodeQualityTest,RealPlatformWorkflowServiceTest,RealPlatformWaveEightServiceTest,RealPlatformWaveNineServiceTest test`.
   - Full verification: `mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository test`, `cd apps/web && npm run test -- --run && npm run typecheck && npm run build`, Oracle `verify_schema.sql`, `git diff --check`, and `RUN_ANALYSIS_E2E_SMOKE=1 bash scripts/test-all.sh`.
 - Current completion state:
-  - Wave 6 through Wave 9 now have actor-facing API/UI loops for dynamic reviewer forms, assignment/COI operations, bulk assignment imports, proposal confirmation to drafts, publication/communication dashboards, and proceedings export metadata.
-  - Remaining product-depth items are kept explicit in `TODO.md`: configurable submission/meta-review/camera-ready form coverage, review revision history, rebuttal window enforcement, saved search/formula filters, CSV export files, bulk decision/user/conflict/preference confirms, Agent proposal context enrichment, audited override UI, real file/proceedings downloads, DOI/index adapters, and richer communication compose/reminder workflows.
+  - Wave 6 through Wave 9 now have actor-facing API/UI loops for configurable submission/review/meta-review/camera-ready forms, review revision history, rebuttal/camera-ready window enforcement, assignment/COI operations, bulk invitation/TPMS imports, proposal confirmation to drafts, publication/communication dashboards, and proceedings export metadata.
+  - Wave 6 is closed for the current configurable-workflow scope. Wave 7 through Wave 9 remain partially closed: saved search/formula filters, CSV export files, bulk decision/user/conflict/preference confirms, richer matching and Agent proposal context, first-class audited override UI, real file/proceedings downloads, DOI/index adapters, and richer communication compose/reminder workflows remain explicit in `TODO.md`.
+
+**Wave3-Wave6 closure ledger repair on 2026-05-08:**
+
+- Added `025_wave3_wave6_full_closure.sql` and wired it into Oracle full apply, incremental bootstrap, test bootstrap, and schema verification.
+- Added API support for active form packages, manuscript form responses, review revision history, and rebuttal/camera-ready phase-window enforcement.
+- Added Web support for expired-session cleanup, author submission checklist, author camera-ready checklist, chair meta-review, and reviewer revision history.
+- Verification run:
+  - `cd apps/web && npm run test -- --run src/tests/login.spec.ts` passed with 12 tests.
+  - `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts` passed with 40 tests.
+  - `cd apps/web && npm run typecheck` passed.
+  - `cd apps/api && mvn -Dtest=RealPlatformWorkflowServiceTest,CodeQualityTest test` passed with 29 tests.
+- Current completion state:
+  - Wave 3 through Wave 6 are closed for their current ledger scope.
+  - Wave 7 through Wave 9 are usable but not fully closed; their remaining product-depth gaps stay tracked in `TODO.md`.
 
 **RealPlatform service/repository split result on 2026-05-08:**
 

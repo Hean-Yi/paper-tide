@@ -14,9 +14,9 @@
 - Wave 4 - real-deployment business P0: implement conference-scoped authorization, phase/deadline enforcement, COI/double-blind governance, and author-facing decision packages.
 - Wave 5 - product operations: add reviewer discussion/meta-review, publication/camera-ready, communication, deployment, reporting, and data lifecycle capabilities.
 - Wave 6 - configurable conference workflow: configurable submission/review/meta-review/camera-ready form read/render/save/submit paths, saved draft hydration, review revision history, and explicit rebuttal/camera-ready window enforcement have landed; deeper author-feedback threading, review quality/rating, and richer per-track phase policy remain future product depth.
-- Wave 7 - chair-scale operations: backend foundation landed for paper tags, tag CSV preview-confirm semantics, paper role assignment such as `SHEPHERD`, and chair assignment-operations workbench read models; still needs saved search/formula filters, CSV export files, bulk decision/user/conflict/preference confirms, and deeper workbench tag/filter integration.
-- Wave 8 - assignment and COI maturity: reviewer invitations, external reviewer delegation approve/reject, conflict graph rows, matching score import, bulk invitation/TPMS preview-confirm, advisory assignment proposals, proposal confirm-to-draft, override audit, and chair assignment operations UI/read model landed; still needs richer subject-area matching display, Agent proposal context enrichment, and first-class audited override UI.
-- Wave 9 - publication and communication maturity: email template preview/test-send history, offline review template/preview/confirm, camera-ready metadata submit/accept/reject, publication metadata, proceedings preview/export metadata, and chair publication/communication workbench landed; still needs real file storage/download, proceedings file generation/download, DOI/index adapters, and a richer communication compose/reminder console.
+- Wave 7 - chair-scale operations: paper tags, tag CSV preview-confirm, paper role assignment such as `SHEPHERD`, chair assignment-operations workbench read models, bulk invitation/TPMS preview-confirm, and proposal confirm-to-draft have landed; Wave7 is not fully closed until saved search/formula filters, CSV export files, bulk decision/user/conflict/preference confirms, and deeper workbench tag/filter integration land.
+- Wave 8 - assignment and COI maturity: reviewer invitations, external reviewer delegation approve/reject, conflict graph rows, matching score import, advisory assignment proposals, proposal confirm-to-draft, override audit, and chair assignment operations UI/read model landed; Wave8 is not fully closed until richer subject-area matching display, Agent proposal context enrichment, first-class audited override UI, and fuller paper-level role governance land.
+- Wave 9 - publication and communication maturity: email template preview/test-send history, offline review template/preview/confirm, camera-ready metadata submit/accept/reject, publication metadata, proceedings preview/export metadata, and chair publication/communication workbench landed; Wave9 is not fully closed until real file storage/download, proceedings file generation/download, DOI/index adapters, and a richer communication compose/reminder console land.
 - Wave 10 - production readiness and governance: add operator compensation actions, queue/dead-letter management, backups/restore drills, HA/disaster-recovery documentation, retention/anonymization/export/delete workflows, and capacity baselines.
 
 ## Cross-cutting
@@ -46,7 +46,7 @@
 - [x] `[P1]` 收敛 `DecisionWorkbenchView.vue`：本轮先补齐 `conflict(...)` 的统一 loading/error 包装；页面拆成列表页 + 详情页或更细子组件仍属于后续 UI 结构优化。
 - [x] `[P1]` 统一前端异步交互：`ReviewerAgentPanel.vue` 已改用 `useAsyncAction` 管理 run/refresh 独立 pending key，并继续复用 `apiErrorMessage` 的状态码文案映射。
 - [ ] `[P1]` 为 reviewer/chair/admin 的高风险动作补确认步骤，尤其是会触发不可逆 workflow 迁移或外部分析成本的操作。
-- [ ] `[P1]` 优化 auth 生命周期：当前 `auth.ts` 主要依赖本地 JWT 解码恢复会话，缺少统一的 401 失效处理和路由级重新登录策略。
+- [ ] `[P1]` 优化 auth 生命周期：401 响应已统一清理本地会话；仍需补路由级重新登录/跳转策略，避免用户停留在需要认证但已失效的页面上。
 - [ ] `[P2]` 继续抽取通用表单/对话框模式，例如 `useDialog<T>(submitFn)`，减少 Element Plus 表单在多个页面里重复样板。
 - [ ] `[P2]` 提升 admin monitor 和 reviewer assist 的交互完成度：增加自动刷新策略、最近更新时间、空态/失败态引导和最小筛选能力。
 - [ ] `[P2]` 评估 `SecurePaperReader` 的大文件策略：长论文按页 PNG 渲染的体积、首屏时间、缓存和 WebP 替代方案需要真实样本验证。

@@ -208,6 +208,124 @@ public class ReviewAssignmentRepository {
         );
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
     }
+
+    public int countActiveAssignmentsForRound(long roundId) {
+        Integer count = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM REVIEW_ASSIGNMENT
+                WHERE ROUND_ID = ?
+                  AND TASK_STATUS IN ('ASSIGNED', 'ACCEPTED', 'IN_REVIEW', 'SUBMITTED', 'OVERDUE')
+                """,
+                Integer.class,
+                roundId
+        );
+        return count == null ? 0 : count;
+    }
+
+    public List<AssignmentCandidateDetailRow> listEligibleCandidates(long roundId) {
+        return jdbcTemplate.query(
+                """
+                SELECT R.ROUND_ID,
+                       R.MANUSCRIPT_ID,
+                       R.VERSION_ID,
+                       CR.REVIEWER_ID,
+                       U.REAL_NAME AS REVIEWER_NAME,
+                       U.INSTITUTION,
+                       CR.MAX_LOAD,
+                       COALESCE((
+                         SELECT COUNT(*)
+                         FROM REVIEW_ASSIGNMENT A
+                         WHERE A.REVIEWER_ID = CR.REVIEWER_ID
+                           AND A.TASK_STATUS IN ('ASSIGNED', 'ACCEPTED', 'IN_REVIEW', 'SUBMITTED', 'OVERDUE')
+                       ), 0) AS CURRENT_LOAD,
+                       COALESCE(B.BID_VALUE, 'NEUTRAL') AS BID_VALUE
+                FROM REVIEW_ROUND R
+                JOIN MANUSCRIPT M ON M.MANUSCRIPT_ID = R.MANUSCRIPT_ID
+                JOIN CONFERENCE_REVIEWER CR
+                  ON CR.CONFERENCE_ID = COALESCE(M.CONFERENCE_ID, 0)
+                 AND CR.MEMBERSHIP_STATUS = 'ACTIVE'
+                JOIN SYS_USER U ON U.USER_ID = CR.REVIEWER_ID
+                LEFT JOIN REVIEWER_BID B
+                  ON B.CONFERENCE_ID = COALESCE(M.CONFERENCE_ID, 0)
+                 AND B.MANUSCRIPT_ID = M.MANUSCRIPT_ID
+                 AND B.REVIEWER_ID = CR.REVIEWER_ID
+                WHERE R.ROUND_ID = ?
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM MANUSCRIPT_AUTHOR MA
+                    WHERE MA.MANUSCRIPT_ID = R.MANUSCRIPT_ID
+                      AND MA.USER_ID = CR.REVIEWER_ID
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM CONFLICT_CHECK_RECORD C
+                    WHERE C.MANUSCRIPT_ID = R.MANUSCRIPT_ID
+                      AND C.REVIEWER_ID = CR.REVIEWER_ID
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM REVIEW_ASSIGNMENT RA
+                    WHERE RA.ROUND_ID = R.ROUND_ID
+                      AND RA.REVIEWER_ID = CR.REVIEWER_ID
+                      AND RA.TASK_STATUS <> 'CANCELLED'
+                  )
+                  AND COALESCE(B.BID_VALUE, 'NEUTRAL') <> 'DECLINE'
+                  AND (
+                    SELECT COUNT(*)
+                    FROM REVIEW_ASSIGNMENT A
+                    WHERE A.REVIEWER_ID = CR.REVIEWER_ID
+                      AND A.TASK_STATUS IN ('ASSIGNED', 'ACCEPTED', 'IN_REVIEW', 'SUBMITTED', 'OVERDUE')
+                  ) < CR.MAX_LOAD
+                ORDER BY
+                  CASE COALESCE(B.BID_VALUE, 'NEUTRAL')
+                    WHEN 'WANT_TO_REVIEW' THEN 1
+                    WHEN 'NEUTRAL' THEN 2
+                    ELSE 3
+                  END,
+                  CURRENT_LOAD ASC,
+                  CR.REVIEWER_ID ASC
+                """,
+                (rs, rowNum) -> new AssignmentCandidateDetailRow(
+                        rs.getLong("ROUND_ID"),
+                        rs.getLong("MANUSCRIPT_ID"),
+                        rs.getLong("VERSION_ID"),
+                        rs.getLong("REVIEWER_ID"),
+                        rs.getString("REVIEWER_NAME"),
+                        rs.getString("INSTITUTION"),
+                        rs.getInt("CURRENT_LOAD"),
+                        rs.getInt("MAX_LOAD"),
+                        rs.getString("BID_VALUE")
+                ),
+                roundId
+        );
+    }
+
+    public List<ReviewRoundRow> listAssignableRoundsForConference(long conferenceId) {
+        return jdbcTemplate.query(
+                """
+                SELECT R.ROUND_ID, R.MANUSCRIPT_ID, R.ROUND_NO, R.VERSION_ID, R.ROUND_STATUS,
+                       R.ASSIGNMENT_STRATEGY, R.SCREENING_REQUIRED, R.DEADLINE_AT, R.CREATED_BY
+                FROM REVIEW_ROUND R
+                JOIN MANUSCRIPT M ON M.MANUSCRIPT_ID = R.MANUSCRIPT_ID
+                WHERE COALESCE(M.CONFERENCE_ID, 0) = ?
+                  AND R.ROUND_STATUS IN ('PENDING', 'IN_PROGRESS')
+                ORDER BY R.ROUND_ID
+                """,
+                (rs, rowNum) -> new ReviewRoundRow(
+                        rs.getLong("ROUND_ID"),
+                        rs.getLong("MANUSCRIPT_ID"),
+                        rs.getInt("ROUND_NO"),
+                        rs.getLong("VERSION_ID"),
+                        rs.getString("ROUND_STATUS"),
+                        rs.getString("ASSIGNMENT_STRATEGY"),
+                        rs.getInt("SCREENING_REQUIRED") == 1,
+                        rs.getTimestamp("DEADLINE_AT"),
+                        rs.getLong("CREATED_BY")
+                ),
+                conferenceId
+        );
+    }
 }
 
 record ReviewAssignmentRow(
@@ -243,4 +361,17 @@ record AssignmentEligibilityRow(
                 && maxLoad != null
                 && currentLoad < maxLoad;
     }
+}
+
+record AssignmentCandidateDetailRow(
+        long roundId,
+        long manuscriptId,
+        long versionId,
+        long reviewerId,
+        String reviewerName,
+        String institution,
+        int currentLoad,
+        int maxLoad,
+        String bidValue
+) {
 }

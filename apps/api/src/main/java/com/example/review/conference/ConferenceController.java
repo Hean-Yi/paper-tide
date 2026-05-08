@@ -51,6 +51,31 @@ public class ConferenceController {
         }
     }
 
+    @GetMapping("/chair/conferences")
+    public List<ConferenceSummary> listManageableConferences(
+            @AuthenticationPrincipal CurrentUserPrincipal principal
+    ) {
+        try {
+            return conferenceService.listManageableConferences(principal);
+        } catch (ConferenceAccessException ex) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage());
+        }
+    }
+
+    @GetMapping("/chair/conferences/{conferenceId}")
+    public ConferenceDetail getManageableConference(
+            @PathVariable long conferenceId,
+            @AuthenticationPrincipal CurrentUserPrincipal principal
+    ) {
+        try {
+            return conferenceService.getManageableConference(conferenceId, principal);
+        } catch (ConferenceAccessException ex) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage());
+        } catch (ConferenceNotFoundException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
+        }
+    }
+
     @PostMapping("/chair/conferences/{conferenceId}/submit-approval")
     public ConferenceDetail submitForApproval(
             @PathVariable long conferenceId,

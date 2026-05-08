@@ -6,6 +6,7 @@ import com.example.review.analysis.interfaces.AnalysisDtos.AnalysisIntentRespons
 import com.example.review.analysis.interfaces.AnalysisDtos.AnalysisProjectionResponse;
 import com.example.review.auth.CurrentUserPrincipal;
 import com.example.review.auth.RoleGuard;
+import com.example.review.conference.ConferenceService;
 import java.sql.Timestamp;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -16,6 +17,8 @@ import org.springframework.web.server.ResponseStatusException;
 public class WorkflowQueryService {
     private final ReviewerAssignmentReadRepository reviewerAssignmentReadRepository;
     private final ScreeningQueueReadRepository screeningQueueReadRepository;
+    private final ConferencePaperReadRepository conferencePaperReadRepository;
+    private final ConferenceService conferenceService;
     private final AdminAnalysisMonitorReadRepository adminAnalysisMonitorReadRepository;
     private final AnalysisIntentRepository intentRepository;
     private final AnalysisProjectionRepository projectionRepository;
@@ -23,12 +26,16 @@ public class WorkflowQueryService {
     public WorkflowQueryService(
             ReviewerAssignmentReadRepository reviewerAssignmentReadRepository,
             ScreeningQueueReadRepository screeningQueueReadRepository,
+            ConferencePaperReadRepository conferencePaperReadRepository,
+            ConferenceService conferenceService,
             AdminAnalysisMonitorReadRepository adminAnalysisMonitorReadRepository,
             AnalysisIntentRepository intentRepository,
             AnalysisProjectionRepository projectionRepository
     ) {
         this.reviewerAssignmentReadRepository = reviewerAssignmentReadRepository;
         this.screeningQueueReadRepository = screeningQueueReadRepository;
+        this.conferencePaperReadRepository = conferencePaperReadRepository;
+        this.conferenceService = conferenceService;
         this.adminAnalysisMonitorReadRepository = adminAnalysisMonitorReadRepository;
         this.intentRepository = intentRepository;
         this.projectionRepository = projectionRepository;
@@ -55,6 +62,12 @@ public class WorkflowQueryService {
     public List<ScreeningQueueItem> listScreeningQueue(CurrentUserPrincipal principal) {
         RoleGuard.requireChairOrAdmin(principal);
         return screeningQueueReadRepository.findOpenScreeningItems();
+    }
+
+    public List<ConferencePaperItem> listConferencePapers(CurrentUserPrincipal principal, long conferenceId) {
+        RoleGuard.requireChairOrAdmin(principal);
+        conferenceService.getManageableConference(conferenceId, principal);
+        return conferencePaperReadRepository.findByConferenceId(conferenceId);
     }
 
     public AdminAnalysisMonitorPage listAdminAnalysisMonitor(
@@ -117,6 +130,22 @@ record ScreeningQueueItem(
         Timestamp submittedAt,
         String pdfFileName,
         Long pdfFileSize
+) {
+}
+
+record ConferencePaperItem(
+        long manuscriptId,
+        long versionId,
+        int versionNo,
+        Long roundId,
+        Integer roundNo,
+        String title,
+        String currentStatus,
+        String roundStatus,
+        int assignmentCount,
+        int submittedReviewCount,
+        String lastDecisionCode,
+        Timestamp submittedAt
 ) {
 }
 

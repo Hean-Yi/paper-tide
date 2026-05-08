@@ -6,6 +6,8 @@ import com.example.review.manuscript.ManuscriptRepository;
 import com.example.review.manuscript.ManuscriptRepository.LockedManuscriptRow;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -81,25 +83,59 @@ public class ReviewWorkflowService {
         LockedManuscriptRow manuscript = manuscriptRepository.findLockedById(round.manuscriptId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
         ensureConferenceChairOrAdmin(principal, manuscript);
-        ensureReviewerCanBeAssigned(round.manuscriptId(), request.reviewerId());
-
-        long assignmentId = reviewAssignmentRepository.nextAssignmentId();
-        reviewAssignmentRepository.insert(
-                assignmentId,
-                round.roundId(),
-                round.manuscriptId(),
-                round.versionId(),
+        return createAssignment(
+                round,
                 request.reviewerId(),
-                "ASSIGNED",
-                request.deadlineAt() == null ? null : Timestamp.from(request.deadlineAt()),
-                null
+                request.deadlineAt() == null ? null : Timestamp.from(request.deadlineAt())
         );
-        if ("PENDING".equals(round.roundStatus())) {
-            reviewRoundRepository.updateStatus(round.roundId(), "IN_PROGRESS");
-        }
-        conflictCheckService.detectSameInstitutionConflict(assignmentId, round.manuscriptId(), round.versionId(), request.reviewerId());
+    }
 
-        return toAssignmentResponse(reviewAssignmentRepository.findById(assignmentId).orElseThrow());
+    public List<AssignmentCandidateResponse> listAssignmentCandidates(CurrentUserPrincipal principal, long roundId) {
+        RoleGuard.requireChairOrAdmin(principal);
+        ReviewRoundRow round = reviewRoundRepository.findById(roundId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Review round not found"));
+        LockedManuscriptRow manuscript = manuscriptRepository.findLockedById(round.manuscriptId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
+        ensureConferenceChairOrAdmin(principal, manuscript);
+        return reviewAssignmentRepository.listEligibleCandidates(roundId).stream()
+                .map(this::toCandidateResponse)
+                .toList();
+    }
+
+    @Transactional
+    public AutoAssignResponse autoAssignConferenceReviewers(
+            CurrentUserPrincipal principal,
+            long conferenceId,
+            AutoAssignRequest request
+    ) {
+        RoleGuard.requireChairOrAdmin(principal);
+        int reviewsPerPaper = request == null || request.reviewsPerPaper() == null ? 3 : request.reviewsPerPaper();
+        if (reviewsPerPaper < 1 || reviewsPerPaper > 10) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reviews per paper must be between 1 and 10");
+        }
+        List<AssignmentActionResponse> created = new ArrayList<>();
+        for (ReviewRoundRow round : reviewAssignmentRepository.listAssignableRoundsForConference(conferenceId)) {
+            LockedManuscriptRow manuscript = manuscriptRepository.findLockedById(round.manuscriptId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
+            ensureConferenceChairOrAdmin(principal, manuscript);
+            int remaining = reviewsPerPaper - reviewAssignmentRepository.countActiveAssignmentsForRound(round.roundId());
+            if (remaining <= 0) {
+                continue;
+            }
+            Timestamp deadline = request == null || request.deadlineAt() == null
+                    ? round.deadlineAt()
+                    : Timestamp.from(request.deadlineAt());
+            List<AssignmentCandidateDetailRow> candidates = reviewAssignmentRepository.listEligibleCandidates(round.roundId());
+            for (AssignmentCandidateDetailRow candidate : candidates) {
+                if (remaining <= 0) {
+                    break;
+                }
+                AssignmentActionResponse assignment = createAssignment(round, candidate.reviewerId(), deadline);
+                created.add(assignment);
+                remaining--;
+            }
+        }
+        return new AutoAssignResponse(conferenceId, reviewsPerPaper, created.size(), created);
     }
 
     @Transactional
@@ -191,6 +227,48 @@ public class ReviewWorkflowService {
                 assignment.reviewerId(),
                 assignment.reassignedFromId()
         );
+    }
+
+    private AssignmentCandidateResponse toCandidateResponse(AssignmentCandidateDetailRow row) {
+        return new AssignmentCandidateResponse(
+                row.reviewerId(),
+                row.reviewerName(),
+                row.institution(),
+                row.currentLoad(),
+                row.maxLoad(),
+                row.bidValue(),
+                candidateScore(row.bidValue(), row.currentLoad(), row.maxLoad()),
+                "bid=" + row.bidValue() + "; load=" + row.currentLoad() + "/" + row.maxLoad()
+        );
+    }
+
+    private int candidateScore(String bidValue, int currentLoad, int maxLoad) {
+        int bidScore = switch (bidValue == null ? "NEUTRAL" : bidValue) {
+            case "WANT_TO_REVIEW" -> 100;
+            case "NEUTRAL" -> 50;
+            default -> 0;
+        };
+        return bidScore + Math.max(0, maxLoad - currentLoad);
+    }
+
+    private AssignmentActionResponse createAssignment(ReviewRoundRow round, long reviewerId, Timestamp deadline) {
+        ensureReviewerCanBeAssigned(round.manuscriptId(), reviewerId);
+        long assignmentId = reviewAssignmentRepository.nextAssignmentId();
+        reviewAssignmentRepository.insert(
+                assignmentId,
+                round.roundId(),
+                round.manuscriptId(),
+                round.versionId(),
+                reviewerId,
+                "ASSIGNED",
+                deadline,
+                null
+        );
+        if ("PENDING".equals(round.roundStatus())) {
+            reviewRoundRepository.updateStatus(round.roundId(), "IN_PROGRESS");
+        }
+        conflictCheckService.detectSameInstitutionConflict(assignmentId, round.manuscriptId(), round.versionId(), reviewerId);
+        return toAssignmentResponse(reviewAssignmentRepository.findById(assignmentId).orElseThrow());
     }
 
     private ReviewRoundResponse toRoundResponse(ReviewRoundRow round) {

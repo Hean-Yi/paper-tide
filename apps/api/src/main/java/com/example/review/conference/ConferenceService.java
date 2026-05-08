@@ -137,6 +137,21 @@ public class ConferenceService {
         return repository.listPendingApproval();
     }
 
+    public List<ConferenceSummary> listManageableConferences(CurrentUserPrincipal principal) {
+        requireChairOrAdmin(principal);
+        Long organizerUserId = RoleGuard.hasRole(principal, "ADMIN") ? null : principal.userId();
+        return repository.listManageable(organizerUserId);
+    }
+
+    public ConferenceDetail getManageableConference(long conferenceId, CurrentUserPrincipal principal) {
+        requireChairOrAdmin(principal);
+        ConferenceDetail detail = getRequired(conferenceId);
+        if (!RoleGuard.hasRole(principal, "ADMIN") && detail.organizerUserId() != principal.userId()) {
+            throw new ConferenceAccessException("Only the conference organizer or an admin can view this conference");
+        }
+        return detail;
+    }
+
     private ConferenceDetail getRequired(long conferenceId) {
         return repository.findDetail(conferenceId)
                 .orElseThrow(() -> new ConferenceNotFoundException("Conference was not found"));

@@ -66,13 +66,14 @@ public class RegistrationService {
             throw new RegistrationValidationException("Email is already registered");
         }
 
+        String applicationStatus = initialApplicationStatus(type);
         long userId = repository.createUser(new UserRegistrationDraft(
                 normalizedUsername,
                 passwordEncoder.encode(request.password()),
                 request.realName().trim(),
                 normalizedEmail,
                 normalizeNullable(request.institution()),
-                "PENDING_EMAIL_VERIFICATION"
+                "ACTIVE"
         ));
 
         if (request.academicProfile() != null) {
@@ -83,13 +84,12 @@ public class RegistrationService {
         long applicationId = repository.createRoleApplication(new RoleApplicationDraft(
                 userId,
                 type.name(),
-                "PENDING_EMAIL_VERIFICATION",
+                applicationStatus,
                 payloadSnapshot(request)
         ));
+        grantInitialRoleIfEligible(userId, type);
 
-        issueVerificationEmail(userId, applicationId, normalizedEmail);
-
-        return new RegistrationResponse(userId, applicationId, type.name(), "PENDING_EMAIL_VERIFICATION", true);
+        return new RegistrationResponse(userId, applicationId, type.name(), applicationStatus, false);
     }
 
     private boolean resubmitAllowed(ExistingUserSummary existing, String normalizedUsername, RegistrationType type) {
@@ -115,18 +115,22 @@ public class RegistrationService {
                 request.realName().trim(),
                 normalizeNullable(request.institution())
         );
+        repository.activateUser(existing.userId());
         if (request.academicProfile() != null) {
             repository.saveAcademicProfile(existing.userId(), request.academicProfile());
         }
         repository.replaceResearchAreas(existing.userId(),
                 request.researchAreas() == null ? List.of() : request.researchAreas());
+        String applicationStatus = initialApplicationStatus(type);
         repository.resetRoleApplicationToPending(application.applicationId(), payloadSnapshot(request));
+        if (!"PENDING_EMAIL_VERIFICATION".equals(applicationStatus)) {
+            repository.updateRoleApplicationStatus(application.applicationId(), applicationStatus, null, null);
+        }
         repository.clearUnconsumedVerificationTokens(application.applicationId());
-
-        issueVerificationEmail(existing.userId(), application.applicationId(), normalizedEmail);
+        grantInitialRoleIfEligible(existing.userId(), type);
 
         return new RegistrationResponse(existing.userId(), application.applicationId(),
-                type.name(), "PENDING_EMAIL_VERIFICATION", true);
+                type.name(), applicationStatus, false);
     }
 
     private void issueVerificationEmail(long userId, long applicationId, String normalizedEmail) {
@@ -268,6 +272,19 @@ public class RegistrationService {
     private void requireAdmin(CurrentUserPrincipal principal) {
         if (principal == null || !principal.roles().contains("ADMIN")) {
             throw new RegistrationAccessException("ADMIN role is required");
+        }
+    }
+
+    private String initialApplicationStatus(RegistrationType type) {
+        if (type == RegistrationType.AUTHOR) {
+            return "APPROVED";
+        }
+        return "PENDING_ADMIN_APPROVAL";
+    }
+
+    private void grantInitialRoleIfEligible(long userId, RegistrationType type) {
+        if (type == RegistrationType.AUTHOR) {
+            repository.grantRole(userId, type.grantedRole());
         }
     }
 

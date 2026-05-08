@@ -39,6 +39,32 @@ record AssignmentActionResponse(
 ) {
 }
 
+record AssignmentCandidateResponse(
+        long reviewerId,
+        String reviewerName,
+        String institution,
+        int currentLoad,
+        int maxLoad,
+        String bidValue,
+        int score,
+        String reason
+) {
+}
+
+record AutoAssignRequest(
+        Integer reviewsPerPaper,
+        Instant deadlineAt
+) {
+}
+
+record AutoAssignResponse(
+        long conferenceId,
+        int requestedReviewsPerPaper,
+        int createdCount,
+        List<AssignmentActionResponse> assignments
+) {
+}
+
 record DeclineAssignmentRequest(
         String reason,
         boolean conflictDeclared

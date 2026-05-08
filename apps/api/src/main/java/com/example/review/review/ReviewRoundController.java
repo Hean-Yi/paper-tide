@@ -41,6 +41,14 @@ public class ReviewRoundController {
         return reviewWorkflowService.assignReviewer(principal, roundId, request);
     }
 
+    @GetMapping("/{roundId}/assignment-candidates")
+    public List<AssignmentCandidateResponse> listAssignmentCandidates(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long roundId
+    ) {
+        return reviewWorkflowService.listAssignmentCandidates(principal, roundId);
+    }
+
     @GetMapping("/{roundId}/conflict-checks")
     public List<ConflictCheckResponse> listConflictChecks(
             @AuthenticationPrincipal CurrentUserPrincipal principal,

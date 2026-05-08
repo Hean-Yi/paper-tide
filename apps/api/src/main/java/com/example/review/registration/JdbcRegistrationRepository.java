@@ -70,63 +70,68 @@ class JdbcRegistrationRepository implements RegistrationRepository {
 
     @Override
     public void saveAcademicProfile(long userId, AcademicProfileRequest profile) {
-        jdbcTemplate.update(
-                """
-                MERGE INTO USER_ACADEMIC_PROFILE TARGET
-                USING (
-                  SELECT ? USER_ID,
-                         ? HOMEPAGE_URL,
-                         ? ORCID,
-                         ? DBLP_URL,
-                         ? GOOGLE_SCHOLAR_URL,
-                         ? REPRESENTATIVE_WORKS_JSON,
-                         ? CONFLICT_DOMAINS_JSON,
-                         ? DEFAULT_MAX_LOAD
-                  FROM DUAL
-                ) SOURCE
-                ON (TARGET.USER_ID = SOURCE.USER_ID)
-                WHEN MATCHED THEN UPDATE SET
-                  TARGET.HOMEPAGE_URL = SOURCE.HOMEPAGE_URL,
-                  TARGET.ORCID = SOURCE.ORCID,
-                  TARGET.DBLP_URL = SOURCE.DBLP_URL,
-                  TARGET.GOOGLE_SCHOLAR_URL = SOURCE.GOOGLE_SCHOLAR_URL,
-                  TARGET.REPRESENTATIVE_WORKS_JSON = SOURCE.REPRESENTATIVE_WORKS_JSON,
-                  TARGET.CONFLICT_DOMAINS_JSON = SOURCE.CONFLICT_DOMAINS_JSON,
-                  TARGET.DEFAULT_MAX_LOAD = SOURCE.DEFAULT_MAX_LOAD,
-                  TARGET.UPDATED_AT = CURRENT_TIMESTAMP
-                WHEN NOT MATCHED THEN INSERT (
-                  PROFILE_ID,
-                  USER_ID,
-                  HOMEPAGE_URL,
-                  ORCID,
-                  DBLP_URL,
-                  GOOGLE_SCHOLAR_URL,
-                  REPRESENTATIVE_WORKS_JSON,
-                  CONFLICT_DOMAINS_JSON,
-                  DEFAULT_MAX_LOAD,
-                  UPDATED_AT
-                ) VALUES (
-                  SEQ_USER_ACADEMIC_PROFILE.NEXTVAL,
-                  SOURCE.USER_ID,
-                  SOURCE.HOMEPAGE_URL,
-                  SOURCE.ORCID,
-                  SOURCE.DBLP_URL,
-                  SOURCE.GOOGLE_SCHOLAR_URL,
-                  SOURCE.REPRESENTATIVE_WORKS_JSON,
-                  SOURCE.CONFLICT_DOMAINS_JSON,
-                  SOURCE.DEFAULT_MAX_LOAD,
-                  CURRENT_TIMESTAMP
-                )
-                """,
-                userId,
-                profile.homepageUrl(),
-                profile.orcid(),
-                profile.dblpUrl(),
-                profile.googleScholarUrl(),
-                String.join("\n", profile.representativeWorks() == null ? List.of() : profile.representativeWorks()),
-                String.join("\n", profile.conflictDomains() == null ? List.of() : profile.conflictDomains()),
-                profile.defaultMaxLoad() == null ? 3 : profile.defaultMaxLoad()
-        );
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(
+                    """
+                    MERGE INTO USER_ACADEMIC_PROFILE TARGET
+                    USING (
+                      SELECT ? USER_ID,
+                             ? HOMEPAGE_URL,
+                             ? ORCID,
+                             ? DBLP_URL,
+                             ? GOOGLE_SCHOLAR_URL,
+                             ? REPRESENTATIVE_WORKS_JSON,
+                             ? CONFLICT_DOMAINS_JSON,
+                             ? DEFAULT_MAX_LOAD
+                      FROM DUAL
+                    ) SOURCE
+                    ON (TARGET.USER_ID = SOURCE.USER_ID)
+                    WHEN MATCHED THEN UPDATE SET
+                      TARGET.HOMEPAGE_URL = SOURCE.HOMEPAGE_URL,
+                      TARGET.ORCID = SOURCE.ORCID,
+                      TARGET.DBLP_URL = SOURCE.DBLP_URL,
+                      TARGET.GOOGLE_SCHOLAR_URL = SOURCE.GOOGLE_SCHOLAR_URL,
+                      TARGET.REPRESENTATIVE_WORKS_JSON = SOURCE.REPRESENTATIVE_WORKS_JSON,
+                      TARGET.CONFLICT_DOMAINS_JSON = SOURCE.CONFLICT_DOMAINS_JSON,
+                      TARGET.DEFAULT_MAX_LOAD = SOURCE.DEFAULT_MAX_LOAD,
+                      TARGET.UPDATED_AT = CURRENT_TIMESTAMP
+                    WHEN NOT MATCHED THEN INSERT (
+                      PROFILE_ID,
+                      USER_ID,
+                      HOMEPAGE_URL,
+                      ORCID,
+                      DBLP_URL,
+                      GOOGLE_SCHOLAR_URL,
+                      REPRESENTATIVE_WORKS_JSON,
+                      CONFLICT_DOMAINS_JSON,
+                      DEFAULT_MAX_LOAD,
+                      UPDATED_AT
+                    ) VALUES (
+                      SEQ_USER_ACADEMIC_PROFILE.NEXTVAL,
+                      SOURCE.USER_ID,
+                      SOURCE.HOMEPAGE_URL,
+                      SOURCE.ORCID,
+                      SOURCE.DBLP_URL,
+                      SOURCE.GOOGLE_SCHOLAR_URL,
+                      SOURCE.REPRESENTATIVE_WORKS_JSON,
+                      SOURCE.CONFLICT_DOMAINS_JSON,
+                      SOURCE.DEFAULT_MAX_LOAD,
+                      CURRENT_TIMESTAMP
+                    )
+                    """
+            );
+            ps.setLong(1, userId);
+            setNullableString(ps, 2, profile.homepageUrl());
+            setNullableString(ps, 3, profile.orcid());
+            setNullableString(ps, 4, profile.dblpUrl());
+            setNullableString(ps, 5, profile.googleScholarUrl());
+            ps.setString(6, String.join("\n",
+                    profile.representativeWorks() == null ? List.of() : profile.representativeWorks()));
+            ps.setString(7, String.join("\n",
+                    profile.conflictDomains() == null ? List.of() : profile.conflictDomains()));
+            ps.setInt(8, profile.defaultMaxLoad() == null ? 3 : profile.defaultMaxLoad());
+            return ps;
+        });
     }
 
     @Override
@@ -381,6 +386,14 @@ class JdbcRegistrationRepository implements RegistrationRepository {
         return value.toString();
     }
 
+    private void setNullableString(PreparedStatement ps, int parameterIndex, String value) throws java.sql.SQLException {
+        if (value == null) {
+            ps.setNull(parameterIndex, Types.VARCHAR);
+            return;
+        }
+        ps.setString(parameterIndex, value);
+    }
+
     private record PayloadSummary(
             String homepageUrl,
             String orcid,
@@ -492,7 +505,7 @@ class JdbcRegistrationRepository implements RegistrationRepository {
                 SET PASSWORD_HASH = ?,
                     REAL_NAME = ?,
                     INSTITUTION = ?,
-                    STATUS = 'PENDING_EMAIL_VERIFICATION'
+                    STATUS = 'ACTIVE'
                 WHERE USER_ID = ?
                 """,
                 passwordHash,

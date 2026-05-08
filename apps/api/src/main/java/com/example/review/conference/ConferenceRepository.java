@@ -17,6 +17,8 @@ interface ConferenceRepository {
 
     List<ConferenceSummary> listPendingApproval();
 
+    List<ConferenceSummary> listManageable(Long organizerUserId);
+
     boolean publicSlugExists(String publicSlug);
 
     void updateStatus(long conferenceId, String status, boolean cfpPublished, Long approvedBy, Instant approvedAt);

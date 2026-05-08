@@ -48,6 +48,14 @@ public class WorkflowQueryController {
         return decisionWorkbenchQueryService.listDecisionWorkbench(principal);
     }
 
+    @GetMapping("/chair/conferences/{conferenceId}/papers")
+    public List<ConferencePaperItem> listConferencePapers(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long conferenceId
+    ) {
+        return workflowQueryService.listConferencePapers(principal, conferenceId);
+    }
+
     @GetMapping("/admin/analysis-monitor")
     public AdminAnalysisMonitorPage listAdminAnalysisMonitor(
             @AuthenticationPrincipal CurrentUserPrincipal principal,

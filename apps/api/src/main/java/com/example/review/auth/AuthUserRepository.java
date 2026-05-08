@@ -18,7 +18,7 @@ public class AuthUserRepository {
                 """
                 SELECT USER_ID, USERNAME, PASSWORD_HASH, STATUS
                 FROM SYS_USER
-                WHERE USERNAME = ?
+                WHERE LOWER(USERNAME) = LOWER(?)
                 """,
                 (rs, rowNum) -> new AuthUserRecord(
                         rs.getLong("USER_ID"),
@@ -54,5 +54,53 @@ public class AuthUserRepository {
                 user.status(),
                 List.copyOf(roles)
         ));
+    }
+
+    public void activatePendingEmailVerificationRegistration(long userId) {
+        jdbcTemplate.update(
+                """
+                UPDATE SYS_USER
+                SET STATUS = 'ACTIVE'
+                WHERE USER_ID = ? AND STATUS = 'PENDING_EMAIL_VERIFICATION'
+                """,
+                userId
+        );
+        jdbcTemplate.update(
+                """
+                UPDATE ROLE_APPLICATION
+                SET APPLICATION_STATUS = CASE
+                      WHEN REGISTRATION_TYPE = 'AUTHOR' THEN 'APPROVED'
+                      ELSE 'PENDING_ADMIN_APPROVAL'
+                    END,
+                    REVIEWED_BY = NULL,
+                    REVIEWED_AT = NULL,
+                    REJECTION_REASON = NULL
+                WHERE USER_ID = ? AND APPLICATION_STATUS = 'PENDING_EMAIL_VERIFICATION'
+                """,
+                userId
+        );
+        jdbcTemplate.update(
+                """
+                MERGE INTO SYS_USER_ROLE UR
+                USING (
+                  SELECT ? AS USER_ID, R.ROLE_ID
+                  FROM SYS_ROLE R
+                  WHERE R.ROLE_CODE = 'AUTHOR'
+                    AND EXISTS (
+                      SELECT 1
+                      FROM ROLE_APPLICATION RA
+                      WHERE RA.USER_ID = ?
+                        AND RA.REGISTRATION_TYPE = 'AUTHOR'
+                        AND RA.APPLICATION_STATUS = 'APPROVED'
+                    )
+                ) S
+                ON (UR.USER_ID = S.USER_ID AND UR.ROLE_ID = S.ROLE_ID)
+                WHEN NOT MATCHED THEN
+                  INSERT (USER_ROLE_ID, USER_ID, ROLE_ID)
+                  VALUES (SEQ_SYS_USER_ROLE.NEXTVAL, S.USER_ID, S.ROLE_ID)
+                """,
+                userId,
+                userId
+        );
     }
 }

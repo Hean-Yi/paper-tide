@@ -173,6 +173,32 @@ class JdbcConferenceRepository implements ConferenceRepository {
     }
 
     @Override
+    public List<ConferenceSummary> listManageable(Long organizerUserId) {
+        String ownerPredicate = organizerUserId == null ? "" : "WHERE c.ORGANIZER_USER_ID = ?";
+        Object[] args = organizerUserId == null ? new Object[]{} : new Object[]{organizerUserId};
+        return jdbcTemplate.query(
+                """
+                SELECT
+                  c.CONFERENCE_ID,
+                  c.NAME,
+                  c.ACRONYM,
+                  c.CONFERENCE_YEAR,
+                  c.CONFERENCE_STATUS,
+                  c.BLIND_MODE,
+                  c.PUBLIC_SLUG,
+                  p.SUBMISSION_OPEN_AT,
+                  p.SUBMISSION_CLOSE_AT
+                FROM CONFERENCE c
+                JOIN CONFERENCE_PHASE p ON p.CONFERENCE_ID = c.CONFERENCE_ID
+                %s
+                ORDER BY c.CONFERENCE_YEAR DESC, c.CONFERENCE_ID DESC
+                """.formatted(ownerPredicate),
+                summaryMapper,
+                args
+        );
+    }
+
+    @Override
     public boolean publicSlugExists(String publicSlug) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM CONFERENCE WHERE PUBLIC_SLUG = ?",

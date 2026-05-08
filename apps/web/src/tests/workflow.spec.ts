@@ -1718,6 +1718,57 @@ describe("workflow screens", () => {
     resolveOverdue?.(jsonResponse({}));
   });
 
+  it("shows eligible reviewer details before chair assigns a reviewer", async () => {
+    installAuth(["CHAIR"]);
+    const fetch = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/chair/decision-workbench") {
+        return Promise.resolve(jsonResponse([
+          {
+            roundId: 7,
+            manuscriptId: 11,
+            versionId: 21,
+            versionNo: 1,
+            roundNo: 1,
+            title: "Workflow Seed",
+            currentStatus: "UNDER_REVIEW",
+            roundStatus: "IN_PROGRESS",
+            assignmentCount: 0,
+            submittedReviewCount: 0,
+            conflictCount: 0,
+            assignments: [],
+            conflictProjections: []
+          }
+        ]));
+      }
+      if (path === "/review-rounds/7/assignment-candidates") {
+        return Promise.resolve(jsonResponse([
+          {
+            reviewerId: 1002,
+            reviewerName: "Reviewer Demo",
+            institution: "Nanjing University",
+            currentLoad: 0,
+            maxLoad: 3,
+            bidValue: "WANT_TO_REVIEW",
+            score: 103,
+            reason: "bid=WANT_TO_REVIEW; load=0/3"
+          }
+        ]));
+      }
+      return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(DecisionWorkbenchView);
+    await buttonByText(wrapper, "分配审稿人").trigger("click");
+    await flushPromises();
+
+    expect(fetch).toHaveBeenCalledWith("/api/review-rounds/7/assignment-candidates", expect.anything());
+    expect(document.body.textContent).toContain("Reviewer Demo");
+    expect(document.body.textContent).toContain("Nanjing University");
+    expect(document.body.textContent).toContain("0/3");
+  });
+
   it("renders chair assignment operations and confirms proposal drafts", async () => {
     installAuth(["CHAIR"]);
     const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -1754,6 +1805,51 @@ describe("workflow screens", () => {
       "/api/conferences/0/reviewer-invitations/imports/preview",
       expect.objectContaining({ method: "POST" })
     );
+  });
+
+  it("runs one-click reviewer assignment with a configurable reviewer count", async () => {
+    installAuth(["CHAIR"]);
+    const success = vi.spyOn(ElMessage, "success").mockImplementation(() => undefined as never);
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/conferences/0/assignment-operations") {
+        return Promise.resolve(jsonResponse({
+          conferenceId: 0,
+          reviewerInvitations: [],
+          externalDelegations: [],
+          importBatches: [],
+          assignmentProposals: [],
+          matchingScores: []
+        }));
+      }
+      if (path === "/conferences/0/auto-assignments" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({
+          requestedReviewsPerPaper: JSON.parse(init.body as string).reviewsPerPaper,
+          createdCount: 2,
+          assignments: [
+            { assignmentId: 31, roundId: 7, reviewerId: 1002 },
+            { assignmentId: 32, roundId: 8, reviewerId: 1012 }
+          ]
+        }));
+      }
+      return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(AssignmentOperationsView);
+    await wrapper.find('[data-test="auto-assign-target"] input').setValue("2");
+    await wrapper.find('[data-test="auto-assign-submit"]').trigger("click");
+    await flushPromises();
+
+    const autoAssignCall = fetch.mock.calls.find(([input, init]) =>
+      String(input) === "/api/conferences/0/auto-assignments" && init?.method === "POST"
+    );
+    expect(autoAssignCall).toBeTruthy();
+    expect(JSON.parse(autoAssignCall?.[1]?.body as string)).toMatchObject({
+      reviewsPerPaper: 2
+    });
+    expect(success).toHaveBeenCalledWith("已创建 2 个审稿分配。");
+    expect(wrapper.text()).toContain("已按每篇 2 人目标创建 2 个分配。");
   });
 
   it("renders chair publication operations and exports proceedings metadata", async () => {

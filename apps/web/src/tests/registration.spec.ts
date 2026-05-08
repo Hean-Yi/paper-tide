@@ -36,8 +36,8 @@ describe("registration workflow", () => {
         userId: 42,
         applicationId: 77,
         registrationType: "AUTHOR",
-        applicationStatus: "PENDING_EMAIL_VERIFICATION",
-        emailVerificationRequired: true
+        applicationStatus: "APPROVED",
+        emailVerificationRequired: false
       })
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -69,7 +69,7 @@ describe("registration workflow", () => {
       username: "new_author",
       email: "new_author@example.com"
     }));
-    expect(wrapper.text()).toContain("注册成功");
+    expect(wrapper.text()).toContain("账号已激活");
   });
 
   it("keeps registration and admin approval routes in the router", () => {

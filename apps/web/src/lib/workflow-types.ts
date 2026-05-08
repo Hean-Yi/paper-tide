@@ -220,6 +220,21 @@ export interface ConferenceDetail extends ConferenceCfpSummary {
   phase?: ConferencePhaseInput | null;
 }
 
+export interface ConferencePaperItem {
+  manuscriptId: number;
+  versionId: number;
+  versionNo: number;
+  roundId: number | null;
+  roundNo: number | null;
+  title: string;
+  currentStatus: string;
+  roundStatus: string | null;
+  assignmentCount: number;
+  submittedReviewCount: number;
+  lastDecisionCode: string | null;
+  submittedAt: string | null;
+}
+
 export interface ReviewerBiddingItem {
   manuscriptId: number;
   versionId: number;
@@ -243,6 +258,31 @@ export interface AssignmentDraft {
   bidValue: string | null;
   reason: string | null;
   draftStatus: string;
+}
+
+export interface AssignmentCandidate {
+  reviewerId: number;
+  reviewerName: string;
+  institution: string | null;
+  currentLoad: number;
+  maxLoad: number;
+  bidValue: string | null;
+  score: number;
+  reason: string | null;
+}
+
+export interface AssignmentAction {
+  assignmentId: number;
+  taskStatus: string;
+  reviewerId: number;
+  reassignedFromId?: number | null;
+}
+
+export interface AutoAssignResponse {
+  conferenceId: number;
+  requestedReviewsPerPaper: number;
+  createdCount: number;
+  assignments: AssignmentAction[];
 }
 
 export interface AssignmentAssistState {

@@ -97,6 +97,12 @@ export function createAppRouter() {
             meta: { requiresAuth: true, roles: ["CHAIR", "ADMIN"] }
           },
           {
+            path: "chair/conferences/:conferenceId",
+            name: "chair-conference-detail",
+            component: () => import("../views/chair/ChairConferenceDetailView.vue"),
+            meta: { requiresAuth: true, roles: ["CHAIR", "ADMIN"] }
+          },
+          {
             path: "chair/decisions",
             name: "chair-decisions",
             component: () => import("../views/chair/DecisionWorkbenchView.vue"),

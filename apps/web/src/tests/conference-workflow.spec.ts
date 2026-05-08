@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAppRouter } from "../router";
 import { initializeAuth, resetAuthForTests } from "../stores/auth";
 import DashboardView from "../views/DashboardView.vue";
+import ChairConferenceDetailView from "../views/chair/ChairConferenceDetailView.vue";
 import DecisionWorkbenchView from "../views/chair/DecisionWorkbenchView.vue";
 
 function token(roles: string[]): string {
@@ -65,6 +66,7 @@ describe("conference frontend workflows", () => {
 
     expect(router.getRoutes().some((route) => route.path === "/cfp")).toBe(true);
     expect(router.getRoutes().some((route) => route.name === "chair-conferences")).toBe(true);
+    expect(router.getRoutes().some((route) => route.name === "chair-conference-detail")).toBe(true);
     expect(router.getRoutes().some((route) => route.name === "reviewer-bidding")).toBe(true);
   });
 
@@ -119,14 +121,16 @@ describe("conference frontend workflows", () => {
     await wrapper.get('[data-test="conference-year"] input').setValue("2026");
     await wrapper.get('[data-test="conference-slug"]').setValue("arc-2026");
     await wrapper.get('[data-test="conference-topics"]').setValue("agents,systems");
-    await clickButton(wrapper, "Create draft");
-    await clickButton(wrapper, "Submit for approval");
+    await clickButton(wrapper, "创建草稿");
+    await clickButton(wrapper, "提交审批");
 
     expect(fetch).toHaveBeenCalledWith(
       "/api/chair/conferences",
       expect.objectContaining({ method: "POST" })
     );
-    const createCall = fetch.mock.calls.find((call) => String(call[0]).endsWith("/chair/conferences"));
+    const createCall = fetch.mock.calls.find((call) =>
+      String(call[0]).endsWith("/chair/conferences") && call[1]?.method === "POST"
+    );
     expect(createCall).toBeTruthy();
     const createBody = JSON.parse((createCall![1] as RequestInit).body as string);
     expect(createBody).toEqual(expect.objectContaining({
@@ -139,6 +143,130 @@ describe("conference frontend workflows", () => {
       "/api/chair/conferences/501/submit-approval",
       expect.objectContaining({ method: "POST" })
     );
+  });
+
+  it("shows manageable conference history and links to conference details", async () => {
+    installAuth(["CHAIR"]);
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/chair/conferences") {
+        return Promise.resolve(jsonResponse([
+          {
+            conferenceId: 501,
+            name: "Agent Review Conference",
+            acronym: "ARC",
+            year: 2026,
+            status: "REVIEWING",
+            blindMode: "DOUBLE_BLIND",
+            publicSlug: "arc-2026",
+            submissionOpenAt: "2026-05-01T00:00:00Z",
+            submissionCloseAt: "2026-06-01T00:00:00Z"
+          }
+        ]));
+      }
+      return Promise.resolve(jsonResponse([]));
+    }));
+
+    const wrapper = await mountRoute("/chair/conferences");
+
+    expect(wrapper.text()).toContain("过往会议状态");
+    expect(wrapper.text()).toContain("Agent Review Conference");
+    const detailLink = wrapper.find('a[href="/chair/conferences/501"]');
+    expect(detailLink.exists()).toBe(true);
+  });
+
+  it("shows conference papers and lets chairs make accept or desk-reject decisions from detail", async () => {
+    installAuth(["CHAIR"]);
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/chair/conferences/501") {
+        return Promise.resolve(jsonResponse({
+          conferenceId: 501,
+          name: "Agent Review Conference",
+          acronym: "ARC",
+          year: 2026,
+          status: "DECISION",
+          blindMode: "DOUBLE_BLIND",
+          publicSlug: "arc-2026",
+          cfpPublished: true,
+          phase: {
+            submissionOpenAt: "2026-05-01T00:00:00Z",
+            submissionCloseAt: "2026-06-01T00:00:00Z",
+            biddingOpenAt: "2026-06-02T00:00:00Z",
+            biddingCloseAt: "2026-06-10T00:00:00Z",
+            reviewDeadlineAt: "2026-07-01T00:00:00Z",
+            decisionReleaseAt: "2026-07-15T00:00:00Z"
+          }
+        }));
+      }
+      if (path === "/chair/conferences/501/papers") {
+        return Promise.resolve(jsonResponse([
+          {
+            manuscriptId: 11,
+            versionId: 21,
+            versionNo: 1,
+            roundId: 7,
+            roundNo: 1,
+            title: "Auditable Agent Review",
+            currentStatus: "UNDER_REVIEW",
+            roundStatus: "IN_PROGRESS",
+            assignmentCount: 2,
+            submittedReviewCount: 2,
+            lastDecisionCode: null,
+            submittedAt: "2026-05-10T00:00:00Z"
+          },
+          {
+            manuscriptId: 12,
+            versionId: 22,
+            versionNo: 1,
+            roundId: 8,
+            roundNo: 1,
+            title: "Early Rejection Candidate",
+            currentStatus: "UNDER_SCREENING",
+            roundStatus: "PENDING",
+            assignmentCount: 0,
+            submittedReviewCount: 0,
+            lastDecisionCode: null,
+            submittedAt: "2026-05-11T00:00:00Z"
+          }
+        ]));
+      }
+      if (path === "/decisions" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({ decisionId: 99, decisionCode: "ACCEPT", currentStatus: "ACCEPTED" }));
+      }
+      return Promise.resolve(jsonResponse([]));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const router = createAppRouter();
+    router.push("/chair/conferences/501");
+    await router.isReady();
+    const wrapper = mount(ChairConferenceDetailView, {
+      attachTo: document.body,
+      global: {
+        plugins: [ElementPlus, router]
+      }
+    });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Agent Review Conference");
+    expect(wrapper.text()).toContain("Auditable Agent Review");
+    await clickButton(wrapper, "Accept");
+    await wrapper.get('[data-test="conference-decision-reason"]').setValue("Program committee approved.");
+    await clickButton(wrapper, "Submit decision");
+
+    const decisionCall = fetch.mock.calls.find(([input, init]) =>
+      String(input) === "/api/decisions" && init?.method === "POST"
+    );
+    expect(decisionCall).toBeTruthy();
+    expect(JSON.parse((decisionCall![1] as RequestInit).body as string)).toEqual(expect.objectContaining({
+      manuscriptId: 11,
+      versionId: 21,
+      roundId: 7,
+      decisionCode: "ACCEPT",
+      decisionReason: "Program committee approved."
+    }));
+    expect(wrapper.text()).toContain("Desk reject");
   });
 
   it("lets reviewers load bidding papers and submit conflict-aware bids", async () => {
@@ -179,8 +307,8 @@ describe("conference frontend workflows", () => {
     vi.stubGlobal("fetch", fetch);
 
     const wrapper = await mountRoute("/reviewer/bidding");
-    await clickButton(wrapper, "Load papers");
-    await clickButton(wrapper, "Declare conflict");
+    await clickButton(wrapper, "加载论文");
+    await clickButton(wrapper, "声明利益冲突");
 
     expect(wrapper.text()).toContain("De-identified Agent Paper");
     expect(fetch).toHaveBeenCalledWith(
@@ -283,11 +411,11 @@ describe("conference frontend workflows", () => {
     await flushPromises();
     await wrapper.get(".el-table__expand-icon").trigger("click");
     await flushPromises();
-    await clickButton(wrapper, "Generate drafts");
-    await clickButton(wrapper, "Run assignment assist");
-    await clickButton(wrapper, "Confirm drafts");
+    await clickButton(wrapper, "生成草稿");
+    await clickButton(wrapper, "运行分配辅助");
+    await clickButton(wrapper, "确认草稿");
 
-    expect(wrapper.text()).toContain("Reviewer 1002");
+    expect(wrapper.text()).toContain("审稿人 1002");
     expect(wrapper.text()).toContain("Candidate ranking ready.");
     expect(fetch).toHaveBeenCalledWith(
       "/api/review-rounds/7/assignment-drafts/confirm",
@@ -307,8 +435,8 @@ describe("conference frontend workflows", () => {
       }
     });
 
-    expect(wrapper.text()).toContain("Conferences");
-    expect(wrapper.text()).toContain("Reviewer bidding");
-    expect(wrapper.text()).toContain("Conference approvals");
+    expect(wrapper.text()).toContain("会议管理");
+    expect(wrapper.text()).toContain("竞标投票");
+    expect(wrapper.text()).toContain("会议审批");
   });
 });

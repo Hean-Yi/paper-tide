@@ -1,12 +1,16 @@
 import { apiRequest } from "./api";
 import type {
   AnalysisIntentResponse,
+  AssignmentCandidate,
   AssignmentAssistState,
   AssignmentDraft,
+  AutoAssignResponse,
   AssignmentOperations,
   AssignmentProposalConfirmDraftsResponse,
   ConferenceDetail,
   ConferencePhaseInput,
+  ConferencePaperItem,
+  ConferenceCfpSummary,
   DecisionWorkbenchItem,
   ImportPreviewResponse,
   ManuscriptSummary,
@@ -28,6 +32,18 @@ export function createConferenceDraft(payload: {
   phase: ConferencePhaseInput;
 }) {
   return apiRequest<ConferenceDetail>("/chair/conferences", { method: "POST", json: payload });
+}
+
+export function listChairConferences() {
+  return apiRequest<ConferenceCfpSummary[]>("/chair/conferences");
+}
+
+export function getChairConference(conferenceId: number) {
+  return apiRequest<ConferenceDetail>(`/chair/conferences/${conferenceId}`);
+}
+
+export function listConferencePapers(conferenceId: number) {
+  return apiRequest<ConferencePaperItem[]>(`/chair/conferences/${conferenceId}/papers`);
 }
 
 export function submitConferenceForApproval(conferenceId: number) {
@@ -73,6 +89,17 @@ export function createReviewRound(payload: {
 
 export function assignReviewer(roundId: number, reviewerId: number, deadlineAt: string) {
   return apiRequest(`/review-rounds/${roundId}/assignments`, { method: "POST", json: { reviewerId, deadlineAt } });
+}
+
+export function listAssignmentCandidates(roundId: number) {
+  return apiRequest<AssignmentCandidate[]>(`/review-rounds/${roundId}/assignment-candidates`);
+}
+
+export function autoAssignConferenceReviewers(conferenceId: number, reviewsPerPaper: number, deadlineAt: string) {
+  return apiRequest<AutoAssignResponse>(`/conferences/${conferenceId}/auto-assignments`, {
+    method: "POST",
+    json: { reviewsPerPaper, deadlineAt }
+  });
 }
 
 export function generateAssignmentDrafts(roundId: number, limit = 5) {

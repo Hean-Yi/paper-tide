@@ -68,6 +68,25 @@ if command -v mvn >/dev/null 2>&1 && command -v java >/dev/null 2>&1; then
       ! oracle_table_exists "PAPER_ROLE_ASSIGNMENT"; then
       apply_single_oracle_migration "021_real_platform_wave6_wave7.sql"
     fi
+    if ! oracle_table_exists "REVIEWER_INVITATION" ||
+      ! oracle_table_exists "EXTERNAL_REVIEWER_DELEGATION" ||
+      ! oracle_table_exists "CONFLICT_RELATIONSHIP" ||
+      ! oracle_table_exists "REVIEWER_MATCHING_SCORE" ||
+      ! oracle_table_exists "ASSIGNMENT_PROPOSAL_BUNDLE" ||
+      ! oracle_table_exists "ASSIGNMENT_PROPOSAL" ||
+      ! oracle_table_exists "ASSIGNMENT_OVERRIDE_AUDIT"; then
+      apply_single_oracle_migration "022_assignment_coi_maturity.sql"
+    fi
+    if ! oracle_table_exists "EMAIL_TEMPLATE" ||
+      ! oracle_table_exists "EMAIL_TEMPLATE_VERSION" ||
+      ! oracle_table_exists "OUTBOUND_EMAIL_HISTORY" ||
+      ! oracle_table_exists "OFFLINE_REVIEW_IMPORT_BATCH" ||
+      ! oracle_table_exists "OFFLINE_REVIEW_IMPORT_ROW" ||
+      ! oracle_table_exists "CAMERA_READY_FILE" ||
+      ! oracle_table_exists "PUBLICATION_METADATA" ||
+      ! oracle_table_exists "PROCEEDINGS_EXPORT_BATCH"; then
+      apply_single_oracle_migration "023_publication_communication_maturity.sql"
+    fi
   fi
   if [ -x "$ROOT_DIR/scripts/demo-seed.sh" ] && command -v docker >/dev/null 2>&1; then
     bash "$ROOT_DIR/scripts/demo-seed.sh"

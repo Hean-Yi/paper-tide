@@ -119,7 +119,7 @@ class CodeQualityTest {
         assertTrue(verification.contains("IDX_REVIEW_ROUND_STATUS_ID"));
         assertTrue(verification.contains("IDX_REVIEW_ASSIGNMENT_ROUND_ID"));
         assertTrue(verification.contains("IDX_REVIEW_REPORT_ROUND"));
-        assertTrue(verification.contains("Expected 67 indexes"));
+        assertTrue(verification.contains("Expected 83 indexes"));
 
         assertTrue(applyScript.contains("009_execution_job_attempt_count.sql"));
         assertTrue(applyScript.contains("010_database_query_optimization.sql"));
@@ -170,10 +170,58 @@ class CodeQualityTest {
         }
         assertTrue(applyScript.contains("021_real_platform_wave6_wave7.sql"));
         assertTrue(devUp.contains("021_real_platform_wave6_wave7.sql"));
-        assertTrue(verification.contains("Expected 41 tables"));
-        assertTrue(verification.contains("Expected 40 sequences"));
-        assertTrue(verification.contains("Expected 43 triggers"));
-        assertTrue(verification.contains("Expected 67 indexes"));
+        assertTrue(verification.contains("Expected 56 tables"));
+        assertTrue(verification.contains("Expected 55 sequences"));
+        assertTrue(verification.contains("Expected 58 triggers"));
+        assertTrue(verification.contains("Expected 83 indexes"));
+    }
+
+    @Test
+    void realPlatformWaveEightMigrationIsWiredAndVerified() throws IOException {
+        Path migrationPath = Path.of("..", "..", "database", "oracle", "022_assignment_coi_maturity.sql");
+        assertTrue(Files.exists(migrationPath));
+
+        String migration = Files.readString(migrationPath);
+        String verification = Files.readString(Path.of("..", "..", "database", "oracle", "verify_schema.sql"));
+        String applyScript = Files.readString(Path.of("..", "..", "scripts", "oracle-schema-apply.sh"));
+        String devUp = Files.readString(Path.of("..", "..", "scripts", "dev-up.sh"));
+
+        for (String tableName : realPlatformWaveEightTables()) {
+            assertTrue(migration.contains("CREATE TABLE " + tableName), "022 migration should create " + tableName);
+            assertTrue(verification.contains(tableName), "verify_schema should verify " + tableName);
+            assertTrue(devUp.contains(tableName), "dev-up should detect " + tableName);
+        }
+        for (String indexName : realPlatformWaveEightIndexes()) {
+            assertTrue(migration.contains(indexName), "022 migration should create " + indexName);
+            assertTrue(verification.contains(indexName), "verify_schema should verify " + indexName);
+        }
+        assertTrue(applyScript.contains("022_assignment_coi_maturity.sql"));
+        assertTrue(devUp.contains("022_assignment_coi_maturity.sql"));
+        assertTrue(verification.contains("Expected assignment/COI maturity tables to exist"));
+    }
+
+    @Test
+    void realPlatformWaveNineMigrationIsWiredAndVerified() throws IOException {
+        Path migrationPath = Path.of("..", "..", "database", "oracle", "023_publication_communication_maturity.sql");
+        assertTrue(Files.exists(migrationPath));
+
+        String migration = Files.readString(migrationPath);
+        String verification = Files.readString(Path.of("..", "..", "database", "oracle", "verify_schema.sql"));
+        String applyScript = Files.readString(Path.of("..", "..", "scripts", "oracle-schema-apply.sh"));
+        String devUp = Files.readString(Path.of("..", "..", "scripts", "dev-up.sh"));
+
+        for (String tableName : realPlatformWaveNineTables()) {
+            assertTrue(migration.contains("CREATE TABLE " + tableName), "023 migration should create " + tableName);
+            assertTrue(verification.contains(tableName), "verify_schema should verify " + tableName);
+            assertTrue(devUp.contains(tableName), "dev-up should detect " + tableName);
+        }
+        for (String indexName : realPlatformWaveNineIndexes()) {
+            assertTrue(migration.contains(indexName), "023 migration should create " + indexName);
+            assertTrue(verification.contains(indexName), "verify_schema should verify " + indexName);
+        }
+        assertTrue(applyScript.contains("023_publication_communication_maturity.sql"));
+        assertTrue(devUp.contains("023_publication_communication_maturity.sql"));
+        assertTrue(verification.contains("Expected publication/communication maturity tables to exist"));
     }
 
     @Test
@@ -319,6 +367,57 @@ class CodeQualityTest {
                 "IDX_PAPER_ROLE_ASSIGNMENT_USER",
                 "IDX_PAPER_ROLE_ASSIGNMENT_MANUSCRIPT",
                 "IDX_PAPER_TAG_VALUE"
+        );
+    }
+
+    private List<String> realPlatformWaveEightTables() {
+        return List.of(
+                "REVIEWER_INVITATION",
+                "EXTERNAL_REVIEWER_DELEGATION",
+                "CONFLICT_RELATIONSHIP",
+                "REVIEWER_MATCHING_SCORE",
+                "ASSIGNMENT_PROPOSAL_BUNDLE",
+                "ASSIGNMENT_PROPOSAL",
+                "ASSIGNMENT_OVERRIDE_AUDIT"
+        );
+    }
+
+    private List<String> realPlatformWaveEightIndexes() {
+        return List.of(
+                "IDX_REVIEWER_INVITATION_STATUS",
+                "IDX_EXTERNAL_DELEGATION_ASSIGN",
+                "IDX_CONFLICT_REL_SUBJECT",
+                "IDX_CONFLICT_REL_OBJECT",
+                "IDX_REVIEWER_MATCHING_LOOKUP",
+                "IDX_ASSIGNMENT_PROPOSAL_BUNDLE",
+                "IDX_ASSIGNMENT_PROPOSAL_CANDIDATE",
+                "IDX_ASSIGNMENT_OVERRIDE_BUNDLE"
+        );
+    }
+
+    private List<String> realPlatformWaveNineTables() {
+        return List.of(
+                "EMAIL_TEMPLATE",
+                "EMAIL_TEMPLATE_VERSION",
+                "OUTBOUND_EMAIL_HISTORY",
+                "OFFLINE_REVIEW_IMPORT_BATCH",
+                "OFFLINE_REVIEW_IMPORT_ROW",
+                "CAMERA_READY_FILE",
+                "PUBLICATION_METADATA",
+                "PROCEEDINGS_EXPORT_BATCH"
+        );
+    }
+
+    private List<String> realPlatformWaveNineIndexes() {
+        return List.of(
+                "IDX_EMAIL_TEMPLATE_KEY",
+                "IDX_EMAIL_TEMPLATE_VERSION",
+                "IDX_OUTBOUND_EMAIL_STATUS",
+                "IDX_OFFLINE_REVIEW_BATCH",
+                "IDX_OFFLINE_REVIEW_ROW",
+                "IDX_CAMERA_READY_FILE_STATUS",
+                "IDX_PUBLICATION_METADATA_STATUS",
+                "IDX_PROCEEDINGS_EXPORT_STATUS"
         );
     }
 }

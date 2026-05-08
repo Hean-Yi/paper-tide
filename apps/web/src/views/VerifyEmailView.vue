@@ -51,7 +51,7 @@ function nextStepMessage(response: VerifyResponse): string {
 <template>
   <main class="login-page">
     <section class="login-panel" aria-labelledby="verify-title">
-      <p class="eyebrow">Review System</p>
+      <p class="eyebrow">论文评审系统</p>
       <h1 id="verify-title">邮箱验证</h1>
 
       <p v-if="status === 'pending'" role="status">正在验证你的邮箱，请稍候…</p>

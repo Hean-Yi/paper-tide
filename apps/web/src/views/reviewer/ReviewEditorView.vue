@@ -55,11 +55,11 @@ const requiredTrimmed = (message: string): FormItemRule => ({
   }
 });
 const reviewRules: FormRules = {
-  confidenceLevel: [{ required: true, message: "Confidence is required", trigger: "change" }],
-  recommendation: [{ required: true, message: "Recommendation is required", trigger: "change" }],
-  strengths: [requiredTrimmed("Strengths are required")],
-  weaknesses: [requiredTrimmed("Weaknesses are required")],
-  commentsToAuthor: [requiredTrimmed("Comments to author are required")]
+  confidenceLevel: [{ required: true, message: "请选择置信度", trigger: "change" }],
+  recommendation: [{ required: true, message: "请选择建议结论", trigger: "change" }],
+  strengths: [requiredTrimmed("请填写优势")],
+  weaknesses: [requiredTrimmed("请填写不足")],
+  commentsToAuthor: [requiredTrimmed("请填写对作者的评语")]
 };
 
 function hasRequiredReviewValues() {
@@ -123,7 +123,7 @@ async function saveDynamicReview(responseStatus: "DRAFT" | "SUBMITTED") {
       responseStatus,
       answers: { ...dynamicAnswers }
     });
-    ElMessage.success(responseStatus === "DRAFT" ? "Review draft saved." : "Configured review submitted.");
+    ElMessage.success(responseStatus === "DRAFT" ? "评审草稿已保存。" : "定制评审已提交。");
     await loadDynamicReviewForm();
   } finally {
     dynamicSubmitting.value = false;
@@ -133,7 +133,7 @@ async function saveDynamicReview(responseStatus: "DRAFT" | "SUBMITTED") {
 function revisionAnswerPreview(revision: ReviewFormRevision): string {
   const entries = Object.entries(revision.answers ?? {});
   if (!entries.length) {
-    return "No answers captured.";
+    return "暂无填写记录。";
   }
   return entries
     .map(([key, value]) => `${key}: ${String(value ?? "")}`)
@@ -148,7 +148,7 @@ async function submitReport() {
   submitting.value = true;
   try {
     await submitReviewReport(assignmentId.value, form);
-    ElMessage.success("Review submitted.");
+    ElMessage.success("评审已提交。");
     await router.push("/reviewer/assignments");
   } finally {
     submitting.value = false;
@@ -161,15 +161,15 @@ async function submitReport() {
   <section class="workflow-page">
     <div class="page-heading dossier-header">
       <div>
-        <p class="eyebrow">Reviewer</p>
-        <h1>Review editor</h1>
-        <p class="body">Read the assignment details and submit one complete review report.</p>
+        <p class="eyebrow">审稿人</p>
+        <h1>评审编辑器</h1>
+        <p class="body">阅读任务详情并提交一份完整的评审报告。</p>
       </div>
       <div class="header-actions">
         <el-button @click="sidePanelCollapsed = !sidePanelCollapsed">
-          {{ sidePanelCollapsed ? "Show assist panel" : "Collapse assist panel" }}
+          {{ sidePanelCollapsed ? "显示辅助面板" : "收起辅助面板" }}
         </el-button>
-        <el-button @click="router.push('/reviewer/assignments')">Back to assignments</el-button>
+        <el-button @click="router.push('/reviewer/assignments')">返回任务列表</el-button>
       </div>
     </div>
 
@@ -190,7 +190,7 @@ async function submitReport() {
             <el-collapse-item name="assignment">
               <template #title>
                 <div class="assignment-summary">
-                  <span>Assignment</span>
+                  <span>任务信息</span>
                   <strong>{{ assignment.title }}</strong>
                   <el-tag :type="statusTagType(assignment.taskStatus)">
                     {{ workflowLabel(assignment.taskStatus) }}
@@ -198,14 +198,14 @@ async function submitReport() {
                 </div>
               </template>
               <el-descriptions :column="1" border>
-                <el-descriptions-item label="Title">{{ assignment.title }}</el-descriptions-item>
-                <el-descriptions-item label="Status">
+                <el-descriptions-item label="标题">{{ assignment.title }}</el-descriptions-item>
+                <el-descriptions-item label="状态">
                   <el-tag :type="statusTagType(assignment.taskStatus)">{{ workflowLabel(assignment.taskStatus) }}</el-tag>
                 </el-descriptions-item>
-                <el-descriptions-item label="Version">v{{ assignment.versionNo }}</el-descriptions-item>
-                <el-descriptions-item label="Deadline">{{ formatDateTime(assignment.deadlineAt) }}</el-descriptions-item>
-                <el-descriptions-item label="Keywords">{{ assignment.keywords || "None" }}</el-descriptions-item>
-                <el-descriptions-item label="Abstract">{{ assignment.abstractText }}</el-descriptions-item>
+                <el-descriptions-item label="版本">v{{ assignment.versionNo }}</el-descriptions-item>
+                <el-descriptions-item label="截止日期">{{ formatDateTime(assignment.deadlineAt) }}</el-descriptions-item>
+                <el-descriptions-item label="关键词">{{ assignment.keywords || "无" }}</el-descriptions-item>
+                <el-descriptions-item label="摘要">{{ assignment.abstractText }}</el-descriptions-item>
               </el-descriptions>
             </el-collapse-item>
           </el-collapse>
@@ -243,20 +243,20 @@ async function submitReport() {
                 <el-input v-else v-model="dynamicAnswers[field.fieldKey]" />
               </el-form-item>
               <div class="action-row">
-                <el-button :loading="dynamicSubmitting" @click="saveDynamicReview('DRAFT')">Save draft</el-button>
-                <el-button type="primary" native-type="submit" :loading="dynamicSubmitting">Submit configured review</el-button>
+                <el-button :loading="dynamicSubmitting" @click="saveDynamicReview('DRAFT')">保存草稿</el-button>
+                <el-button type="primary" native-type="submit" :loading="dynamicSubmitting">提交定制评审</el-button>
               </div>
             </el-form>
             <section class="revision-history">
               <div class="subsection-heading">
-                <h3>Review revision history</h3>
+                <h3>评审修订历史</h3>
                 <el-tag>{{ reviewFormRevisions.length }}</el-tag>
               </div>
-              <el-empty v-if="!reviewFormRevisions.length" description="No submitted configured reviews yet." />
+              <el-empty v-if="!reviewFormRevisions.length" description="暂无已提交的定制评审。" />
               <div v-else class="stacked-list">
                 <el-card v-for="revision in reviewFormRevisions" :key="revision.revisionId" shadow="never">
                   <template #header>
-                    Revision {{ revision.revisionNo }} · {{ formatDateTime(revision.submittedAt) }}
+                    修订 {{ revision.revisionNo }} · {{ formatDateTime(revision.submittedAt) }}
                   </template>
                   <pre class="json-block">{{ revisionAnswerPreview(revision) }}</pre>
                 </el-card>
@@ -273,51 +273,51 @@ async function submitReport() {
             @submit.prevent="submitReport"
           >
             <div class="score-grid review-score-grid">
-              <el-form-item label="Novelty">
+              <el-form-item label="创新性">
                 <el-input-number v-model="form.noveltyScore" :min="1" :max="5" />
               </el-form-item>
-              <el-form-item label="Method">
+              <el-form-item label="方法论">
                 <el-input-number v-model="form.methodScore" :min="1" :max="5" />
               </el-form-item>
-              <el-form-item label="Experiment">
+              <el-form-item label="实验">
                 <el-input-number v-model="form.experimentScore" :min="1" :max="5" />
               </el-form-item>
-              <el-form-item label="Writing">
+              <el-form-item label="写作">
                 <el-input-number v-model="form.writingScore" :min="1" :max="5" />
               </el-form-item>
-              <el-form-item label="Overall">
+              <el-form-item label="综合">
                 <el-input-number v-model="form.overallScore" :min="1" :max="5" />
               </el-form-item>
             </div>
 
-            <el-form-item label="Confidence" prop="confidenceLevel">
+            <el-form-item label="置信度" prop="confidenceLevel">
               <el-select v-model="form.confidenceLevel">
-                <el-option label="Low" value="LOW" />
-                <el-option label="Medium" value="MEDIUM" />
-                <el-option label="High" value="HIGH" />
+                <el-option label="低" value="LOW" />
+                <el-option label="中" value="MEDIUM" />
+                <el-option label="高" value="HIGH" />
               </el-select>
             </el-form-item>
-            <el-form-item label="Recommendation" prop="recommendation">
+            <el-form-item label="建议结论" prop="recommendation">
               <el-select v-model="form.recommendation">
-                <el-option label="Accept" value="ACCEPT" />
-                <el-option label="Minor revision" value="MINOR_REVISION" />
-                <el-option label="Major revision" value="MAJOR_REVISION" />
-                <el-option label="Reject" value="REJECT" />
+                <el-option label="接受" value="ACCEPT" />
+                <el-option label="小修" value="MINOR_REVISION" />
+                <el-option label="大修" value="MAJOR_REVISION" />
+                <el-option label="拒稿" value="REJECT" />
               </el-select>
             </el-form-item>
-            <el-form-item label="Strengths" prop="strengths">
+            <el-form-item label="优点" prop="strengths">
               <el-input v-model="form.strengths" type="textarea" :rows="3" />
             </el-form-item>
-            <el-form-item label="Weaknesses" prop="weaknesses">
+            <el-form-item label="不足" prop="weaknesses">
               <el-input v-model="form.weaknesses" type="textarea" :rows="3" />
             </el-form-item>
-            <el-form-item label="Comments to author" prop="commentsToAuthor">
+            <el-form-item label="对作者的评语" prop="commentsToAuthor">
               <el-input v-model="form.commentsToAuthor" type="textarea" :rows="4" />
             </el-form-item>
-            <el-form-item label="Confidential comments to chair">
+            <el-form-item label="对主席的保密评语">
               <el-input v-model="form.commentsToChair" type="textarea" :rows="4" />
             </el-form-item>
-            <el-button type="primary" native-type="submit" :loading="submitting">Submit review</el-button>
+            <el-button type="primary" native-type="submit" :loading="submitting">提交评审</el-button>
           </el-form>
         </aside>
       </div>

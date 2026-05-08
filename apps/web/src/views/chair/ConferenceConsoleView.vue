@@ -8,6 +8,7 @@ import {
   addConferenceReviewer,
   approveConference,
   createConferenceDraft,
+  listChairConferences,
   listPendingConferenceApprovals,
   submitConferenceForApproval,
   type ConferenceCfpSummary,
@@ -21,6 +22,8 @@ const pendingLoading = ref(false);
 const error = ref("");
 const createdConference = ref<ConferenceDetail | null>(null);
 const pendingConferences = ref<ConferenceCfpSummary[]>([]);
+const chairConferences = ref<ConferenceCfpSummary[]>([]);
+const conferenceHistoryLoading = ref(false);
 
 const form = reactive({
   name: "",
@@ -47,6 +50,7 @@ const reviewerForm = reactive({
 });
 
 onMounted(() => {
+  void loadChairConferences();
   if (isAdmin.value) {
     void loadPending();
   }
@@ -76,9 +80,10 @@ async function createDraft() {
       }
     });
     reviewerForm.conferenceId = createdConference.value.conferenceId;
-    ElMessage.success("Conference draft created.");
+    ElMessage.success("会议草稿已创建。");
+    await loadChairConferences();
   } catch (err) {
-    error.value = apiErrorMessage(err, "Conference draft could not be created.");
+    error.value = apiErrorMessage(err, "会议草稿创建失败。");
   } finally {
     loading.value = false;
   }
@@ -89,7 +94,8 @@ async function submitCreatedConference() {
     return;
   }
   createdConference.value = await submitConferenceForApproval(createdConference.value.conferenceId);
-  ElMessage.success("Conference submitted for approval.");
+  await loadChairConferences();
+  ElMessage.success("会议已提交审批。");
 }
 
 async function addReviewerToConference() {
@@ -98,7 +104,7 @@ async function addReviewerToConference() {
     Number(reviewerForm.reviewerId),
     Number(reviewerForm.maxLoad)
   );
-  ElMessage.success("Reviewer added to conference pool.");
+  ElMessage.success("审稿人已加入会议审稿人池。");
 }
 
 async function loadPending() {
@@ -110,10 +116,22 @@ async function loadPending() {
   }
 }
 
+async function loadChairConferences() {
+  conferenceHistoryLoading.value = true;
+  try {
+    chairConferences.value = await listChairConferences();
+  } catch (err) {
+    error.value = apiErrorMessage(err, "会议列表加载失败。");
+  } finally {
+    conferenceHistoryLoading.value = false;
+  }
+}
+
 async function approve(row: ConferenceCfpSummary) {
   await approveConference(row.conferenceId);
+  await loadChairConferences();
   await loadPending();
-  ElMessage.success("Conference approved.");
+  ElMessage.success("会议已审批通过。");
 }
 </script>
 
@@ -121,46 +139,77 @@ async function approve(row: ConferenceCfpSummary) {
   <section class="workflow-page">
     <div class="page-heading">
       <div>
-        <p class="eyebrow">Chair console</p>
-        <h1>Conferences</h1>
-        <p class="body">Create CFPs, submit conferences for approval, and seed the reviewer pool.</p>
+        <p class="eyebrow">主席控制台</p>
+        <h1>会议管理</h1>
+        <p class="body">创建征稿启事草稿、管理过往会议状态并进入会议论文审核。</p>
       </div>
     </div>
 
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
 
     <section class="workflow-section">
-      <h2>Create CFP draft</h2>
+      <div class="subsection-heading">
+        <h2>过往会议状态</h2>
+        <el-button :loading="conferenceHistoryLoading" @click="loadChairConferences">刷新</el-button>
+      </div>
+      <el-table v-loading="conferenceHistoryLoading" :data="chairConferences" empty-text="暂无可管理会议。">
+        <el-table-column prop="acronym" label="缩写" width="120" />
+        <el-table-column label="会议" min-width="220">
+          <template #default="{ row }">
+            <strong>{{ row.name }}</strong>
+            <p class="muted-line">{{ row.year }} · {{ row.publicSlug }}</p>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="180">
+          <template #default="{ row }">
+            <el-tag :type="statusTagType(row.status)">{{ workflowLabel(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="投稿截止" min-width="170">
+          <template #default="{ row }">{{ formatDateTime(row.submissionCloseAt) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="150">
+          <template #default="{ row }">
+            <RouterLink class="text-link" :to="{ name: 'chair-conference-detail', params: { conferenceId: row.conferenceId } }">
+              查看详情
+            </RouterLink>
+          </template>
+        </el-table-column>
+      </el-table>
+    </section>
+
+    <section class="workflow-section">
+      <h2>创建征稿启事草稿</h2>
       <el-form class="workflow-form" label-position="top" @submit.prevent="createDraft">
         <div class="score-grid">
-          <el-form-item label="Name">
+          <el-form-item label="名称">
             <el-input v-model="form.name" data-test="conference-name" />
           </el-form-item>
-          <el-form-item label="Acronym">
+          <el-form-item label="缩写">
             <el-input v-model="form.acronym" data-test="conference-acronym" />
           </el-form-item>
-          <el-form-item label="Year">
+          <el-form-item label="年份">
             <el-input-number v-model="form.year" data-test="conference-year" :min="2026" />
           </el-form-item>
-          <el-form-item label="Public slug">
+          <el-form-item label="公开标识">
             <el-input v-model="form.publicSlug" data-test="conference-slug" />
           </el-form-item>
-          <el-form-item label="Topics">
-            <el-input v-model="form.topicAreas" data-test="conference-topics" placeholder="agents,systems" />
+          <el-form-item label="主题领域">
+            <el-input v-model="form.topicAreas" data-test="conference-topics" placeholder="示例：agents,systems" />
           </el-form-item>
-          <el-form-item label="Blind mode">
+          <el-form-item label="审稿模式">
             <el-select v-model="form.blindMode">
-              <el-option label="Double blind" value="DOUBLE_BLIND" />
-              <el-option label="Single blind" value="SINGLE_BLIND" />
+              <el-option label="双盲" value="DOUBLE_BLIND" />
+              <el-option label="单盲" value="SINGLE_BLIND" />
             </el-select>
           </el-form-item>
         </div>
-        <el-form-item label="CFP text">
+        <el-form-item label="征稿文本">
           <el-input v-model="form.cfpText" type="textarea" :rows="3" />
         </el-form-item>
         <div class="action-row">
-          <el-button type="primary" native-type="submit" :loading="loading">Create draft</el-button>
-          <el-button :disabled="!createdConference" @click="submitCreatedConference">Submit for approval</el-button>
+          <el-button type="primary" native-type="submit" :loading="loading">创建草稿</el-button>
+          <el-button :disabled="!createdConference" @click="submitCreatedConference">提交审批</el-button>
         </div>
       </el-form>
       <el-alert
@@ -172,44 +221,44 @@ async function approve(row: ConferenceCfpSummary) {
     </section>
 
     <section class="workflow-section">
-      <h2>Reviewer pool</h2>
+      <h2>审稿人池</h2>
       <el-form class="workflow-form" label-position="top" @submit.prevent="addReviewerToConference">
         <div class="score-grid">
-          <el-form-item label="Conference id">
+          <el-form-item label="会议 ID">
             <el-input-number v-model="reviewerForm.conferenceId" :min="1" />
           </el-form-item>
-          <el-form-item label="Reviewer id">
+          <el-form-item label="审稿人 ID">
             <el-input-number v-model="reviewerForm.reviewerId" :min="1" />
           </el-form-item>
-          <el-form-item label="Max load">
+          <el-form-item label="最大负荷">
             <el-input-number v-model="reviewerForm.maxLoad" :min="1" :max="20" />
           </el-form-item>
         </div>
-        <el-button type="primary" native-type="submit">Add reviewer</el-button>
+        <el-button type="primary" native-type="submit">添加审稿人</el-button>
       </el-form>
     </section>
 
     <section v-if="isAdmin" class="workflow-section">
       <div class="subsection-heading">
-        <h2>Conference approvals</h2>
-        <el-button @click="loadPending">Refresh</el-button>
+        <h2>会议审批</h2>
+        <el-button @click="loadPending">刷新</el-button>
       </div>
-      <el-table v-loading="pendingLoading" :data="pendingConferences" empty-text="No pending conferences.">
-        <el-table-column prop="acronym" label="Acronym" width="120" />
-        <el-table-column label="Conference">
+      <el-table v-loading="pendingLoading" :data="pendingConferences" empty-text="暂无待审批的会议。">
+        <el-table-column prop="acronym" label="缩写" width="120" />
+        <el-table-column label="会议">
           <template #default="{ row }">
             <strong>{{ row.name }}</strong>
             <p class="muted-line">{{ formatDateTime(row.submissionCloseAt) }}</p>
           </template>
         </el-table-column>
-        <el-table-column label="Status" width="180">
+        <el-table-column label="状态" width="180">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)">{{ workflowLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Actions" width="160">
+        <el-table-column label="操作" width="160">
           <template #default="{ row }">
-            <el-button size="small" type="primary" @click="approve(row)">Approve</el-button>
+            <el-button size="small" type="primary" @click="approve(row)">审批通过</el-button>
           </template>
         </el-table-column>
       </el-table>

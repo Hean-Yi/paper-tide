@@ -27,11 +27,11 @@ const deskRejectFormRef = ref<FormInstance>();
 const deskRejectForm = reactive({ manuscriptId: 0, versionId: 0, roundId: 0, decisionReason: "" });
 const deskRejectDialogOpen = ref(false);
 const roundRules: FormRules = {
-  deadlineAt: [{ required: true, message: "Deadline is required", trigger: "change" }]
+  deadlineAt: [{ required: true, message: "截止日期为必填", trigger: "change" }]
 };
 const deskRejectRules: FormRules = {
-  roundId: [{ required: true, message: "Round id is required", trigger: "blur" }],
-  decisionReason: [{ required: true, message: "Reason is required", trigger: "blur" }]
+  roundId: [{ required: true, message: "轮次 ID 为必填", trigger: "blur" }],
+  decisionReason: [{ required: true, message: "原因为必填", trigger: "blur" }]
 };
 
 onMounted(loadQueue);
@@ -41,7 +41,7 @@ async function loadQueue() {
   try {
     queue.value = await listScreeningQueue();
   } catch (error) {
-    showApiError(error, "Screening queue could not be loaded.");
+    showApiError(error, "初筛队列加载失败。");
   } finally {
     loading.value = false;
   }
@@ -63,9 +63,9 @@ async function triggerAgent(row: ScreeningQueueItem) {
   await actions.run(`agent:${row.manuscriptId}:${row.versionId}`, async () => {
     try {
       await requestScreeningAnalysis(row.manuscriptId, row.versionId);
-      ElMessage.success("Screening analysis requested.");
+      ElMessage.success("初筛分析已请求。");
     } catch (error) {
-      showApiError(error, "Screening analysis could not be requested.");
+      showApiError(error, "初筛分析请求失败。");
     }
   });
 }
@@ -78,7 +78,7 @@ async function download(row: ScreeningQueueItem) {
       window.open(url, "_blank", "noopener");
       URL.revokeObjectURL(url);
     } catch (error) {
-      showApiError(error, "PDF could not be opened.");
+      showApiError(error, "PDF 无法打开。");
     }
   });
 }
@@ -105,10 +105,10 @@ async function submitRound() {
         screeningRequired: true
       });
       roundDialogOpen.value = false;
-      ElMessage.success("Review round created.");
+      ElMessage.success("评审轮次已创建。");
       await loadQueue();
     } catch (error) {
-      showApiError(error, "Review round could not be created.");
+      showApiError(error, "评审轮次创建失败。");
     }
   });
 }
@@ -130,9 +130,9 @@ async function submitDeskReject() {
   }
   try {
     await ElMessageBox.confirm(
-      "Desk reject will close this manuscript before external review. Continue?",
-      "Confirm desk reject",
-      { type: "warning", confirmButtonText: "Desk reject" }
+      "桥面拒稿将在外部评审前关闭此稿件，确认继续？",
+      "确认桥面拒稿",
+      { type: "warning", confirmButtonText: "拒稿" }
     );
   } catch {
     return;
@@ -147,10 +147,10 @@ async function submitDeskReject() {
         decisionReason: deskRejectForm.decisionReason
       });
       deskRejectDialogOpen.value = false;
-      ElMessage.success("Desk reject recorded.");
+      ElMessage.success("桥面拒稿已记录。");
       await loadQueue();
     } catch (error) {
-      showApiError(error, "Desk reject could not be recorded.");
+      showApiError(error, "桥面拒稿记录失败。");
     }
   });
 }
@@ -160,25 +160,25 @@ async function submitDeskReject() {
   <section class="workflow-page">
     <div class="page-heading dossier-header">
       <div>
-        <p class="eyebrow">Chair</p>
-        <h1>Screening queue</h1>
-        <p class="body">Review new submissions before a full review round.</p>
+        <p class="eyebrow">主席</p>
+        <h1>初筛队列</h1>
+        <p class="body">在正式评审轮次前对新投稿进行初筛。</p>
       </div>
-      <el-button :loading="loading" @click="loadQueue">Refresh</el-button>
+      <el-button :loading="loading" @click="loadQueue">刷新</el-button>
     </div>
 
-    <el-table v-loading="loading" :data="queue" empty-text="No manuscripts are waiting for screening.">
-      <el-table-column prop="manuscriptId" label="Manuscript" width="120" />
-      <el-table-column prop="title" label="Title" min-width="220" />
-      <el-table-column prop="currentStatus" label="Status" width="160">
+    <el-table v-loading="loading" :data="queue" empty-text="暂无等待初筛的稿件。">
+      <el-table-column prop="manuscriptId" label="稿件" width="120" />
+      <el-table-column prop="title" label="标题" min-width="220" />
+      <el-table-column prop="currentStatus" label="状态" width="160">
         <template #default="{ row }">
           <el-tag :type="statusTagType(row.currentStatus)">{{ workflowLabel(row.currentStatus) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="blindMode" label="Blind mode" width="150">
+      <el-table-column prop="blindMode" label="审稿模式" width="150">
         <template #default="{ row }">{{ workflowLabel(row.blindMode) }}</template>
       </el-table-column>
-      <el-table-column prop="submittedAt" label="Submitted" min-width="170">
+      <el-table-column prop="submittedAt" label="投稿时间" min-width="170">
         <template #default="{ row }">{{ formatDateTime(row.submittedAt) }}</template>
       </el-table-column>
       <el-table-column label="PDF" min-width="160">
@@ -191,10 +191,10 @@ async function submitDeskReject() {
           >
             {{ row.pdfFileName }} · {{ formatFileSize(row.pdfFileSize) }}
           </el-button>
-          <span v-else>Missing</span>
+          <span v-else>缺失</span>
         </template>
       </el-table-column>
-      <el-table-column label="Actions" width="430">
+      <el-table-column label="操作" width="430">
         <template #default="{ row }">
           <div class="action-row">
             <el-button
@@ -202,54 +202,54 @@ async function submitDeskReject() {
               :loading="actions.isPending(`start:${row.manuscriptId}:${row.versionId}`)"
               @click="start(row)"
             >
-              Start screening
+              开始初筛
             </el-button>
             <el-button
               size="small"
               :loading="actions.isPending(`agent:${row.manuscriptId}:${row.versionId}`)"
               @click="triggerAgent(row)"
             >
-              Run agent
+              运行分析
             </el-button>
-            <el-button size="small" @click="openRound(row)">Create round</el-button>
-            <el-button size="small" type="danger" @click="openDeskReject(row)">Desk reject</el-button>
+            <el-button size="small" @click="openRound(row)">创建轮次</el-button>
+            <el-button size="small" type="danger" @click="openDeskReject(row)">桌面拒稿</el-button>
           </div>
         </template>
       </el-table-column>
       <template #empty>
-        <el-empty description="No manuscripts are waiting for screening." />
+        <el-empty description="暂无等待初筛的稿件。" />
       </template>
     </el-table>
 
-    <el-dialog v-model="roundDialogOpen" title="Create review round" width="520px">
+    <el-dialog v-model="roundDialogOpen" title="创建评审轮次" width="520px">
       <el-form ref="roundFormRef" :model="roundForm" :rules="roundRules" label-position="top">
-        <el-form-item label="Deadline" prop="deadlineAt">
+        <el-form-item label="截止日期" prop="deadlineAt">
           <el-date-picker
             v-model="roundForm.deadlineAt"
             type="datetime"
             value-format="YYYY-MM-DDTHH:mm:ss[Z]"
-            placeholder="Select deadline"
+            placeholder="选择截止日期"
           />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button :disabled="actions.isPending('create-round')" @click="roundDialogOpen = false">Cancel</el-button>
-        <el-button type="primary" :loading="actions.isPending('create-round')" @click="submitRound">Create round</el-button>
+        <el-button :disabled="actions.isPending('create-round')" @click="roundDialogOpen = false">取消</el-button>
+        <el-button type="primary" :loading="actions.isPending('create-round')" @click="submitRound">创建轮次</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="deskRejectDialogOpen" title="Desk reject" width="520px">
+    <el-dialog v-model="deskRejectDialogOpen" title="桌面拒稿" width="520px">
       <el-form ref="deskRejectFormRef" :model="deskRejectForm" :rules="deskRejectRules" label-position="top">
-        <el-form-item label="Round id" prop="roundId">
+        <el-form-item label="轮次 ID" prop="roundId">
           <el-input-number v-model="deskRejectForm.roundId" :min="0" />
         </el-form-item>
-        <el-form-item label="Reason" prop="decisionReason">
+        <el-form-item label="原因" prop="decisionReason">
           <el-input v-model="deskRejectForm.decisionReason" type="textarea" :rows="4" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button :disabled="actions.isPending('desk-reject')" @click="deskRejectDialogOpen = false">Cancel</el-button>
-        <el-button type="danger" :loading="actions.isPending('desk-reject')" @click="submitDeskReject">Desk reject</el-button>
+        <el-button :disabled="actions.isPending('desk-reject')" @click="deskRejectDialogOpen = false">取消</el-button>
+        <el-button type="danger" :loading="actions.isPending('desk-reject')" @click="submitDeskReject">确认拒稿</el-button>
       </template>
     </el-dialog>
   </section>

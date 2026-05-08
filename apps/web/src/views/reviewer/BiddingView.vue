@@ -38,7 +38,7 @@ async function loadPapers() {
   try {
     papers.value = await listReviewerBiddingItems(selectedConferenceId.value);
   } catch (err) {
-    error.value = apiErrorMessage(err, "Bidding papers are unavailable.");
+    error.value = apiErrorMessage(err, "竞标论文暂时不可用。");
   } finally {
     loading.value = false;
   }
@@ -57,7 +57,7 @@ async function submitBid(row: ReviewerBiddingItem, bidValue: string) {
   });
   row.bidValue = bidValue;
   row.conflictDeclared = bidValue === "CONFLICT";
-  ElMessage.success("Bid saved.");
+  ElMessage.success("投标已保存。");
 }
 </script>
 
@@ -65,12 +65,12 @@ async function submitBid(row: ReviewerBiddingItem, bidValue: string) {
   <section class="workflow-page">
     <div class="page-heading">
       <div>
-        <p class="eyebrow">Reviewer bidding</p>
-        <h1>Reviewer bidding</h1>
-        <p class="body">Choose a bidding-open conference and submit preference or conflict signals.</p>
+        <p class="eyebrow">竞标投票</p>
+        <h1>审稿人竞标</h1>
+        <p class="body">选择开放竞标的会议，提交你的偏好或利益冲突声明。</p>
       </div>
       <div class="header-actions">
-        <el-select v-model="selectedConferenceId" placeholder="Conference" style="width: 260px">
+        <el-select v-model="selectedConferenceId" placeholder="选择会议" style="width: 260px">
           <el-option
             v-for="conference in conferences"
             :key="conference.conferenceId"
@@ -78,7 +78,7 @@ async function submitBid(row: ReviewerBiddingItem, bidValue: string) {
             :value="conference.conferenceId"
           />
         </el-select>
-        <el-button type="primary" :disabled="!selectedConferenceId" @click="loadPapers">Load papers</el-button>
+        <el-button type="primary" :disabled="!selectedConferenceId" @click="loadPapers">加载论文</el-button>
       </div>
     </div>
 
@@ -90,25 +90,25 @@ async function submitBid(row: ReviewerBiddingItem, bidValue: string) {
     </el-alert>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
 
-    <el-table v-loading="loading" :data="papers" empty-text="No papers open for bidding.">
-      <el-table-column label="Paper" min-width="260">
+    <el-table v-loading="loading" :data="papers" empty-text="暂无开放竞标的论文。">
+      <el-table-column label="论文" min-width="260">
         <template #default="{ row }">
           <strong>{{ row.title }}</strong>
-          <p class="muted-line">{{ row.keywords || "No keywords" }}</p>
+          <p class="muted-line">{{ row.keywords || "暂无关键词" }}</p>
         </template>
       </el-table-column>
-      <el-table-column prop="abstractText" label="Abstract" min-width="320" />
-      <el-table-column label="Current bid" width="160">
+      <el-table-column prop="abstractText" label="摘要" min-width="320" />
+      <el-table-column label="当前投标" width="160">
         <template #default="{ row }">
           <el-tag :type="row.conflictDeclared ? 'danger' : 'info'">{{ workflowLabel(row.bidValue || "NONE") }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="Actions" width="360">
+      <el-table-column label="操作" width="360">
         <template #default="{ row }">
           <div class="action-row">
-            <el-button size="small" @click="submitBid(row, 'WANT_TO_REVIEW')">Want to review</el-button>
-            <el-button size="small" @click="submitBid(row, 'CAN_REVIEW')">Can review</el-button>
-            <el-button size="small" type="danger" @click="submitBid(row, 'CONFLICT')">Declare conflict</el-button>
+            <el-button size="small" @click="submitBid(row, 'WANT_TO_REVIEW')">希望评审</el-button>
+            <el-button size="small" @click="submitBid(row, 'CAN_REVIEW')">可以评审</el-button>
+            <el-button size="small" type="danger" @click="submitBid(row, 'CONFLICT')">声明利益冲突</el-button>
           </div>
         </template>
       </el-table-column>

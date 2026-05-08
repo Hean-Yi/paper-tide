@@ -25,6 +25,12 @@ const form = reactive({
 
 const requiresAcademicProfile = computed(() => form.registrationType !== "AUTHOR");
 
+type RegistrationResponse = {
+  registrationType: string;
+  applicationStatus: string;
+  emailVerificationRequired: boolean;
+};
+
 async function submit() {
   message.value = "";
   error.value = "";
@@ -46,11 +52,11 @@ async function submit() {
   }
   loading.value = true;
   try {
-    await apiRequest("/auth/register", {
+    const response = await apiRequest<RegistrationResponse>("/auth/register", {
       method: "POST",
       json: registrationPayload()
     });
-    message.value = "注册成功，请前往邮箱点击验证链接完成邮箱验证。";
+    message.value = successMessage(response);
   } catch (apiError) {
     error.value = apiError instanceof ApiError ? apiError.message : "注册失败，请稍后重试。";
   } finally {
@@ -88,6 +94,19 @@ function registrationPayload() {
       : null,
     researchAreas
   };
+}
+
+function successMessage(response: RegistrationResponse): string {
+  if (response.emailVerificationRequired) {
+    return "注册成功，请按系统提示完成后续验证。";
+  }
+  if (response.applicationStatus === "APPROVED") {
+    return "注册成功，账号已激活，可直接登录。";
+  }
+  if (response.applicationStatus === "PENDING_ADMIN_APPROVAL") {
+    return "注册成功，申请已进入管理员审核队列，审核通过后即可使用对应角色。";
+  }
+  return "注册成功。";
 }
 </script>
 

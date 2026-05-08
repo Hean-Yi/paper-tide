@@ -28,7 +28,7 @@ const assistFailed = computed(() => isFailedStatus(latestStatus.value));
 const assistPending = computed(() => actions.isPending("run") || isPendingStatus(latestStatus.value));
 const showProgress = computed(() => assistPending.value && !hasProjection.value && !assistFailed.value);
 const showEmpty = computed(() => !actions.isPending("refresh") && !showProgress.value && !assistFailed.value && !hasProjection.value);
-const visibleError = computed(() => error.value || (assistFailed.value ? "Review assistant failed. Try again." : ""));
+const visibleError = computed(() => error.value || (assistFailed.value ? "审稿助手失败，请重试。" : ""));
 
 onMounted(loadAssist);
 onBeforeUnmount(stopPolling);
@@ -50,7 +50,7 @@ async function loadAssist(options: { preserveIntent?: boolean } = {}) {
       error.value = "";
       syncPolling();
     } catch (err) {
-      error.value = apiErrorMessage(err, "Reviewer assistance is unavailable.");
+      error.value = apiErrorMessage(err, "审稿辅助暂时不可用。");
       assist.value = { intent: null, projections: [] };
       stopPolling();
     }
@@ -67,7 +67,7 @@ async function runAssist(force = false) {
       syncPolling();
       await loadAssist({ preserveIntent: true });
     } catch (err) {
-      error.value = apiErrorMessage(err, "Reviewer assistance could not be started.");
+      error.value = apiErrorMessage(err, "审稿辅助启动失败。");
       stopPolling();
     } finally {
       syncPolling();
@@ -116,18 +116,18 @@ function isFailedStatus(status: string | null) {
   <section class="agent-trace-panel">
     <div class="agent-trace-header">
       <div>
-        <p class="eyebrow">Agent Trace</p>
-        <h2>Review assist analysis</h2>
+        <p class="eyebrow">Agent 分析追踪</p>
+        <h2>审稿辅助分析</h2>
       </div>
-      <el-tag type="info">Reviewer safe</el-tag>
+      <el-tag type="info">审稿人可见</el-tag>
     </div>
 
     <el-alert v-if="visibleError" :title="visibleError" type="warning" :closable="false" />
 
     <div class="action-row">
-      <el-button type="primary" :loading="actions.isPending('run')" @click="runAssist(false)">Run review assistant</el-button>
-      <el-button v-if="assist.intent?.businessStatus === 'FAILED_VISIBLE'" :loading="actions.isPending('run')" @click="runAssist(true)">Retry</el-button>
-      <el-button :loading="actions.isPending('refresh')" @click="loadAssist">Refresh</el-button>
+      <el-button type="primary" :loading="actions.isPending('run')" @click="runAssist(false)">运行审稿助手</el-button>
+      <el-button v-if="assist.intent?.businessStatus === 'FAILED_VISIBLE'" :loading="actions.isPending('run')" @click="runAssist(true)">重试</el-button>
+      <el-button :loading="actions.isPending('refresh')" @click="loadAssist">刷新</el-button>
       <el-tag v-if="assist.intent" :type="statusTagType(assist.intent.businessStatus)">
         {{ workflowLabel(assist.intent.businessStatus) }}
       </el-tag>
@@ -135,8 +135,8 @@ function isFailedStatus(status: string | null) {
 
     <div v-if="showProgress" class="assist-progress" aria-live="polite">
       <div>
-        <strong>Analysis in progress</strong>
-        <p>Request submitted. The assistant is reading the assignment and preparing a checklist.</p>
+        <strong>分析进行中</strong>
+        <p>请求已提交，助手正在阅读任务并准备分析清单。</p>
       </div>
       <div class="assist-progress-animation" aria-hidden="true">
         <span />
@@ -147,14 +147,14 @@ function isFailedStatus(status: string | null) {
 
     <el-alert
       v-if="showEmpty"
-      title="No reviewer assistance is available for this assignment."
+      title="当前分配暂无审稿辅助。"
       type="info"
       :closable="false"
     />
     <article v-for="projection in assist.projections" :key="projection.projectionId" class="trace-entry">
       <div class="trace-entry-heading">
         <strong>{{ workflowLabel(projection.analysisType) }}</strong>
-        <el-tag :type="statusTagType(projection.businessStatus)">Reviewer safe</el-tag>
+        <el-tag :type="statusTagType(projection.businessStatus)">审稿人可见</el-tag>
       </div>
       <p v-if="projection.summaryText" class="trace-summary">{{ projection.summaryText }}</p>
       <pre class="json-block">{{ printableTrace(projection.redactedResult) }}</pre>

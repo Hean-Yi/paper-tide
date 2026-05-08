@@ -12,12 +12,14 @@ import {
   generateAssignmentDrafts,
   getAssignmentAssist,
   getManuscriptForm,
+  listAssignmentCandidates,
   listDecisionWorkbench,
   markOverdue,
   runAssignmentAssist,
   saveManuscriptFormResponse,
   triggerConflictAnalysis,
   type AssignmentAssistState,
+  type AssignmentCandidate,
   type AssignmentDraft,
   type AnalysisProjectionResponse,
   type DecisionWorkbenchItem,
@@ -37,6 +39,7 @@ const decisionDialogOpen = ref(false);
 const metaReviewDialogOpen = ref(false);
 const assignFormRef = ref<FormInstance>();
 const assignForm = reactive({ roundId: 0, reviewerId: 1002, deadlineAt: "" });
+const assignmentCandidates = ref<AssignmentCandidate[]>([]);
 const decisionFormRef = ref<FormInstance>();
 const decisionForm = reactive({
   manuscriptId: 0,
@@ -49,12 +52,12 @@ const metaReviewManuscriptId = ref<number | null>(null);
 const metaReviewForm = ref<WorkflowFormPackage | null>(null);
 const metaReviewAnswers = reactive<Record<string, unknown>>({});
 const assignRules: FormRules = {
-  reviewerId: [{ required: true, message: "Reviewer id is required", trigger: "blur" }],
-  deadlineAt: [{ required: true, message: "Deadline is required", trigger: "change" }]
+  reviewerId: [{ required: true, message: "审稿人 ID 为必填", trigger: "blur" }],
+  deadlineAt: [{ required: true, message: "截止日期为必填", trigger: "change" }]
 };
 const decisionRules: FormRules = {
-  decisionCode: [{ required: true, message: "Decision is required", trigger: "change" }],
-  decisionReason: [{ required: true, message: "Reason is required", trigger: "blur" }]
+  decisionCode: [{ required: true, message: "决策为必选", trigger: "change" }],
+  decisionReason: [{ required: true, message: "原因为必填", trigger: "blur" }]
 };
 
 onMounted(loadWorkbench);
@@ -64,7 +67,7 @@ async function loadWorkbench() {
   try {
     rows.value = await listDecisionWorkbench();
   } catch (error) {
-    showApiError(error, "Decision workbench could not be loaded.");
+    showApiError(error, "决策工作台加载失败。");
   } finally {
     loading.value = false;
   }
@@ -73,10 +76,25 @@ async function loadWorkbench() {
 function openAssign(row: DecisionWorkbenchItem) {
   Object.assign(assignForm, {
     roundId: row.roundId,
-    reviewerId: 1002,
+    reviewerId: 0,
     deadlineAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
   });
   assignDialogOpen.value = true;
+  void loadAssignmentCandidates(row.roundId);
+}
+
+async function loadAssignmentCandidates(roundId: number) {
+  assignmentCandidates.value = [];
+  await actions.run(`assignment-candidates:${roundId}`, async () => {
+    try {
+      assignmentCandidates.value = await listAssignmentCandidates(roundId);
+      if (assignmentCandidates.value.length && !assignForm.reviewerId) {
+        assignForm.reviewerId = assignmentCandidates.value[0].reviewerId;
+      }
+    } catch (error) {
+      showApiError(error, "可分配审稿人加载失败。");
+    }
+  });
 }
 
 async function submitAssign() {
@@ -88,10 +106,10 @@ async function submitAssign() {
     try {
       await assignReviewer(assignForm.roundId, assignForm.reviewerId, assignForm.deadlineAt);
       assignDialogOpen.value = false;
-      ElMessage.success("Reviewer assigned.");
+      ElMessage.success("审稿人已分配。");
       await loadWorkbench();
     } catch (error) {
-      showApiError(error, "Reviewer could not be assigned.");
+      showApiError(error, "审稿人分配失败。");
     }
   });
 }
@@ -100,10 +118,10 @@ async function overdue(assignmentId: number) {
   await actions.run(`overdue:${assignmentId}`, async () => {
     try {
       await markOverdue(assignmentId);
-      ElMessage.success("Assignment marked overdue.");
+      ElMessage.success("任务已标记为过期。");
       await loadWorkbench();
     } catch (error) {
-      showApiError(error, "Assignment could not be marked overdue.");
+      showApiError(error, "任务标记过期失败。");
     }
   });
 }
@@ -112,10 +130,10 @@ async function conflict(row: DecisionWorkbenchItem) {
   await actions.run(`conflict:${row.roundId}`, async () => {
     try {
       await triggerConflictAnalysis(row.roundId);
-      ElMessage.success("Conflict analysis requested.");
+      ElMessage.success("冲突分析已请求。");
       await loadWorkbench();
     } catch (error) {
-      showApiError(error, "Conflict analysis could not be requested.");
+      showApiError(error, "冲突分析请求失败。");
     }
   });
 }
@@ -127,9 +145,9 @@ async function generateDrafts(row: DecisionWorkbenchItem) {
       if (!draftDeadlineByRound[row.roundId]) {
         draftDeadlineByRound[row.roundId] = defaultReviewDeadline();
       }
-      ElMessage.success("Assignment drafts generated.");
+      ElMessage.success("分配草稿已生成。");
     } catch (error) {
-      showApiError(error, "Assignment drafts could not be generated.");
+      showApiError(error, "分配草稿生成失败。");
     }
   });
 }
@@ -139,9 +157,9 @@ async function assignmentAssist(row: DecisionWorkbenchItem) {
     try {
       await runAssignmentAssist(row.roundId);
       assignmentAssistByRound[row.roundId] = await getAssignmentAssist(row.roundId);
-      ElMessage.success("Assignment assist requested.");
+      ElMessage.success("分配辅助已请求。");
     } catch (error) {
-      showApiError(error, "Assignment assist could not be requested.");
+      showApiError(error, "分配辅助请求失败。");
     }
   });
 }
@@ -154,10 +172,10 @@ async function confirmDrafts(row: DecisionWorkbenchItem) {
   await actions.run(`confirm-drafts:${row.roundId}`, async () => {
     try {
       await confirmAssignmentDrafts(row.roundId, draftIds, draftDeadlineByRound[row.roundId] || defaultReviewDeadline());
-      ElMessage.success("Assignment drafts confirmed.");
+      ElMessage.success("分配草稿已确认。");
       await loadWorkbench();
     } catch (error) {
-      showApiError(error, "Assignment drafts could not be confirmed.");
+      showApiError(error, "分配草稿确认失败。");
     }
   });
 }
@@ -198,10 +216,10 @@ async function submitDecision() {
     try {
       await decide(decisionForm);
       decisionDialogOpen.value = false;
-      ElMessage.success("Decision submitted.");
+      ElMessage.success("决策已提交。");
       await loadWorkbench();
     } catch (error) {
-      showApiError(error, "Decision could not be submitted.");
+      showApiError(error, "决策提交失败。");
     }
   });
 }
@@ -217,7 +235,7 @@ async function openMetaReview(row: DecisionWorkbenchItem) {
       }
       metaReviewDialogOpen.value = true;
     } catch (error) {
-      showApiError(error, "Meta-review form could not be loaded.");
+      showApiError(error, "元评审表单加载失败。");
     }
   });
 }
@@ -230,7 +248,7 @@ async function submitMetaReview() {
     field.required && !String(metaReviewAnswers[field.fieldKey] ?? "").trim()
   );
   if (missingRequired) {
-    ElMessage.error("Required meta-review fields must be completed.");
+    ElMessage.error("元评审必填项尚未填写完整。");
     return;
   }
   await actions.run(`submit-meta-review:${metaReviewManuscriptId.value}`, async () => {
@@ -241,10 +259,10 @@ async function submitMetaReview() {
         answers: { ...metaReviewAnswers }
       });
       metaReviewDialogOpen.value = false;
-      ElMessage.success("Meta-review submitted.");
+      ElMessage.success("元评审已提交。");
       await loadWorkbench();
     } catch (error) {
-      showApiError(error, "Meta-review could not be submitted.");
+      showApiError(error, "元评审提交失败。");
     }
   });
 }
@@ -255,45 +273,45 @@ async function submitMetaReview() {
   <section class="workflow-page">
     <div class="page-heading dossier-header">
       <div>
-        <p class="eyebrow">Chair</p>
-        <h1>Decision workbench</h1>
-        <p class="body">Review round status, conflict checks, and agent evidence before a decision.</p>
+        <p class="eyebrow">主席</p>
+        <h1>决策工作台</h1>
+        <p class="body">在做出决策前查看评审轮次状态、冲突检查及 Agent 分析证据。</p>
       </div>
-      <el-button :loading="loading" @click="loadWorkbench">Refresh</el-button>
+      <el-button :loading="loading" @click="loadWorkbench">刷新</el-button>
     </div>
 
-    <el-table v-loading="loading" :data="rows" row-key="roundId" empty-text="No active review rounds.">
+    <el-table v-loading="loading" :data="rows" row-key="roundId" empty-text="暂无活跃的评审轮次。">
       <el-table-column type="expand">
         <template #default="{ row }">
           <div class="expanded-panel">
-            <el-descriptions title="Round details" :column="3" border>
-              <el-descriptions-item label="Assignments">{{ row.assignmentCount }}</el-descriptions-item>
-              <el-descriptions-item label="Submitted reviews">{{ row.submittedReviewCount }}</el-descriptions-item>
-              <el-descriptions-item label="Conflicts">{{ row.conflictCount }}</el-descriptions-item>
-              <el-descriptions-item label="Deadline">{{ formatDateTime(row.deadlineAt) }}</el-descriptions-item>
-              <el-descriptions-item label="Last decision">{{ workflowLabel(row.lastDecisionCode) }}</el-descriptions-item>
+            <el-descriptions title="轮次详情" :column="3" border>
+              <el-descriptions-item label="分配">{{ row.assignmentCount }}</el-descriptions-item>
+              <el-descriptions-item label="已提交评审">{{ row.submittedReviewCount }}</el-descriptions-item>
+              <el-descriptions-item label="冲突">{{ row.conflictCount }}</el-descriptions-item>
+              <el-descriptions-item label="截止日期">{{ formatDateTime(row.deadlineAt) }}</el-descriptions-item>
+              <el-descriptions-item label="最近决策">{{ workflowLabel(row.lastDecisionCode) }}</el-descriptions-item>
             </el-descriptions>
 
-            <h2>Assignments</h2>
+            <h2>分配</h2>
             <el-table :data="row.assignments" size="small">
-              <el-table-column prop="assignmentId" label="Assignment" width="120" />
-              <el-table-column prop="reviewerId" label="Reviewer" width="120" />
-              <el-table-column prop="taskStatus" label="Status" width="140">
+              <el-table-column prop="assignmentId" label="分配 ID" width="120" />
+              <el-table-column prop="reviewerId" label="审稿人" width="120" />
+              <el-table-column prop="taskStatus" label="状态" width="140">
                 <template #default="{ row: assignment }">
                   <el-tag :type="statusTagType(assignment.taskStatus)">{{ workflowLabel(assignment.taskStatus) }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="deadlineAt" label="Deadline" min-width="170">
+              <el-table-column prop="deadlineAt" label="截止日期" min-width="170">
                 <template #default="{ row: assignment }">{{ formatDateTime(assignment.deadlineAt) }}</template>
               </el-table-column>
-              <el-table-column label="Actions" width="180">
+              <el-table-column label="操作" width="180">
                 <template #default="{ row: assignment }">
                   <el-button
                     size="small"
                     :loading="actions.isPending(`overdue:${assignment.assignmentId}`)"
                     @click="overdue(assignment.assignmentId)"
                   >
-                    Mark overdue
+                    标记过期
                   </el-button>
                 </template>
               </el-table-column>
@@ -301,14 +319,14 @@ async function submitMetaReview() {
 
             <section class="workflow-section">
               <div class="subsection-heading">
-                <h2>Assignment drafts</h2>
+                <h2>分配草稿</h2>
                 <div class="action-row">
                   <el-button
                     size="small"
                     :loading="actions.isPending(`drafts:${row.roundId}`)"
                     @click="generateDrafts(row)"
                   >
-                    Generate drafts
+                    生成草稿
                   </el-button>
                   <el-button
                     size="small"
@@ -316,7 +334,7 @@ async function submitMetaReview() {
                     :loading="actions.isPending(`assignment-assist:${row.roundId}`)"
                     @click="assignmentAssist(row)"
                   >
-                    Run assignment assist
+                    运行分配辅助
                   </el-button>
                   <el-button
                     size="small"
@@ -325,22 +343,22 @@ async function submitMetaReview() {
                     :loading="actions.isPending(`confirm-drafts:${row.roundId}`)"
                     @click="confirmDrafts(row)"
                   >
-                    Confirm drafts
+                    确认草稿
                   </el-button>
                 </div>
               </div>
-              <el-table :data="draftsByRound[row.roundId] ?? []" size="small" empty-text="No assignment drafts generated.">
-                <el-table-column prop="rankOrder" label="Rank" width="80" />
-                <el-table-column label="Reviewer" width="140">
-                  <template #default="{ row: draft }">Reviewer {{ draft.reviewerId }}</template>
+              <el-table :data="draftsByRound[row.roundId] ?? []" size="small" empty-text="暂无分配草稿。">
+                <el-table-column prop="rankOrder" label="排名" width="80" />
+                <el-table-column label="审稿人" width="140">
+                  <template #default="{ row: draft }">审稿人 {{ draft.reviewerId }}</template>
                 </el-table-column>
-                <el-table-column label="Load" width="120">
+                <el-table-column label="负荷" width="120">
                   <template #default="{ row: draft }">{{ draft.currentLoad }}/{{ draft.maxLoad }}</template>
                 </el-table-column>
-                <el-table-column prop="bidValue" label="Bid" width="160">
+                <el-table-column prop="bidValue" label="投标" width="160">
                   <template #default="{ row: draft }">{{ workflowLabel(draft.bidValue) }}</template>
                 </el-table-column>
-                <el-table-column prop="reason" label="Reason" min-width="220" />
+                <el-table-column prop="reason" label="原因" min-width="220" />
               </el-table>
               <article
                 v-for="projection in assignmentAssistProjections(row)"
@@ -358,10 +376,10 @@ async function submitMetaReview() {
               </article>
             </section>
 
-            <h2>Conflict analysis projections</h2>
+            <h2>冲突分析投影</h2>
             <el-alert
               v-if="!conflictProjections(row).length"
-              title="No conflict analysis projections yet."
+              title="暂无冲突分析投影。"
               type="info"
               :closable="false"
             />
@@ -378,61 +396,61 @@ async function submitMetaReview() {
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="roundId" label="Round" width="100" />
-      <el-table-column prop="title" label="Title" min-width="220" />
-      <el-table-column prop="roundStatus" label="Round status" width="150">
+      <el-table-column prop="roundId" label="轮次" width="100" />
+      <el-table-column prop="title" label="标题" min-width="220" />
+      <el-table-column prop="roundStatus" label="轮次状态" width="150">
         <template #default="{ row }">
           <el-tag :type="statusTagType(row.roundStatus)">{{ workflowLabel(row.roundStatus) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="currentStatus" label="Manuscript status" width="170">
+      <el-table-column prop="currentStatus" label="稿件状态" width="170">
         <template #default="{ row }">
           <el-tag :type="statusTagType(row.currentStatus)">{{ workflowLabel(row.currentStatus) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="Counts" width="180">
+      <el-table-column label="计数" width="180">
         <template #default="{ row }">
-          {{ row.submittedReviewCount }}/{{ row.assignmentCount }} reviews, {{ row.conflictCount }} conflicts
+          {{ row.submittedReviewCount }}/{{ row.assignmentCount }} 评审，{{ row.conflictCount }} 冲突
         </template>
       </el-table-column>
-      <el-table-column label="Actions" width="360">
+      <el-table-column label="操作" width="360">
         <template #default="{ row }">
           <div class="action-row">
-            <el-button size="small" @click="openAssign(row)">Assign reviewer</el-button>
+            <el-button size="small" @click="openAssign(row)">分配审稿人</el-button>
             <el-button
               size="small"
               :loading="actions.isPending(`conflict:${row.roundId}`)"
               @click="conflict(row)"
             >
-              Conflict analysis
+              冲突分析
             </el-button>
             <el-button
               size="small"
               :loading="actions.isPending(`load-meta-review:${row.manuscriptId}`)"
               @click="openMetaReview(row)"
             >
-              Meta-review
+              元评审
             </el-button>
-            <el-button size="small" type="primary" @click="openDecision(row)">Submit decision</el-button>
+            <el-button size="small" type="primary" @click="openDecision(row)">提交决策</el-button>
           </div>
         </template>
       </el-table-column>
       <template #empty>
-        <el-empty description="No active review rounds." />
+        <el-empty description="暂无活跃的评审轮次。" />
       </template>
     </el-table>
 
     <section class="agent-trace-panel">
       <div class="agent-trace-header">
         <div>
-          <p class="eyebrow">Agent Trace</p>
-          <h2>Agent result coverage</h2>
+        <p class="eyebrow">Agent 跟踪</p>
+        <h2>Agent 分析覆盖情况</h2>
         </div>
-        <el-tag type="warning">Chair only</el-tag>
+        <el-tag type="warning">仅主席可见</el-tag>
       </div>
       <el-alert
         v-if="!rows.some((row) => conflictProjections(row).length)"
-        title="No conflict analysis projections are available for active rounds."
+        title="当前轮次暂无冲突分析投影。"
         type="info"
         :closable="false"
       />
@@ -440,7 +458,7 @@ async function submitMetaReview() {
         <article v-if="conflictProjections(row).length" class="trace-entry">
           <div class="trace-entry-heading">
             <strong>Round {{ row.roundNo }} · Manuscript {{ row.manuscriptId }}</strong>
-            <span>{{ conflictProjections(row).length }} projection{{ conflictProjections(row).length === 1 ? "" : "s" }}</span>
+            <span>{{ conflictProjections(row).length }} 个投影</span>
           </div>
           <div class="action-row">
             <el-tag
@@ -455,47 +473,76 @@ async function submitMetaReview() {
       </template>
     </section>
 
-    <el-dialog v-model="assignDialogOpen" title="Assign reviewer" width="520px">
+    <el-dialog v-model="assignDialogOpen" title="分配审稿人" width="520px">
       <el-form ref="assignFormRef" :model="assignForm" :rules="assignRules" label-position="top">
-        <el-form-item label="Reviewer id" prop="reviewerId">
-          <el-input-number v-model="assignForm.reviewerId" :min="1" />
+        <el-form-item label="审稿人 ID" prop="reviewerId">
+          <el-select
+            v-model="assignForm.reviewerId"
+            data-test="assignment-candidate-select"
+            filterable
+            :loading="actions.isPending(`assignment-candidates:${assignForm.roundId}`)"
+            placeholder="选择可分配审稿人"
+          >
+            <el-option
+              v-for="candidate in assignmentCandidates"
+              :key="candidate.reviewerId"
+              :label="`${candidate.reviewerName} · ${candidate.institution || '未知机构'} · ${candidate.currentLoad}/${candidate.maxLoad}`"
+              :value="candidate.reviewerId"
+            >
+              <span>{{ candidate.reviewerName }}</span>
+              <span class="option-meta">
+                ID {{ candidate.reviewerId }} · {{ candidate.institution || "未知机构" }} ·
+                负荷 {{ candidate.currentLoad }}/{{ candidate.maxLoad }} · {{ workflowLabel(candidate.bidValue) }}
+              </span>
+            </el-option>
+          </el-select>
         </el-form-item>
-        <el-form-item label="Deadline" prop="deadlineAt">
+        <el-table :data="assignmentCandidates" size="small" empty-text="暂无可分配审稿人。">
+          <el-table-column prop="reviewerName" label="审稿人" min-width="140" />
+          <el-table-column prop="institution" label="机构" min-width="160" />
+          <el-table-column label="负荷" width="100">
+            <template #default="{ row }">{{ row.currentLoad }}/{{ row.maxLoad }}</template>
+          </el-table-column>
+          <el-table-column label="投标" width="130">
+            <template #default="{ row }">{{ workflowLabel(row.bidValue) }}</template>
+          </el-table-column>
+        </el-table>
+        <el-form-item label="截止日期" prop="deadlineAt">
           <el-date-picker
             v-model="assignForm.deadlineAt"
             type="datetime"
             value-format="YYYY-MM-DDTHH:mm:ss[Z]"
-            placeholder="Select deadline"
+            placeholder="选择截止日期"
           />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button :disabled="actions.isPending('assign-reviewer')" @click="assignDialogOpen = false">Cancel</el-button>
-        <el-button type="primary" :loading="actions.isPending('assign-reviewer')" @click="submitAssign">Assign</el-button>
+        <el-button :disabled="actions.isPending('assign-reviewer')" @click="assignDialogOpen = false">取消</el-button>
+        <el-button type="primary" :loading="actions.isPending('assign-reviewer')" @click="submitAssign">确认分配</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="decisionDialogOpen" title="Submit decision" width="560px">
+    <el-dialog v-model="decisionDialogOpen" title="提交决策" width="560px">
       <el-form ref="decisionFormRef" :model="decisionForm" :rules="decisionRules" label-position="top">
-        <el-form-item label="Decision" prop="decisionCode">
+        <el-form-item label="决策" prop="decisionCode">
           <el-select v-model="decisionForm.decisionCode">
-            <el-option label="Accept" value="ACCEPT" />
-            <el-option label="Minor revision" value="MINOR_REVISION" />
-            <el-option label="Major revision" value="MAJOR_REVISION" />
-            <el-option label="Reject" value="REJECT" />
+            <el-option label="接收" value="ACCEPT" />
+            <el-option label="小修" value="MINOR_REVISION" />
+            <el-option label="大修" value="MAJOR_REVISION" />
+            <el-option label="拒稿" value="REJECT" />
           </el-select>
         </el-form-item>
-        <el-form-item label="Reason" prop="decisionReason">
+        <el-form-item label="原因" prop="decisionReason">
           <el-input v-model="decisionForm.decisionReason" type="textarea" :rows="4" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button :disabled="actions.isPending('submit-decision')" @click="decisionDialogOpen = false">Cancel</el-button>
-        <el-button type="primary" :loading="actions.isPending('submit-decision')" @click="submitDecision">Submit decision</el-button>
+        <el-button :disabled="actions.isPending('submit-decision')" @click="decisionDialogOpen = false">取消</el-button>
+        <el-button type="primary" :loading="actions.isPending('submit-decision')" @click="submitDecision">提交决策</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="metaReviewDialogOpen" title="Meta-review" width="640px">
+    <el-dialog v-model="metaReviewDialogOpen" title="元评审" width="640px">
       <template v-if="metaReviewForm">
         <h2>{{ metaReviewForm.form.formName }}</h2>
         <el-form label-position="top">
@@ -524,13 +571,13 @@ async function submitMetaReview() {
         </el-form>
       </template>
       <template #footer>
-        <el-button @click="metaReviewDialogOpen = false">Cancel</el-button>
+        <el-button @click="metaReviewDialogOpen = false">取消</el-button>
         <el-button
           type="primary"
           :loading="metaReviewManuscriptId ? actions.isPending(`submit-meta-review:${metaReviewManuscriptId}`) : false"
           @click="submitMetaReview"
         >
-          Submit meta-review
+          提交元评审
         </el-button>
       </template>
     </el-dialog>

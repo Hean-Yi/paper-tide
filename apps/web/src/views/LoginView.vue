@@ -15,8 +15,8 @@ const validation = reactive({
 });
 
 async function submit() {
-  validation.username = form.username.trim() ? "" : "Username is required.";
-  validation.password = form.password ? "" : "Password is required.";
+  validation.username = form.username.trim() ? "" : "请输入用户名";
+  validation.password = form.password ? "" : "请输入密码";
   if (validation.username || validation.password) {
     return;
   }
@@ -32,13 +32,13 @@ async function submit() {
 <template>
   <main class="login-page">
     <section class="login-panel" aria-labelledby="login-title">
-      <p class="eyebrow">Review System</p>
-      <h1 id="login-title">Sign in to Review System</h1>
-      <p class="body">Use your paper review account to continue.</p>
+      <p class="eyebrow">论文评审系统</p>
+      <h1 id="login-title">登录论文评审系统</h1>
+      <p class="body">使用您的论文评审账号继续。</p>
 
       <form class="login-form" @submit.prevent="submit">
         <label class="field">
-          <span>Username</span>
+          <span>用户名</span>
           <el-input
             v-model="form.username"
             data-test="username"
@@ -49,7 +49,7 @@ async function submit() {
         </label>
 
         <label class="field">
-          <span>Password</span>
+          <span>密码</span>
           <el-input
             v-model="form.password"
             data-test="password"
@@ -69,9 +69,9 @@ async function submit() {
           type="primary"
           :loading="authState.loading"
         >
-          Sign in
+          登录
         </el-button>
-        <RouterLink to="/register">Create an account</RouterLink>
+        <RouterLink to="/register">注册账号</RouterLink>
       </form>
     </section>
   </main>

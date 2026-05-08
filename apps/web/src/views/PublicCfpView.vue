@@ -17,7 +17,7 @@ async function loadCfps() {
   try {
     conferences.value = await listPublicCfps();
   } catch (err) {
-    error.value = apiErrorMessage(err, "Conference CFPs are unavailable.");
+    error.value = apiErrorMessage(err, "会议 CFP 暂时无法加载。");
   } finally {
     loading.value = false;
   }
@@ -28,34 +28,34 @@ async function loadCfps() {
   <section class="workflow-page">
     <div class="page-heading">
       <div>
-        <p class="eyebrow">Call for papers</p>
-        <h1>Conference CFPs</h1>
-        <p class="body">Browse open venues before creating an author account or submitting a paper.</p>
+        <p class="eyebrow">征稿启事</p>
+        <h1>会议 CFP</h1>
+        <p class="body">在创建作者账号或提交论文之前，浏览开放中的会场。</p>
       </div>
-      <el-button @click="loadCfps">Refresh</el-button>
+      <el-button @click="loadCfps">刷新</el-button>
     </div>
 
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
 
-    <el-table v-loading="loading" :data="conferences" empty-text="No public CFPs.">
-      <el-table-column prop="acronym" label="Acronym" width="120" />
-      <el-table-column label="Conference">
+    <el-table v-loading="loading" :data="conferences" empty-text="暂无公开 CFP。">
+      <el-table-column prop="acronym" label="缩写" width="120" />
+      <el-table-column label="会议">
         <template #default="{ row }">
           <strong>{{ row.name }}</strong>
           <p class="muted-line">{{ row.year }} · {{ row.publicSlug }}</p>
         </template>
       </el-table-column>
-      <el-table-column label="Status" width="180">
+      <el-table-column label="状态" width="180">
         <template #default="{ row }">
           <el-tag :type="statusTagType(row.status)">{{ workflowLabel(row.status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="Blind mode" width="170">
+      <el-table-column label="审稿模式" width="170">
         <template #default="{ row }">{{ workflowLabel(row.blindMode) }}</template>
       </el-table-column>
-      <el-table-column label="Submission window" min-width="260">
+      <el-table-column label="投稿时间窗口" min-width="260">
         <template #default="{ row }">
-          {{ formatDateTime(row.submissionOpenAt) }} to {{ formatDateTime(row.submissionCloseAt) }}
+          {{ formatDateTime(row.submissionOpenAt) }} 至 {{ formatDateTime(row.submissionCloseAt) }}
         </template>
       </el-table-column>
     </el-table>

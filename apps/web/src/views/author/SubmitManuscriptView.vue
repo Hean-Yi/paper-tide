@@ -62,10 +62,10 @@ const requiredTrimmed = (message: string): FormItemRule => ({
   }
 });
 const draftRules: FormRules = {
-  conferenceId: [{ required: true, message: "Conference is required", trigger: "change" }],
-  title: [requiredTrimmed("Title is required")],
-  abstract: [requiredTrimmed("Abstract is required")],
-  keywords: [requiredTrimmed("Keywords are required")]
+  conferenceId: [{ required: true, message: "请选择会议", trigger: "change" }],
+  title: [requiredTrimmed("请输入标题")],
+  abstract: [requiredTrimmed("请输入摘要")],
+  keywords: [requiredTrimmed("请输入关键词")]
 };
 
 const selectedConference = computed(() =>
@@ -127,9 +127,9 @@ async function createDraft() {
       authors: form.authors
     });
     await loadSubmissionChecklist();
-    ElMessage.success("Manuscript created.");
+    ElMessage.success("稿件已创建。");
   } catch (error) {
-    showApiError(error, "Manuscript could not be created.");
+    showApiError(error, "稿件创建失败。");
   } finally {
     submitting.value = false;
   }
@@ -155,7 +155,7 @@ async function submitChecklist() {
     return;
   }
   if (hasMissingRequiredChecklistAnswer()) {
-    ElMessage.error("Required checklist fields must be completed.");
+    ElMessage.error("核对清单必填项必须完成。");
     return;
   }
   checklistSubmitting.value = true;
@@ -165,10 +165,10 @@ async function submitChecklist() {
       responseStatus: "SUBMITTED",
       answers: { ...checklistAnswers }
     });
-    ElMessage.success("Submission checklist submitted.");
+    ElMessage.success("投稿核对清单已提交。");
     await loadSubmissionChecklist();
   } catch (error) {
-    showApiError(error, "Submission checklist could not be submitted.");
+    showApiError(error, "投稿核对清单提交失败。");
   } finally {
     checklistSubmitting.value = false;
   }
@@ -187,9 +187,9 @@ async function uploadSelectedPdf() {
   await actions.run("upload-pdf", async () => {
     try {
       await uploadPdf(created.value!.manuscriptId, created.value!.currentVersionId, selectedPdf.value!);
-      ElMessage.success("PDF uploaded.");
+      ElMessage.success("PDF 已上传。");
     } catch (error) {
-      showApiError(error, "PDF could not be uploaded.");
+      showApiError(error, "PDF 上传失败。");
     }
   });
 }
@@ -201,10 +201,10 @@ async function submitCurrentVersion() {
   await actions.run("submit-version", async () => {
     try {
       await submitVersion(created.value!.manuscriptId, created.value!.currentVersionId);
-      ElMessage.success("Manuscript submitted.");
+      ElMessage.success("稿件已提交。");
       await router.push("/author/manuscripts");
     } catch (error) {
-      showApiError(error, "Manuscript could not be submitted.");
+      showApiError(error, "稿件提交失败。");
     }
   });
 }
@@ -217,7 +217,7 @@ async function loadConferences() {
       form.conferenceId = conferences.value[0].conferenceId;
     }
   } catch (error) {
-    showApiError(error, "Conferences could not be loaded.");
+    showApiError(error, "会议加载失败。");
   } finally {
     loadingConferences.value = false;
   }
@@ -236,16 +236,16 @@ onMounted(() => {
   <section class="workflow-page">
     <div class="page-heading dossier-header">
       <div>
-        <p class="eyebrow">Author</p>
-        <h1>Submit manuscript</h1>
-        <p class="body">Create the manuscript record, upload the PDF, then submit the current version.</p>
+        <p class="eyebrow">作者</p>
+        <h1>提交稿件</h1>
+        <p class="body">创建稿件记录、上传 PDF，然后提交当前版本。</p>
         <p class="body">{{ PDF_UPLOAD_LIMIT_HINT }}</p>
       </div>
     </div>
 
     <el-form ref="draftFormRef" class="workflow-form" :model="form" :rules="draftRules" label-position="top" @submit.prevent="createDraft">
-      <el-form-item label="Conference" prop="conferenceId">
-        <el-select v-model="form.conferenceId" data-test="manuscript-conference" :loading="loadingConferences" placeholder="Select conference">
+      <el-form-item label="会议" prop="conferenceId">
+        <el-select v-model="form.conferenceId" data-test="manuscript-conference" :loading="loadingConferences" placeholder="选择会议">
           <el-option
             v-for="conference in conferences"
             :key="conference.conferenceId"
@@ -256,35 +256,35 @@ onMounted(() => {
       </el-form-item>
       <el-alert v-if="selectedConference" class="workflow-alert compact-alert" type="info" :closable="false">
         <template #title>
-          {{ selectedConference.name }} uses {{ workflowLabel(selectedConference.blindMode) }} review.
+          {{ selectedConference.name }} 使用 {{ workflowLabel(selectedConference.blindMode) }} 评审。
         </template>
-        Submission closes {{ formatDeadline(selectedConference.submissionCloseAt) }}.
+        投稿截止时间 {{ formatDeadline(selectedConference.submissionCloseAt) }}。
       </el-alert>
-      <el-form-item label="Title" prop="title">
-        <el-input v-model="form.title" placeholder="Title" />
+      <el-form-item label="标题" prop="title">
+        <el-input v-model="form.title" placeholder="诞文标题" />
       </el-form-item>
-      <el-form-item label="Abstract" prop="abstract">
+      <el-form-item label="摘要" prop="abstract">
         <el-input v-model="form.abstract" type="textarea" :rows="5" />
       </el-form-item>
-      <el-form-item label="Keywords" prop="keywords">
-        <el-input v-model="form.keywords" placeholder="comma,separated,keywords" />
+      <el-form-item label="关键词" prop="keywords">
+        <el-input v-model="form.keywords" placeholder="逗号分隔的关键词" />
       </el-form-item>
       <section class="subsection">
         <div class="subsection-heading">
-          <h2>Authors</h2>
-          <el-button @click="addAuthor">Add author</el-button>
+          <h2>作者</h2>
+          <el-button @click="addAuthor">添加作者</el-button>
         </div>
         <div v-for="(author, index) in form.authors" :key="index" class="author-row">
-          <el-input v-model="author.authorName" placeholder="Name" />
-          <el-input v-model="author.email" placeholder="Email" />
-          <el-input v-model="author.institution" placeholder="Institution" />
-          <el-checkbox v-model="author.isCorresponding">Corresponding</el-checkbox>
-          <el-button :disabled="form.authors.length === 1" @click="removeAuthor(index)">Remove</el-button>
+          <el-input v-model="author.authorName" placeholder="姓名" />
+          <el-input v-model="author.email" placeholder="邮箱" />
+          <el-input v-model="author.institution" placeholder="所属机构" />
+          <el-checkbox v-model="author.isCorresponding">通讯作者</el-checkbox>
+          <el-button :disabled="form.authors.length === 1" @click="removeAuthor(index)">删除</el-button>
         </div>
       </section>
 
       <el-button type="primary" native-type="submit" :loading="submitting" :disabled="!!created">
-        Create manuscript
+        创建稿件
       </el-button>
     </el-form>
 
@@ -300,7 +300,7 @@ onMounted(() => {
           {{ workflowLabel(created.currentStatus) }}
         </el-tag>
       </template>
-      Upload the PDF before final submission.
+      上传 PDF 后方可最终提交。
     </el-alert>
 
     <section v-if="created && submissionChecklist" class="workflow-form review-form-panel">
@@ -333,17 +333,17 @@ onMounted(() => {
           <el-switch v-else-if="field.fieldType === 'BOOLEAN'" v-model="checklistAnswers[field.fieldKey]" />
           <el-input v-else v-model="checklistAnswers[field.fieldKey]" />
         </el-form-item>
-        <el-button type="primary" native-type="submit" :loading="checklistSubmitting">Submit checklist</el-button>
+        <el-button type="primary" native-type="submit" :loading="checklistSubmitting">提交核对清单</el-button>
       </el-form>
     </section>
 
     <div v-if="created" class="upload-actions">
       <p class="body">{{ PDF_UPLOAD_LIMIT_HINT }}</p>
       <el-upload :auto-upload="false" :limit="1" :on-change="selectPdf">
-        <el-button>Select PDF</el-button>
+        <el-button>选择 PDF</el-button>
       </el-upload>
-      <el-button :disabled="!selectedPdf" :loading="actions.isPending('upload-pdf')" @click="uploadSelectedPdf">Upload PDF</el-button>
-      <el-button type="primary" :loading="actions.isPending('submit-version')" @click="submitCurrentVersion">Submit version</el-button>
+      <el-button :disabled="!selectedPdf" :loading="actions.isPending('upload-pdf')" @click="uploadSelectedPdf">上传 PDF</el-button>
+      <el-button type="primary" :loading="actions.isPending('submit-version')" @click="submitCurrentVersion">提交版本</el-button>
     </div>
   </section>
 </template>

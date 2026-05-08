@@ -55,9 +55,9 @@ const revisionForm = reactive({
   ] as AuthorInput[]
 });
 const revisionRules: FormRules = {
-  title: [{ required: true, message: "Title is required", trigger: "blur" }],
-  abstract: [{ required: true, message: "Abstract is required", trigger: "blur" }],
-  keywords: [{ required: true, message: "Keywords are required", trigger: "blur" }]
+  title: [{ required: true, message: "请输入标题", trigger: "blur" }],
+  abstract: [{ required: true, message: "请输入摘要", trigger: "blur" }],
+  keywords: [{ required: true, message: "请输入关键词", trigger: "blur" }]
 };
 const cameraReadyForm = reactive({
   fileName: "",
@@ -93,7 +93,7 @@ async function loadManuscripts() {
   try {
     manuscripts.value = await listManuscripts();
   } catch (error) {
-    showApiError(error, "Manuscripts could not be loaded.");
+    showApiError(error, "稿件加载失败。");
   } finally {
     loading.value = false;
   }
@@ -110,10 +110,10 @@ async function selectPdf(row: ManuscriptSummary, file: UploadFile) {
   await actions.run(uploadKey(row.manuscriptId), async () => {
     try {
       await uploadPdf(row.manuscriptId, row.currentVersionId, file.raw!);
-      ElMessage.success("PDF uploaded.");
+      ElMessage.success("PDF 已上传。");
       await loadManuscripts();
     } catch (error) {
-      showApiError(error, "PDF could not be uploaded.");
+      showApiError(error, "PDF 上传失败。");
     }
   });
 }
@@ -126,10 +126,10 @@ async function submit(row: ManuscriptSummary) {
   await actions.run(submitKey(row.manuscriptId), async () => {
     try {
       await submitVersion(row.manuscriptId, row.currentVersionId);
-      ElMessage.success("Version submitted.");
+      ElMessage.success("版本已提交。");
       await loadManuscripts();
     } catch (error) {
-      showApiError(error, "Version could not be submitted.");
+      showApiError(error, "版本提交失败。");
     }
   });
 }
@@ -142,7 +142,7 @@ async function download(row: ManuscriptSummary) {
       window.open(url, "_blank", "noopener");
       URL.revokeObjectURL(url);
     } catch (error) {
-      showApiError(error, "PDF could not be downloaded.");
+      showApiError(error, "PDF 下载失败。");
     }
   });
 }
@@ -153,7 +153,7 @@ async function openDecisionPackage(row: ManuscriptSummary) {
       decisionPackage.value = await getDecisionPackage(row.manuscriptId);
       decisionDialogOpen.value = true;
     } catch (error) {
-      showApiError(error, "Decision package could not be loaded.");
+      showApiError(error, "决策包加载失败。");
     }
   });
 }
@@ -184,11 +184,11 @@ async function submitCameraReadyForm() {
     return;
   }
   if (!cameraReadyForm.fileName.trim() || !cameraReadyForm.copyrightConfirmed) {
-    ElMessage.error("Camera-ready file name and copyright confirmation are required.");
+    ElMessage.error("终稿 PDF 文件名称和版权确认为必喆。");
     return;
   }
   if (hasMissingCameraReadyAnswer()) {
-    ElMessage.error("Required camera-ready checklist fields must be completed.");
+    ElMessage.error("终稿核对清单必填项必须完成。");
     return;
   }
   const manuscriptId = cameraReadyManuscript.value.manuscriptId;
@@ -208,9 +208,9 @@ async function submitCameraReadyForm() {
         licenseType: cameraReadyForm.licenseType
       });
       cameraReadyDialogOpen.value = false;
-      ElMessage.success("Camera-ready package submitted.");
+      ElMessage.success("终稿套件已提交。");
     } catch (error) {
-      showApiError(error, "Camera-ready package could not be submitted.");
+      showApiError(error, "终稿套件提交失败。");
     }
   });
 }
@@ -244,10 +244,10 @@ async function submitRevision() {
     try {
       await createRevision(revisionManuscriptId.value!, revisionForm);
       revisionDialogOpen.value = false;
-      ElMessage.success("Revision draft created.");
+      ElMessage.success("修订版草稿已创建。");
       await loadManuscripts();
     } catch (error) {
-      showApiError(error, "Revision could not be created.");
+      showApiError(error, "修订版创建失败。");
     }
   });
 }
@@ -257,49 +257,49 @@ async function submitRevision() {
   <section class="workflow-page">
     <div class="page-heading dossier-header">
       <div>
-        <p class="eyebrow">Author</p>
-        <h1>My manuscripts</h1>
-        <p class="body">Track submissions, upload PDFs, and submit draft versions.</p>
+        <p class="eyebrow">作者</p>
+        <h1>我的稿件</h1>
+        <p class="body">跟踪投稿状态、上传 PDF 并提交草稿版本。</p>
         <p class="body">{{ PDF_UPLOAD_LIMIT_HINT }}</p>
       </div>
       <div class="action-row">
-        <el-button @click="loadManuscripts">Refresh</el-button>
-        <el-button type="primary" @click="router.push('/author/submit')">Create manuscript</el-button>
+        <el-button @click="loadManuscripts">刷新</el-button>
+        <el-button type="primary" @click="router.push('/author/submit')">创建稿件</el-button>
       </div>
     </div>
 
-    <el-table v-loading="loading" :data="manuscripts" empty-text="No manuscripts yet.">
-      <el-table-column prop="manuscriptId" label="Manuscript" width="120" />
-      <el-table-column prop="currentVersionTitle" label="Title" min-width="220" />
-      <el-table-column label="Version" width="110">
+    <el-table v-loading="loading" :data="manuscripts" empty-text="暂无稿件。">
+      <el-table-column prop="manuscriptId" label="稿件" width="120" />
+      <el-table-column prop="currentVersionTitle" label="标题" min-width="220" />
+      <el-table-column label="版本" width="110">
         <template #default="{ row }">v{{ row.currentVersionNo }}</template>
       </el-table-column>
-      <el-table-column prop="currentStatus" label="Status" width="170">
+      <el-table-column prop="currentStatus" label="状态" width="170">
         <template #default="{ row }">
           <el-tag :type="statusTagType(row.currentStatus)">{{ workflowLabel(row.currentStatus) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="submittedAt" label="Submitted" min-width="170">
+      <el-table-column prop="submittedAt" label="提交时间" min-width="170">
         <template #default="{ row }">{{ formatDateTime(row.submittedAt) }}</template>
       </el-table-column>
-      <el-table-column prop="lastDecisionCode" label="Last decision" width="160">
+      <el-table-column prop="lastDecisionCode" label="最新决定" width="160">
         <template #default="{ row }">{{ workflowLabel(row.lastDecisionCode) }}</template>
       </el-table-column>
-      <el-table-column label="Actions" width="620">
+      <el-table-column label="操作" width="620">
         <template #default="{ row }">
           <div class="action-row">
             <el-upload :auto-upload="false" :show-file-list="false" :on-change="selectPdfForRow(row)">
-              <el-button size="small" :loading="actions.isPending(uploadKey(row.manuscriptId))">Upload PDF</el-button>
+              <el-button size="small" :loading="actions.isPending(uploadKey(row.manuscriptId))">上传 PDF</el-button>
             </el-upload>
-            <el-button size="small" :loading="actions.isPending(downloadKey(row.manuscriptId))" @click="download(row)">Download PDF</el-button>
-            <el-button size="small" type="primary" :loading="actions.isPending(submitKey(row.manuscriptId))" @click="submit(row)">Submit</el-button>
+            <el-button size="small" :loading="actions.isPending(downloadKey(row.manuscriptId))" @click="download(row)">下载 PDF</el-button>
+            <el-button size="small" type="primary" :loading="actions.isPending(submitKey(row.manuscriptId))" @click="submit(row)">提交</el-button>
             <el-button
               size="small"
               :disabled="row.currentStatus !== 'REVISION_REQUIRED'"
               :loading="actions.isPending(`author-create-revision:${row.manuscriptId}`)"
               @click="openRevision(row)"
             >
-              Create revision
+              创建修订版
             </el-button>
             <el-button
               size="small"
@@ -307,7 +307,7 @@ async function submitRevision() {
               :loading="actions.isPending(decisionPackageKey(row.manuscriptId))"
               @click="openDecisionPackage(row)"
             >
-              Decision package
+              决定包
             </el-button>
             <el-button
               size="small"
@@ -315,66 +315,66 @@ async function submitRevision() {
               :loading="actions.isPending(cameraReadyKey(row.manuscriptId))"
               @click="openCameraReady(row)"
             >
-              Camera-ready
+              终稿
             </el-button>
           </div>
         </template>
       </el-table-column>
       <template #empty>
-        <el-empty description="No manuscripts yet." />
+        <el-empty description="暂无稿件。" />
       </template>
     </el-table>
 
-    <el-dialog v-model="revisionDialogOpen" title="Create revision" width="640px">
+    <el-dialog v-model="revisionDialogOpen" title="创建修订版" width="640px">
       <el-form ref="revisionFormRef" :model="revisionForm" :rules="revisionRules" label-position="top">
-        <el-form-item label="Title" prop="title">
+        <el-form-item label="标题" prop="title">
           <el-input v-model="revisionForm.title" />
         </el-form-item>
-        <el-form-item label="Abstract" prop="abstract">
+        <el-form-item label="摘要" prop="abstract">
           <el-input v-model="revisionForm.abstract" type="textarea" :rows="4" />
         </el-form-item>
-        <el-form-item label="Keywords" prop="keywords">
+        <el-form-item label="关键词" prop="keywords">
           <el-input v-model="revisionForm.keywords" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="revisionDialogOpen = false">Cancel</el-button>
-        <el-button type="primary" @click="submitRevision">Create revision</el-button>
+        <el-button @click="revisionDialogOpen = false">取消</el-button>
+        <el-button type="primary" @click="submitRevision">创建修订版</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="decisionDialogOpen" title="Decision package" width="720px">
+    <el-dialog v-model="decisionDialogOpen" title="决定包" width="720px">
       <template v-if="decisionPackage">
         <el-descriptions :column="1" border>
-          <el-descriptions-item label="Decision">{{ workflowLabel(decisionPackage.decisionCode) }}</el-descriptions-item>
-          <el-descriptions-item label="Reason">{{ decisionPackage.decisionReason || "No decision letter provided." }}</el-descriptions-item>
-          <el-descriptions-item label="Decided at">{{ formatDateTime(decisionPackage.decidedAt) }}</el-descriptions-item>
+          <el-descriptions-item label="决定">{{ workflowLabel(decisionPackage.decisionCode) }}</el-descriptions-item>
+          <el-descriptions-item label="理由">{{ decisionPackage.decisionReason || "未提供决定函。" }}</el-descriptions-item>
+          <el-descriptions-item label="决定时间">{{ formatDateTime(decisionPackage.decidedAt) }}</el-descriptions-item>
         </el-descriptions>
         <div class="stacked-list">
           <el-card v-for="review in decisionPackage.reviews" :key="review.reviewId" shadow="never">
             <template #header>{{ review.reviewerLabel }} · {{ workflowLabel(review.recommendation) }}</template>
-            <p><strong>Overall:</strong> {{ review.overallScore }} / 5 · {{ review.confidenceLevel }}</p>
-            <p><strong>Strengths:</strong> {{ review.strengths || "Not provided." }}</p>
-            <p><strong>Weaknesses:</strong> {{ review.weaknesses || "Not provided." }}</p>
-            <p><strong>Comments:</strong> {{ review.commentsToAuthor || "Not provided." }}</p>
+            <p><strong>综合评分：</strong> {{ review.overallScore }} / 5 · {{ review.confidenceLevel }}</p>
+            <p><strong>优点：</strong> {{ review.strengths || "未提供。" }}</p>
+            <p><strong>不足：</strong> {{ review.weaknesses || "未提供。" }}</p>
+            <p><strong>评论：</strong> {{ review.commentsToAuthor || "未提供。" }}</p>
           </el-card>
         </div>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="cameraReadyDialogOpen" title="Submit camera-ready package" width="520px">
+    <el-dialog v-model="cameraReadyDialogOpen" title="提交终稿套件" width="520px">
       <el-form label-position="top">
-        <el-form-item label="Final PDF file name" required>
+        <el-form-item label="终稿 PDF 文件名" required>
           <el-input v-model="cameraReadyForm.fileName" />
         </el-form-item>
-        <el-form-item label="File size in bytes">
+        <el-form-item label="文件大小（字节）">
           <el-input-number v-model="cameraReadyForm.fileSize" :min="0" />
         </el-form-item>
-        <el-form-item label="License">
+        <el-form-item label="许可证">
           <el-input v-model="cameraReadyForm.licenseType" />
         </el-form-item>
         <el-checkbox v-model="cameraReadyForm.copyrightConfirmed">
-          I confirm the camera-ready package is final and publication rights are cleared.
+          我确认终稿套件已最终定稿，且出版权已迫。
         </el-checkbox>
         <section v-if="cameraReadyChecklist" class="workflow-form review-form-panel">
           <div class="subsection-heading">
@@ -408,13 +408,13 @@ async function submitRevision() {
         </section>
       </el-form>
       <template #footer>
-        <el-button @click="cameraReadyDialogOpen = false">Cancel</el-button>
+        <el-button @click="cameraReadyDialogOpen = false">取消</el-button>
         <el-button
           type="primary"
           :loading="cameraReadyManuscript ? actions.isPending(cameraReadyKey(cameraReadyManuscript.manuscriptId)) : false"
           @click="submitCameraReadyForm"
         >
-          Submit camera-ready
+          提交终稿
         </el-button>
       </template>
     </el-dialog>

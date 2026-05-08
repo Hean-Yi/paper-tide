@@ -43,7 +43,7 @@ async function loadPaper() {
       pageNo.value = 1;
     }
   } catch (err) {
-    error.value = err instanceof Error ? err.message : "Paper is unavailable.";
+    error.value = err instanceof Error ? err.message : "论文暂时不可用。";;
     metadata.value = null;
     revokePageUrl();
   } finally {
@@ -62,7 +62,7 @@ async function loadPage() {
     revokePageUrl();
     pageUrl.value = URL.createObjectURL(blob);
   } catch (err) {
-    error.value = err instanceof Error ? err.message : "Page is unavailable.";
+    error.value = err instanceof Error ? err.message : "页面暂时不可用。";;
     revokePageUrl();
   } finally {
     loading.value = false;
@@ -101,35 +101,35 @@ function zoomOut() {
   <section class="secure-paper-reader">
     <div class="reader-header">
       <div>
-        <p class="eyebrow">Secure Paper Reader</p>
-        <h2>Online reading only</h2>
-        <p class="body">Original PDF download is unavailable for reviewer assignments.</p>
+        <p class="eyebrow">安全论文阅读器</p>
+        <h2>仅支持在线阅读</h2>
+        <p class="body">评审任务不支持下载原始 PDF。</p>
       </div>
-      <el-tag type="warning">Rendered page</el-tag>
+      <el-tag type="warning">渲染页面</el-tag>
     </div>
 
     <el-skeleton v-if="loading && !pageUrl" :rows="8" animated />
     <el-alert v-else-if="error" :title="error" type="warning" :closable="false" />
     <template v-else-if="metadata">
       <div class="reader-toolbar">
-        <el-button :disabled="!canGoPrevious" @click="previousPage">Previous</el-button>
-        <span>Page {{ pageNo }} / {{ metadata.pageCount }}</span>
-        <el-button :disabled="!canGoNext" @click="nextPage">Next</el-button>
-        <el-button @click="zoomOut">Zoom out</el-button>
+        <el-button :disabled="!canGoPrevious" @click="previousPage">上一页</el-button>
+        <span>第 {{ pageNo }} 页 / 共 {{ metadata.pageCount }} 页</span>
+        <el-button :disabled="!canGoNext" @click="nextPage">下一页</el-button>
+        <el-button @click="zoomOut">缩小</el-button>
         <span>{{ zoom }}%</span>
-        <el-button @click="zoomIn">Zoom in</el-button>
+        <el-button @click="zoomIn">放大</el-button>
       </div>
       <div class="paper-page-frame">
         <img
           v-if="pageUrl"
           class="secure-paper-page"
           :src="pageUrl"
-          :alt="`Rendered page ${pageNo}`"
+          :alt="`渲染页面 ${pageNo}`"
           loading="lazy"
           :style="{ width: `${zoom}%` }"
         />
       </div>
     </template>
-    <el-empty v-else description="Paper is unavailable." />
+    <el-empty v-else description="论文暂时不可用。" />
   </section>
 </template>

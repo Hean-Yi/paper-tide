@@ -36,7 +36,7 @@ async function loadApplications() {
   try {
     applications.value = await apiRequest<RoleApplication[]>("/admin/role-applications");
   } catch (apiError) {
-    error.value = apiError instanceof ApiError ? apiError.message : "Unable to load applications.";
+    error.value = apiError instanceof ApiError ? apiError.message : "无法加载申请列表。";
   } finally {
     loading.value = false;
   }
@@ -69,42 +69,42 @@ function researchAreaText(row: RoleApplication): string {
   <section class="page-section">
     <header class="page-header">
       <div>
-        <p class="eyebrow">Admin</p>
-        <h1>Role applications</h1>
+        <p class="eyebrow">管理员</p>
+        <h1>角色申请</h1>
       </div>
-      <el-button :loading="loading" @click="loadApplications">Refresh</el-button>
+      <el-button :loading="loading" @click="loadApplications">刷新</el-button>
     </header>
 
     <el-alert v-if="error" type="error" :title="error" show-icon />
 
     <el-table v-loading="loading" :data="applications" class="workflow-table">
-      <el-table-column prop="applicationId" label="Application" width="130" />
-      <el-table-column label="Applicant" min-width="220">
+      <el-table-column prop="applicationId" label="申请" width="130" />
+      <el-table-column label="申请人" min-width="220">
         <template #default="{ row }">
           <div class="stacked-cell">
             <strong>{{ row.realName || row.username || `User ${row.userId}` }}</strong>
-            <span>{{ row.email || "No email" }}</span>
-            <span>{{ row.institution || "No institution" }}</span>
+            <span>{{ row.email || "暂无邮箱" }}</span>
+            <span>{{ row.institution || "暂无机构" }}</span>
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="registrationType" label="Type" width="150" />
-      <el-table-column prop="status" label="Status" />
-      <el-table-column label="Payload summary" min-width="360">
+      <el-table-column prop="registrationType" label="类型" width="150" />
+      <el-table-column prop="status" label="状态" />
+      <el-table-column label="申请详情" min-width="360">
         <template #default="{ row }">
           <div class="stacked-cell">
-            <span v-if="profileLinks(row).length">Profile: {{ profileLinks(row).join(" | ") }}</span>
-            <span v-if="row.representativeWorks?.length">Works: {{ row.representativeWorks.join("; ") }}</span>
-            <span v-if="row.conflictDomains?.length">Conflicts: {{ row.conflictDomains.join(", ") }}</span>
-            <span v-if="row.plannedConferenceTitle">Conference: {{ row.plannedConferenceTitle }}</span>
-            <span>Areas: {{ researchAreaText(row) }}</span>
+            <span v-if="profileLinks(row).length">学术主页：{{ profileLinks(row).join(" | ") }}</span>
+            <span v-if="row.representativeWorks?.length">代表作：{{ row.representativeWorks.join("; ") }}</span>
+            <span v-if="row.conflictDomains?.length">冲突域：{{ row.conflictDomains.join(", ") }}</span>
+            <span v-if="row.plannedConferenceTitle">会议：{{ row.plannedConferenceTitle }}</span>
+            <span>研究领域：{{ researchAreaText(row) }}</span>
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="Actions" width="220">
+      <el-table-column label="操作" width="220">
         <template #default="{ row }">
-          <el-button size="small" type="primary" @click="approve(row.applicationId)">Approve</el-button>
-          <el-button size="small" @click="reject(row.applicationId)">Reject</el-button>
+          <el-button size="small" type="primary" @click="approve(row.applicationId)">审批通过</el-button>
+          <el-button size="small" @click="reject(row.applicationId)">审批拒绝</el-button>
         </template>
       </el-table-column>
     </el-table>

@@ -83,7 +83,7 @@ class AioPikaAnalysisBroker:
         channel = await connection.channel()
         exchange = await channel.declare_exchange(
             config.broker_exchange,
-            aio_pika.ExchangeType.DIRECT,
+            aio_pika.ExchangeType.TOPIC,
             durable=True,
         )
         request_queue = await channel.declare_queue(config.request_queue, durable=True)

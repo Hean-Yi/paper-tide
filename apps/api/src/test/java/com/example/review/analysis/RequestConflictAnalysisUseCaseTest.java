@@ -46,6 +46,14 @@ class RequestConflictAnalysisUseCaseTest {
                         "reviewId", 501L,
                         "recommendation", "MINOR_REVISION",
                         "commentsToChair", "Borderline but promising."
+                )),
+                List.of(Map.of(
+                        "conflictId", 701L,
+                        "assignmentId", 601L,
+                        "reviewerId", 1002L,
+                        "conflictType", "INSTITUTION",
+                        "conflictDesc", "same institution",
+                        "source", "SYSTEM_DETECTED"
                 ))
         )));
         when(intentRepository.createOrReuseIntent(eq(AnalysisType.CONFLICT_ANALYSIS), any(), eq(1003L), any()))
@@ -72,6 +80,10 @@ class RequestConflictAnalysisUseCaseTest {
         assertThat(payloadCaptor.getValue()).containsEntry("title", "Conflict Seed");
         assertThat(payloadCaptor.getValue()).containsKey("reviewReports");
         assertThat(payloadCaptor.getValue().get("reviewReports").toString()).contains("MINOR_REVISION");
+        assertThat(payloadCaptor.getValue()).containsKey("conflictRecords");
+        assertThat(payloadCaptor.getValue().get("conflictRecords").toString()).contains("INSTITUTION");
+        assertThat(payloadCaptor.getValue().get("conflictRecords").toString()).contains("same institution");
         assertThat(payloadCaptor.getValue()).containsKey("conflictAnalysis");
+        assertThat(payloadCaptor.getValue().get("conflictAnalysis").toString()).contains("conflictRecordCount=1");
     }
 }

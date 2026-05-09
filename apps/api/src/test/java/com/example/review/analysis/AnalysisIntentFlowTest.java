@@ -101,6 +101,7 @@ class AnalysisIntentFlowTest {
         Assertions.assertTrue(message.hasNonNull("idempotencyKey"));
         Assertions.assertEquals(fixture.assignmentId(), message.at("/requestPayload/reviewerAssist/assignmentId").asLong());
         Assertions.assertEquals("checklist_only", message.at("/requestPayload/reviewerAssist/allowedOutput").asText());
+        Assertions.assertEquals("%PDF-1.4 % test pdf", message.at("/requestPayload/pdfText").asText());
     }
 
     private ManuscriptFixture seedUnderReviewManuscriptWithReviewer() {

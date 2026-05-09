@@ -71,11 +71,13 @@ public class RequestConflictAnalysisUseCase {
         payload.put("abstract", context.abstractText());
         payload.put("keywords", context.keywordList());
         payload.put("reviewReports", context.reviewReports());
+        payload.put("conflictRecords", context.conflictRecords());
         payload.put("conflictAnalysis", Map.of(
                 "roundId", context.roundId(),
                 "manuscriptId", context.manuscriptId(),
                 "versionId", context.versionId(),
-                "reviewReportCount", context.reviewReports().size()
+                "reviewReportCount", context.reviewReports().size(),
+                "conflictRecordCount", context.conflictRecords().size()
         ));
         return payload;
     }

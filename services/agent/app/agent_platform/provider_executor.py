@@ -43,13 +43,13 @@ class ProviderExecutor:
             "manuscriptId": str(paper.get("manuscriptId", "")),
             "versionId": str(paper.get("versionId", "")),
             "status": "SUCCESS",
-            "paperSummary": paper.get("abstractSummary") or "No abstract summary provided.",
-            "claimedContributions": paper.get("claimedContributions") or ["Verify the claimed contribution."],
-            "methodChecklist": ["Check whether assumptions, baselines, and implementation details support the method claims."],
-            "experimentChecklist": ["Verify datasets, metrics, baselines, and ablation coverage."],
-            "evidenceToVerify": ["Match each major claim to a table, figure, experiment, or cited prior result."],
-            "potentialWeaknesses": ["Look for unsupported claims, missing ablations, and unclear limitations."],
-            "questionsForReviewer": ["What evidence would change your assessment of the paper?"],
+            "paperSummary": _chinese_review_summary(paper),
+            "claimedContributions": paper.get("claimedContributions") or ["核查论文是否清楚说明并证明了主要贡献。"],
+            "methodChecklist": ["检查方法假设、基线设置和实现细节是否足以支撑方法主张。"],
+            "experimentChecklist": ["核查数据集、评价指标、对比基线和消融实验是否充分。"],
+            "evidenceToVerify": ["将每个主要结论对应到表格、图示、实验结果或已引用的先前工作。"],
+            "potentialWeaknesses": ["关注未被证据支撑的主张、缺失的消融实验和表述不清的局限性。"],
+            "questionsForReviewer": ["哪些证据会改变你对这篇论文的判断？"],
             "blindReviewRisks": paper.get("possibleBlindnessRisks", []),
             "confidence": 0.5,
         }
@@ -57,9 +57,13 @@ class ProviderExecutor:
             schema_name="review_assist_analysis",
             schema=ReviewAssistResult.model_json_schema(),
             instruction=(
-                "Create checklist-only reviewer assistance for a double-blind paper review workflow. "
-                "Do not include scores, recommendations, decisions, complete review text, author names, "
-                "institutions, acknowledgements, grants, or self-citation clues. Return only the schema fields. "
+                "为双盲论文评审流程创建仅包含核查清单的审稿辅助。"
+                "所有面向审稿人展示的文本必须使用中文，包括 paperSummary、claimedContributions、"
+                "methodChecklist、experimentChecklist、evidenceToVerify、potentialWeaknesses、"
+                "questionsForReviewer 和 blindReviewRisks 的字段值。"
+                "保留 JSON schema 的字段名，不要翻译字段名。"
+                "不要包含分数、推荐结论、录用/拒稿决策、完整评审文本、作者姓名、机构、致谢、基金或自引身份线索。"
+                "只返回 schema 字段。"
                 f"Paper understanding JSON: {_prompt_json(paper)}"
             ),
             fallback=fallback,
@@ -242,6 +246,16 @@ class ProviderExecutor:
 
 def _prompt_json(value: dict[str, Any]) -> str:
     return json.dumps(_budget_payload(value), ensure_ascii=False, sort_keys=True)
+
+
+def _chinese_review_summary(paper: dict[str, Any]) -> str:
+    abstract_summary = str(paper.get("abstractSummary") or "").strip()
+    if not abstract_summary:
+        return "暂无可用的论文摘要，请重点核查论文问题定义、方法和实验是否相互支撑。"
+    if abstract_summary.lower().startswith("a paper about "):
+        topic = abstract_summary[len("a paper about "):].strip()
+        return f"一篇关于 {topic} 的论文。"
+    return f"论文摘要：{abstract_summary}"
 
 
 def _budget_payload(value: Any, *, key: str | None = None) -> Any:

@@ -40,6 +40,8 @@ def test_runtime_executes_reviewer_assist_and_emits_completed_event() -> None:
     assert event["businessStatus"] == "AVAILABLE"
     assert event["summaryProjection"]["businessStatus"] == "AVAILABLE"
     assert event["redactedResult"]["taskType"] == "REVIEW_ASSIST_ANALYSIS"
+    assert "一篇关于" in event["redactedResult"]["paperSummary"]
+    assert event["redactedResult"]["methodChecklist"] == ["检查方法假设、基线设置和实现细节是否足以支撑方法主张。"]
     pending_events = app.state.execution_completed_publisher.pending()
     assert len(pending_events) == 1
     assert pending_events[0].topic == "analysis.completed"

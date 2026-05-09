@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
-import org.springframework.amqp.core.DirectExchange;
+import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
@@ -29,8 +29,8 @@ public class AnalysisRabbitConfiguration {
     }
 
     @Bean
-    DirectExchange analysisExchange(@Value("${review.analysis.broker-exchange:review.analysis.exchange}") String exchange) {
-        return new DirectExchange(exchange, true, false);
+    TopicExchange analysisExchange(@Value("${review.analysis.broker-exchange:review.analysis.exchange}") String exchange) {
+        return new TopicExchange(exchange, true, false);
     }
 
     @Bean
@@ -41,7 +41,7 @@ public class AnalysisRabbitConfiguration {
     @Bean
     Binding analysisRequestedBinding(
             Queue analysisRequestedQueue,
-            DirectExchange analysisExchange,
+            TopicExchange analysisExchange,
             @Value("${review.analysis.request-routing-key:analysis.requested}") String routingKey
     ) {
         return BindingBuilder.bind(analysisRequestedQueue).to(analysisExchange).with(routingKey);
@@ -55,7 +55,7 @@ public class AnalysisRabbitConfiguration {
     @Bean
     Binding analysisCompletedBinding(
             Queue analysisCompletedQueue,
-            DirectExchange analysisExchange,
+            TopicExchange analysisExchange,
             @Value("${review.analysis.completion-routing-key:analysis.completed}") String routingKey
     ) {
         return BindingBuilder.bind(analysisCompletedQueue).to(analysisExchange).with(routingKey);

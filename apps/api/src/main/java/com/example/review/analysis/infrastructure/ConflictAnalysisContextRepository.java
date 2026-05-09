@@ -37,7 +37,8 @@ public class ConflictAnalysisContextRepository {
                         rs.getString("ABSTRACT"),
                         rs.getString("KEYWORDS"),
                         rs.getObject("PDF_FILE_SIZE", Long.class),
-                        listReviewReports(roundId)
+                        listReviewReports(roundId),
+                        listConflictRecords(roundId)
                 ),
                 roundId
         );
@@ -67,6 +68,31 @@ public class ConflictAnalysisContextRepository {
         );
     }
 
+    private List<Map<String, Object>> listConflictRecords(long roundId) {
+        return jdbcTemplate.queryForList(
+                """
+                SELECT C.CONFLICT_ID AS "conflictId",
+                       C.ASSIGNMENT_ID AS "assignmentId",
+                       C.MANUSCRIPT_ID AS "manuscriptId",
+                       C.REVIEWER_ID AS "reviewerId",
+                       C.CONFLICT_TYPE AS "conflictType",
+                       C.CONFLICT_DESC AS "conflictDesc",
+                       C.SOURCE AS "source",
+                       C.DECLARED_BY AS "declaredBy",
+                       C.DECLARED_AT AS "declaredAt",
+                       C.DETECTED_AT AS "detectedAt",
+                       C.CONFIRMED_BY_CHAIR AS "confirmedByChair"
+                FROM CONFLICT_CHECK_RECORD C
+                JOIN REVIEW_ROUND R ON R.MANUSCRIPT_ID = C.MANUSCRIPT_ID
+                LEFT JOIN REVIEW_ASSIGNMENT A ON A.ASSIGNMENT_ID = C.ASSIGNMENT_ID
+                WHERE R.ROUND_ID = ?
+                  AND (C.ASSIGNMENT_ID IS NULL OR A.ROUND_ID = R.ROUND_ID)
+                ORDER BY C.CONFLICT_ID
+                """,
+                roundId
+        );
+    }
+
     public record ConflictAnalysisContext(
             long roundId,
             long manuscriptId,
@@ -75,7 +101,8 @@ public class ConflictAnalysisContextRepository {
             String abstractText,
             String keywords,
             Long pdfFileSize,
-            List<Map<String, Object>> reviewReports
+            List<Map<String, Object>> reviewReports,
+            List<Map<String, Object>> conflictRecords
     ) {
         public List<String> keywordList() {
             if (keywords == null || keywords.isBlank()) {

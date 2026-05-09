@@ -167,6 +167,52 @@ def test_provider_executor_limits_large_assignment_candidate_payload_before_prom
     assert "[truncated" in prompt
 
 
+def test_reviewer_assist_prompt_requires_chinese_reviewer_visible_text() -> None:
+    client = FakeClient()
+    executor = ProviderExecutor(
+        AgentPlatformConfig(
+            llm_api_key="secret-key",
+            llm_base_url="https://api.siliconflow.cn/v1",
+            llm_model="Qwen/Qwen3-VL-32B-Thinking",
+        ),
+        client=client,
+    )
+
+    executor.run_reviewer_assist(
+        {
+            "manuscriptId": 11,
+            "versionId": 21,
+            "title": "Agent Review",
+            "abstractSummary": "A paper about agent-assisted review.",
+            "claimedContributions": ["A review workflow"],
+        }
+    )
+
+    prompt = client.chat.completions.calls[0]["messages"][1]["content"]
+    assert "所有面向审稿人展示的文本必须使用中文" in prompt
+    assert "paperSummary" in prompt
+    assert "claimedContributions" in prompt
+
+
+def test_reviewer_assist_fallback_returns_chinese_checklists() -> None:
+    executor = ProviderExecutor()
+
+    result = executor.run_reviewer_assist(
+        {
+            "manuscriptId": 11,
+            "versionId": 21,
+            "abstractSummary": "A paper about agent-assisted review.",
+            "claimedContributions": [],
+            "possibleBlindnessRisks": [],
+        }
+    )
+
+    assert result["paperSummary"] == "一篇关于 agent-assisted review. 的论文。"
+    assert result["claimedContributions"] == ["核查论文是否清楚说明并证明了主要贡献。"]
+    assert result["methodChecklist"] == ["检查方法假设、基线设置和实现细节是否足以支撑方法主张。"]
+    assert result["questionsForReviewer"] == ["哪些证据会改变你对这篇论文的判断？"]
+
+
 def test_provider_executor_classifies_provider_transport_failure_retryable() -> None:
     executor = ProviderExecutor(
         AgentPlatformConfig(

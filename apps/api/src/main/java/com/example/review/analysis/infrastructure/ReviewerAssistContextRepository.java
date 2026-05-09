@@ -25,7 +25,8 @@ public class ReviewerAssistContextRepository {
                        V.TITLE,
                        V.ABSTRACT,
                        V.KEYWORDS,
-                       V.PDF_FILE_SIZE
+                       V.PDF_FILE_SIZE,
+                       V.PDF_FILE
                 FROM REVIEW_ASSIGNMENT A
                 JOIN MANUSCRIPT_VERSION V ON V.VERSION_ID = A.VERSION_ID
                 WHERE A.ASSIGNMENT_ID = ?
@@ -40,7 +41,8 @@ public class ReviewerAssistContextRepository {
                         rs.getString("TITLE"),
                         rs.getString("ABSTRACT"),
                         rs.getString("KEYWORDS"),
-                        rs.getObject("PDF_FILE_SIZE", Long.class)
+                        rs.getObject("PDF_FILE_SIZE", Long.class),
+                        rs.getBytes("PDF_FILE")
                 ),
                 assignmentId
         );
@@ -57,7 +59,8 @@ public class ReviewerAssistContextRepository {
             String title,
             String abstractText,
             String keywords,
-            Long pdfFileSize
+            Long pdfFileSize,
+            byte[] pdfFile
     ) {
         public List<String> keywordList() {
             if (keywords == null || keywords.isBlank()) {

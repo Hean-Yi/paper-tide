@@ -16,6 +16,7 @@ import com.example.review.analysis.infrastructure.ReviewerAssistContextRepositor
 import com.example.review.analysis.infrastructure.ReviewerAssistContextRepository.ReviewerAssistContext;
 import com.example.review.auth.CurrentUserPrincipal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -46,7 +47,8 @@ class RequestReviewerAssistUseCaseTest {
                 "Durable Agent Design",
                 "A paper about task boundaries.",
                 "agent,design",
-                128L
+                128L,
+                null
         )));
         when(intentRepository.nextRequestVersion(eq(AnalysisType.REVIEWER_ASSIST), eq(AnalysisBusinessAnchor.assignment(77L))))
                 .thenReturn(2)
@@ -67,5 +69,38 @@ class RequestReviewerAssistUseCaseTest {
         );
         assertThat(keyCaptor.getAllValues()).hasSize(2);
         assertThat(keyCaptor.getAllValues().get(0)).isNotEqualTo(keyCaptor.getAllValues().get(1));
+    }
+
+    @Test
+    void reviewerAssistPayloadIncludesExtractedPaperTextForTheLlm() {
+        when(contextRepository.findByAssignmentId(77L)).thenReturn(Optional.of(new ReviewerAssistContext(
+                77L,
+                8L,
+                9L,
+                10L,
+                1002L,
+                "ACCEPTED",
+                "Durable Agent Design",
+                "A paper about task boundaries.",
+                "agent,design",
+                128L,
+                "Real paper body discusses scheduler lock ordering and queue deduplication.".getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        )));
+        when(intentRepository.createOrReuseIntent(eq(AnalysisType.REVIEWER_ASSIST), any(), eq(1002L), any()))
+                .thenReturn(101L);
+
+        useCase.request(REVIEWER, 77L, false);
+
+        ArgumentCaptor<Map<String, Object>> payloadCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(outboxPublisher).publishRequested(
+                eq(101L),
+                eq(AnalysisType.REVIEWER_ASSIST),
+                any(),
+                payloadCaptor.capture()
+        );
+        assertThat(payloadCaptor.getValue())
+                .containsEntry("pdfText", "Real paper body discusses scheduler lock ordering and queue deduplication.");
+        assertThat((Map<String, Object>) payloadCaptor.getValue().get("sections"))
+                .containsEntry("fullText", "Real paper body discusses scheduler lock ordering and queue deduplication.");
     }
 }

@@ -1,0 +1,41 @@
+SET DEFINE OFF;
+WHENEVER SQLERROR EXIT SQL.SQLCODE ROLLBACK;
+
+DECLARE
+  PROCEDURE add_column_if_missing(p_column_name VARCHAR2, p_sql CLOB) IS
+    v_count NUMBER;
+  BEGIN
+    SELECT COUNT(*)
+      INTO v_count
+      FROM USER_TAB_COLUMNS
+     WHERE TABLE_NAME = 'CONFERENCE'
+       AND COLUMN_NAME = UPPER(p_column_name);
+    IF v_count = 0 THEN
+      EXECUTE IMMEDIATE p_sql;
+    END IF;
+  END;
+
+  PROCEDURE add_constraint_if_missing(p_constraint_name VARCHAR2, p_sql CLOB) IS
+    v_count NUMBER;
+  BEGIN
+    SELECT COUNT(*)
+      INTO v_count
+      FROM USER_CONSTRAINTS
+     WHERE CONSTRAINT_NAME = UPPER(p_constraint_name);
+    IF v_count = 0 THEN
+      EXECUTE IMMEDIATE p_sql;
+    END IF;
+  END;
+BEGIN
+  add_column_if_missing('REJECTED_BY', 'ALTER TABLE CONFERENCE ADD (REJECTED_BY NUMBER(19))');
+  add_column_if_missing('REJECTED_AT', 'ALTER TABLE CONFERENCE ADD (REJECTED_AT TIMESTAMP)');
+  add_column_if_missing('REJECTION_REASON', 'ALTER TABLE CONFERENCE ADD (REJECTION_REASON CLOB)');
+
+  add_constraint_if_missing(
+    'FK_CONFERENCE_REJECTED_BY',
+    'ALTER TABLE CONFERENCE ADD CONSTRAINT FK_CONFERENCE_REJECTED_BY FOREIGN KEY (REJECTED_BY) REFERENCES SYS_USER (USER_ID)'
+  );
+END;
+/
+
+COMMIT;

@@ -103,6 +103,20 @@ class RegistrationServiceTest {
     }
 
     @Test
+    void organizerCanRegisterWithoutPlannedConferenceTitle() {
+        RegistrationResponse registration = service.register(organizerRequestWithoutPlannedConferenceTitle(
+                "no_title_org",
+                "no_title_org@example.com"
+        ));
+
+        RoleApplicationRecord application = repository.applications.get(registration.applicationId());
+        assertEquals("PENDING_ADMIN_APPROVAL", registration.applicationStatus());
+        assertFalse(registration.emailVerificationRequired());
+        assertEquals("ACTIVE", repository.users.get(1L).status());
+        assertEquals("PENDING_ADMIN_APPROVAL", application.status());
+    }
+
+    @Test
     void approvalAndRejectionWriteAuditLogEntries() {
         RegistrationResponse registration = service.register(reviewerRequest("audited_reviewer", "audited@example.com"));
 
@@ -235,6 +249,28 @@ class RegistrationServiceTest {
                         List.of("example.edu"),
                         3,
                         "International Conference on Review Systems"
+                ),
+                List.of()
+        );
+    }
+
+    private RegistrationRequest organizerRequestWithoutPlannedConferenceTitle(String username, String email) {
+        return new RegistrationRequest(
+                "ORGANIZER",
+                username,
+                "demo123",
+                "New Organizer",
+                email,
+                "Fudan University",
+                new AcademicProfileRequest(
+                        "https://example.edu/new-organizer",
+                        null,
+                        null,
+                        "https://scholar.google.com/citations?user=demo",
+                        List.of("Conference Organization Record"),
+                        List.of("example.edu"),
+                        3,
+                        null
                 ),
                 List.of()
         );

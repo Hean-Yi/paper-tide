@@ -72,6 +72,61 @@ describe("registration workflow", () => {
     expect(wrapper.text()).toContain("账号已激活");
   });
 
+  it("registers an organizer without asking for a planned conference title", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({
+        userId: 43,
+        applicationId: 78,
+        registrationType: "ORGANIZER",
+        applicationStatus: "PENDING_ADMIN_APPROVAL",
+        emailVerificationRequired: false
+      })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const router = createAppRouter();
+    router.push("/register");
+    await router.isReady();
+
+    const wrapper = mount(RegisterView, {
+      global: {
+        plugins: [ElementPlus, router]
+      }
+    });
+
+    const organizerTab = wrapper.findAll(".el-tabs__item").find((tab) => tab.text().includes("会议组织者"));
+    expect(organizerTab).toBeTruthy();
+    await organizerTab!.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.find('[data-test="register-conference-title"]').exists()).toBe(false);
+
+    await wrapper.get('[data-test="register-username"]').setValue("new_organizer");
+    await wrapper.get('[data-test="register-password"]').setValue("demo123");
+    await wrapper.get('[data-test="register-real-name"]').setValue("New Organizer");
+    await wrapper.get('[data-test="register-email"]').setValue("new_organizer@example.com");
+    await wrapper.get('[data-test="register-institution"]').setValue("Fudan University");
+    await wrapper.get('[data-test="register-homepage"]').setValue("https://example.edu/new-organizer");
+    await wrapper.get("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain("拟举办会议名称");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/register",
+      expect.objectContaining({ method: "POST" })
+    );
+    const [, requestOptions] = fetchMock.mock.calls[0];
+    expect(JSON.parse(requestOptions.body as string)).toEqual(expect.objectContaining({
+      registrationType: "ORGANIZER",
+      username: "new_organizer",
+      academicProfile: expect.objectContaining({
+        plannedConferenceTitle: null
+      })
+    }));
+    expect(wrapper.text()).toContain("管理员审核队列");
+  });
+
   it("keeps registration and admin approval routes in the router", () => {
     const router = createAppRouter();
 
@@ -92,7 +147,7 @@ describe("registration workflow", () => {
       }
     });
 
-    expect(wrapper.text()).toContain("Role applications");
+    expect(wrapper.text()).toContain("角色申请");
   });
 
   it("shows role application payload summary for admin decisions", async () => {

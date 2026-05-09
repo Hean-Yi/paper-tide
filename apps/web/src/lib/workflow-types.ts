@@ -10,6 +10,7 @@ export interface AuthorInput {
 
 export interface ManuscriptSummary {
   manuscriptId: number;
+  submissionNumber?: string;
   conferenceId: number | null;
   currentVersionId: number;
   currentStatus: string;
@@ -93,6 +94,8 @@ export interface ScreeningQueueItem {
   versionId: number;
   versionNo: number;
   title: string;
+  abstractText: string | null;
+  keywords: string | null;
   currentStatus: string;
   currentRoundNo: number;
   blindMode: string;
@@ -196,11 +199,13 @@ export interface ConferenceCfpSummary {
   blindMode: string;
   publicSlug: string;
   submissionOpenAt: string | null;
+  abstractSubmissionCloseAt: string | null;
   submissionCloseAt: string | null;
 }
 
 export interface ConferencePhaseInput {
   submissionOpenAt: string | null;
+  abstractSubmissionCloseAt: string | null;
   submissionCloseAt: string | null;
   biddingOpenAt: string | null;
   biddingCloseAt: string | null;
@@ -217,7 +222,18 @@ export interface ConferenceDetail extends ConferenceCfpSummary {
   cfpPublished?: boolean;
   approvedBy?: number | null;
   approvedAt?: string | null;
+  rejectedBy?: number | null;
+  rejectedAt?: string | null;
+  rejectionReason?: string | null;
   phase?: ConferencePhaseInput | null;
+}
+
+export interface PlatformReviewerSearchResult {
+  reviewerId: number;
+  realName: string;
+  email: string;
+  institution: string | null;
+  researchAreas: Array<{ areaCode: string; areaName: string }>;
 }
 
 export interface ConferencePaperItem {
@@ -233,6 +249,60 @@ export interface ConferencePaperItem {
   submittedReviewCount: number;
   lastDecisionCode: string | null;
   submittedAt: string | null;
+  averageOverallScore: number | null;
+  reviewerScores: ConferencePaperReviewerScore[];
+}
+
+export interface ConferencePaperReviewerScore {
+  assignmentId: number;
+  reviewerId: number;
+  reviewerName: string;
+  taskStatus: string;
+  overallScore: number | null;
+  recommendation: string | null;
+  submittedAt: string | null;
+}
+
+export interface ChairConferencePaperReviewDetail {
+  manuscriptId: number;
+  versionId: number;
+  versionNo: number;
+  roundId: number | null;
+  roundNo: number | null;
+  title: string;
+  abstractText: string;
+  keywords: string;
+  pdfFileName: string | null;
+  currentStatus: string;
+  roundStatus: string | null;
+  submittedAt: string | null;
+  pageCount: number;
+  averageOverallScore: number | null;
+  reviews: ChairConferencePaperReview[];
+}
+
+export interface ChairConferencePaperReview {
+  assignmentId: number;
+  reviewerId: number;
+  reviewerName: string;
+  institution: string | null;
+  taskStatus: string;
+  assignedAt: string | null;
+  deadlineAt: string | null;
+  assignmentSubmittedAt: string | null;
+  reviewId: number | null;
+  noveltyScore: number | null;
+  methodScore: number | null;
+  experimentScore: number | null;
+  writingScore: number | null;
+  overallScore: number | null;
+  confidenceLevel: string | null;
+  strengths: string | null;
+  weaknesses: string | null;
+  commentsToAuthor: string | null;
+  commentsToChair: string | null;
+  recommendation: string | null;
+  reviewSubmittedAt: string | null;
 }
 
 export interface ReviewerBiddingItem {
@@ -281,6 +351,19 @@ export interface AssignmentAction {
 export interface AutoAssignResponse {
   conferenceId: number;
   requestedReviewsPerPaper: number;
+  createdCount: number;
+  assignments: AssignmentAction[];
+}
+
+export interface RandomAssignmentPreviewResponse {
+  conferenceId: number;
+  requestedReviewsPerPaper: number;
+  createdDraftCount: number;
+  drafts: AssignmentDraft[];
+}
+
+export interface ConfirmAssignmentPreviewResponse {
+  conferenceId: number;
   createdCount: number;
   assignments: AssignmentAction[];
 }
@@ -362,76 +445,6 @@ export interface ImportConfirmResponse {
 export interface AssignmentProposalConfirmDraftsResponse {
   bundleId: number;
   createdCount: number;
-}
-
-export interface EmailTemplateOperationRow {
-  templateId: number;
-  activeVersionId?: number | null;
-  templateKey: string;
-  createdAt?: string | null;
-}
-
-export interface EmailHistoryOperationRow {
-  emailHistoryId: number;
-  templateKey: string;
-  recipientEmail: string;
-  deliveryStatus: string;
-  createdAt?: string | null;
-}
-
-export interface OfflineReviewImportOperationRow {
-  batchId: number;
-  assignmentId: number;
-  reviewerId: number;
-  batchStatus: string;
-  rowCount: number;
-  validRowCount: number;
-  errorCount: number;
-  createdAt?: string | null;
-}
-
-export interface CameraReadyFileOperationRow {
-  cameraReadyFileId: number;
-  manuscriptId: number;
-  fileName: string;
-  fileSize: number;
-  fileStatus: string;
-  submittedAt?: string | null;
-}
-
-export interface PublicationMetadataOperationRow {
-  publicationMetadataId: number;
-  manuscriptId: number;
-  doi?: string | null;
-  indexKeywords?: string | null;
-  publicationStatus: string;
-  updatedAt?: string | null;
-}
-
-export interface ProceedingsExportOperationRow {
-  exportBatchId: number;
-  exportName: string;
-  exportStatus: string;
-  paperCount: number;
-  createdAt?: string | null;
-}
-
-export interface PublicationOperations {
-  conferenceId: number;
-  emailTemplates: EmailTemplateOperationRow[];
-  emailHistory: EmailHistoryOperationRow[];
-  offlineReviewImports: OfflineReviewImportOperationRow[];
-  cameraReadyFiles: CameraReadyFileOperationRow[];
-  publicationMetadata: PublicationMetadataOperationRow[];
-  proceedingsExports: ProceedingsExportOperationRow[];
-}
-
-export interface ProceedingsExportDownloadMetadataResponse {
-  exportBatchId: number;
-  exportStatus: string;
-  downloadFileName: string;
-  downloadUrl: string;
-  paperCount: number;
 }
 
 export interface DynamicFormField {

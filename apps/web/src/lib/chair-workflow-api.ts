@@ -1,4 +1,4 @@
-import { apiRequest } from "./api";
+import { apiBlob, apiRequest } from "./api";
 import type {
   AnalysisIntentResponse,
   AssignmentCandidate,
@@ -7,19 +7,21 @@ import type {
   AutoAssignResponse,
   AssignmentOperations,
   AssignmentProposalConfirmDraftsResponse,
+  ChairConferencePaperReviewDetail,
   ConferenceDetail,
   ConferencePhaseInput,
   ConferencePaperItem,
   ConferenceCfpSummary,
+  ConfirmAssignmentPreviewResponse,
   DecisionWorkbenchItem,
   ImportPreviewResponse,
   ManuscriptSummary,
-  ProceedingsExportDownloadMetadataResponse,
-  PublicationOperations,
+  PlatformReviewerSearchResult,
+  RandomAssignmentPreviewResponse,
   ScreeningQueueItem
 } from "./workflow-types";
 
-export function createConferenceDraft(payload: {
+export interface ConferenceDraftPayload {
   name: string;
   acronym: string;
   year: number;
@@ -30,8 +32,14 @@ export function createConferenceDraft(payload: {
   defaultReviewerMaxLoad: number;
   publicSlug: string;
   phase: ConferencePhaseInput;
-}) {
+}
+
+export function createConferenceDraft(payload: ConferenceDraftPayload) {
   return apiRequest<ConferenceDetail>("/chair/conferences", { method: "POST", json: payload });
+}
+
+export function updateConferenceDraft(conferenceId: number, payload: ConferenceDraftPayload) {
+  return apiRequest<ConferenceDetail>(`/chair/conferences/${conferenceId}`, { method: "PUT", json: payload });
 }
 
 export function listChairConferences() {
@@ -46,6 +54,16 @@ export function listConferencePapers(conferenceId: number) {
   return apiRequest<ConferencePaperItem[]>(`/chair/conferences/${conferenceId}/papers`);
 }
 
+export function getChairConferencePaperReviewDetail(conferenceId: number, manuscriptId: number) {
+  return apiRequest<ChairConferencePaperReviewDetail>(
+    `/chair/conferences/${conferenceId}/papers/${manuscriptId}/review-detail`
+  );
+}
+
+export function getChairConferencePaperPage(conferenceId: number, manuscriptId: number, pageNo: number) {
+  return apiBlob(`/chair/conferences/${conferenceId}/papers/${manuscriptId}/paper/pages/${pageNo}`);
+}
+
 export function submitConferenceForApproval(conferenceId: number) {
   return apiRequest<ConferenceDetail>(`/chair/conferences/${conferenceId}/submit-approval`, { method: "POST" });
 }
@@ -56,6 +74,10 @@ export function advanceConference(conferenceId: number, status: string) {
 
 export function addConferenceReviewer(conferenceId: number, reviewerId: number, maxLoad: number) {
   return apiRequest(`/chair/conferences/${conferenceId}/reviewers`, { method: "POST", json: { reviewerId, maxLoad } });
+}
+
+export function searchPlatformReviewers(query: string) {
+  return apiRequest<PlatformReviewerSearchResult[]>(`/chair/reviewers/search?query=${encodeURIComponent(query.trim())}`);
 }
 
 export function listScreeningQueue() {
@@ -99,6 +121,20 @@ export function autoAssignConferenceReviewers(conferenceId: number, reviewsPerPa
   return apiRequest<AutoAssignResponse>(`/conferences/${conferenceId}/auto-assignments`, {
     method: "POST",
     json: { reviewsPerPaper, deadlineAt }
+  });
+}
+
+export function previewRandomConferenceAssignments(conferenceId: number, reviewsPerPaper: number, deadlineAt: string) {
+  return apiRequest<RandomAssignmentPreviewResponse>(`/conferences/${conferenceId}/assignment-previews/random`, {
+    method: "POST",
+    json: { reviewsPerPaper, deadlineAt }
+  });
+}
+
+export function confirmRandomConferenceAssignmentPreview(conferenceId: number, deadlineAt: string) {
+  return apiRequest<ConfirmAssignmentPreviewResponse>(`/conferences/${conferenceId}/assignment-previews/confirm`, {
+    method: "POST",
+    json: { deadlineAt }
   });
 }
 
@@ -151,6 +187,14 @@ export function decide(payload: {
   return apiRequest("/decisions", { method: "POST", json: payload });
 }
 
+export function screeningDeskReject(payload: {
+  manuscriptId: number;
+  versionId: number;
+  decisionReason: string;
+}) {
+  return apiRequest("/decisions/screening-desk-reject", { method: "POST", json: payload });
+}
+
 export function getAssignmentOperations(conferenceId: number) {
   return apiRequest<AssignmentOperations>(`/conferences/${conferenceId}/assignment-operations`);
 }
@@ -179,14 +223,4 @@ export function confirmMatchingScoreImport(batchId: number) {
 
 export function confirmAssignmentProposalDrafts(bundleId: number) {
   return apiRequest<AssignmentProposalConfirmDraftsResponse>(`/assignment-proposals/${bundleId}/confirm-drafts`, { method: "POST" });
-}
-
-export function getPublicationOperations(conferenceId: number) {
-  return apiRequest<PublicationOperations>(`/conferences/${conferenceId}/publication-operations`);
-}
-
-export function proceedingsExportDownloadMetadata(exportBatchId: number) {
-  return apiRequest<ProceedingsExportDownloadMetadataResponse>(`/proceedings-exports/${exportBatchId}/download-metadata`, {
-    method: "POST"
-  });
 }

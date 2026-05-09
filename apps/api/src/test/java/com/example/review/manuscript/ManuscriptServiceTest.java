@@ -96,7 +96,7 @@ class ManuscriptServiceTest {
     }
 
     @Test
-    void createDraftManuscriptPersistsAggregate() throws Exception {
+    void createAbstractSubmissionPersistsAggregateAndReturnsSubmissionNumber() throws Exception {
         String token = loginAndExtractToken("author_demo", "demo123");
         long conferenceId = seedConference("submission-open-2026", "SINGLE_BLIND", "OPEN_FOR_SUBMISSION",
                 Instant.parse("2026-12-31T00:00:00Z"));
@@ -109,13 +109,14 @@ class ManuscriptServiceTest {
                 .andExpect(jsonPath("$.manuscriptId").isNumber())
                 .andExpect(jsonPath("$.conferenceId").value((int) conferenceId))
                 .andExpect(jsonPath("$.currentVersionId").isNumber())
-                .andExpect(jsonPath("$.currentStatus").value("DRAFT"))
+                .andExpect(jsonPath("$.currentStatus").value("ABSTRACT_SUBMITTED"))
                 .andExpect(jsonPath("$.blindMode").value("SINGLE_BLIND"))
                 .andReturn();
 
         JsonNode root = objectMapper.readTree(result.getResponse().getContentAsString());
         long manuscriptId = root.path("manuscriptId").asLong();
         long versionId = root.path("currentVersionId").asLong();
+        org.junit.jupiter.api.Assertions.assertEquals("PAPER-" + manuscriptId, root.path("submissionNumber").asText());
 
         Map<String, Object> manuscriptRow = jdbcTemplate.queryForMap(
                 """
@@ -145,7 +146,7 @@ class ManuscriptServiceTest {
                 versionId
         );
 
-        org.junit.jupiter.api.Assertions.assertEquals("DRAFT", manuscriptRow.get("CURRENT_STATUS"));
+        org.junit.jupiter.api.Assertions.assertEquals("ABSTRACT_SUBMITTED", manuscriptRow.get("CURRENT_STATUS"));
         org.junit.jupiter.api.Assertions.assertEquals("SINGLE_BLIND", manuscriptRow.get("BLIND_MODE"));
         org.junit.jupiter.api.Assertions.assertEquals(conferenceId, ((Number) manuscriptRow.get("CONFERENCE_ID")).longValue());
         org.junit.jupiter.api.Assertions.assertEquals(1001L, ((Number) manuscriptRow.get("SUBMITTER_ID")).longValue());
@@ -157,7 +158,7 @@ class ManuscriptServiceTest {
     }
 
     @Test
-    void createDraftRequiresOpenConferenceAndCopiesConferenceBlindMode() throws Exception {
+    void createAbstractSubmissionRequiresOpenConferenceAndCopiesConferenceBlindMode() throws Exception {
         String token = loginAndExtractToken("author_demo", "demo123");
         long closedConferenceId = seedConference("closed-2026", "DOUBLE_BLIND", "SUBMISSION_CLOSED",
                 Instant.parse("2026-12-31T00:00:00Z"));
@@ -180,6 +181,24 @@ class ManuscriptServiceTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(createManuscriptPayload("Expired Conference", "DOUBLE_BLIND", expiredConferenceId)))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void createAbstractSubmissionRejectsAfterAbstractDeadlineEvenWhenPaperDeadlineIsFuture() throws Exception {
+        String token = loginAndExtractToken("author_demo", "demo123");
+        long conferenceId = seedConference(
+                "abstract-expired-2026",
+                "DOUBLE_BLIND",
+                "OPEN_FOR_SUBMISSION",
+                Instant.parse("2020-01-01T00:00:00Z"),
+                Instant.parse("2026-12-31T00:00:00Z")
+        );
+
+        mockMvc.perform(post("/api/manuscripts")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(createManuscriptPayload("Late Abstract", "DOUBLE_BLIND", conferenceId)))
                 .andExpect(status().isConflict());
     }
 
@@ -411,6 +430,7 @@ class ManuscriptServiceTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(2)))
                 .andExpect(jsonPath("$[0].manuscriptId").isNumber())
+                .andExpect(jsonPath("$[0].submissionNumber", not(blankOrNullString())))
                 .andExpect(jsonPath("$[0].currentStatus", not(blankOrNullString())))
                 .andExpect(jsonPath("$[0].currentVersionTitle", not(blankOrNullString())));
 
@@ -507,8 +527,24 @@ class ManuscriptServiceTest {
     }
 
     private long seedConference(String slug, String blindMode, String status, Instant submissionCloseAt) {
+        return seedConference(
+                slug,
+                blindMode,
+                status,
+                submissionCloseAt.minusSeconds(30 * 24 * 60 * 60),
+                submissionCloseAt
+        );
+    }
+
+    private long seedConference(
+            String slug,
+            String blindMode,
+            String status,
+            Instant abstractSubmissionCloseAt,
+            Instant submissionCloseAt
+    ) {
         long conferenceId = jdbcTemplate.queryForObject("SELECT SEQ_CONFERENCE.NEXTVAL FROM DUAL", Long.class);
-        Instant submissionOpenAt = submissionCloseAt.minusSeconds(31536000);
+        Instant submissionOpenAt = abstractSubmissionCloseAt.minusSeconds(31536000);
         jdbcTemplate.update(
                 """
                 INSERT INTO CONFERENCE (
@@ -527,12 +563,13 @@ class ManuscriptServiceTest {
         jdbcTemplate.update(
                 """
                 INSERT INTO CONFERENCE_PHASE (
-                  PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, SUBMISSION_CLOSE_AT,
+                  PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, ABSTRACT_SUBMISSION_CLOSE_AT, SUBMISSION_CLOSE_AT,
                   BIDDING_OPEN_AT, BIDDING_CLOSE_AT, REVIEW_DEADLINE_AT, DECISION_RELEASE_AT
-                ) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 conferenceId,
                 Timestamp.from(submissionOpenAt),
+                Timestamp.from(abstractSubmissionCloseAt),
                 Timestamp.from(submissionCloseAt),
                 Timestamp.from(submissionCloseAt.plusSeconds(86400)),
                 Timestamp.from(submissionCloseAt.plusSeconds(172800)),
@@ -546,11 +583,13 @@ class ManuscriptServiceTest {
         jdbcTemplate.update(
                 """
                 UPDATE CONFERENCE_PHASE
-                SET SUBMISSION_OPEN_AT = ?, SUBMISSION_CLOSE_AT = ?, BIDDING_OPEN_AT = ?, BIDDING_CLOSE_AT = ?,
+                SET SUBMISSION_OPEN_AT = ?, ABSTRACT_SUBMISSION_CLOSE_AT = ?, SUBMISSION_CLOSE_AT = ?,
+                    BIDDING_OPEN_AT = ?, BIDDING_CLOSE_AT = ?,
                     REVIEW_DEADLINE_AT = ?, DECISION_RELEASE_AT = ?
                 WHERE CONFERENCE_ID = ?
                 """,
                 Timestamp.from(Instant.parse("2019-01-01T00:00:00Z")),
+                Timestamp.from(submissionCloseAt.minusSeconds(86400)),
                 Timestamp.from(submissionCloseAt),
                 Timestamp.from(submissionCloseAt.plusSeconds(86400)),
                 Timestamp.from(submissionCloseAt.plusSeconds(172800)),

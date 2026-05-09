@@ -7,6 +7,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -76,6 +77,23 @@ public class ConferenceController {
         }
     }
 
+    @PutMapping("/chair/conferences/{conferenceId}")
+    public ConferenceDetail updateDraft(
+            @PathVariable long conferenceId,
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @RequestBody ConferenceDraftRequest request
+    ) {
+        try {
+            return conferenceService.updateDraft(conferenceId, principal, request);
+        } catch (ConferenceAccessException ex) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage());
+        } catch (ConferenceNotFoundException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
+        } catch (ConferenceValidationException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        }
+    }
+
     @PostMapping("/chair/conferences/{conferenceId}/submit-approval")
     public ConferenceDetail submitForApproval(
             @PathVariable long conferenceId,
@@ -120,6 +138,20 @@ public class ConferenceController {
         }
     }
 
+    @GetMapping("/admin/conferences/{conferenceId}")
+    public ConferenceDetail getConferenceForApproval(
+            @PathVariable long conferenceId,
+            @AuthenticationPrincipal CurrentUserPrincipal principal
+    ) {
+        try {
+            return conferenceService.getAdminConference(conferenceId, principal);
+        } catch (ConferenceAccessException ex) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage());
+        } catch (ConferenceNotFoundException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
+        }
+    }
+
     @PostMapping("/admin/conferences/{conferenceId}/approve")
     public ConferenceDetail approveConference(
             @PathVariable long conferenceId,
@@ -127,6 +159,23 @@ public class ConferenceController {
     ) {
         try {
             return conferenceService.approveConference(conferenceId, principal);
+        } catch (ConferenceAccessException ex) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage());
+        } catch (ConferenceNotFoundException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
+        } catch (ConferenceValidationException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        }
+    }
+
+    @PostMapping("/admin/conferences/{conferenceId}/reject")
+    public ConferenceDetail rejectConference(
+            @PathVariable long conferenceId,
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @RequestBody ConferenceRejectionRequest request
+    ) {
+        try {
+            return conferenceService.rejectConference(conferenceId, principal, request);
         } catch (ConferenceAccessException ex) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage());
         } catch (ConferenceNotFoundException ex) {

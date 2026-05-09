@@ -88,7 +88,7 @@ export function createAppRouter() {
             path: "chair/screening",
             name: "chair-screening",
             component: () => import("../views/chair/ScreeningQueueView.vue"),
-            meta: { requiresAuth: true, roles: ["CHAIR", "ADMIN"] }
+            meta: { requiresAuth: true, roles: ["CHAIR"] }
           },
           {
             path: "chair/conferences",
@@ -103,22 +103,22 @@ export function createAppRouter() {
             meta: { requiresAuth: true, roles: ["CHAIR", "ADMIN"] }
           },
           {
+            path: "chair/conferences/:conferenceId/papers/:manuscriptId",
+            name: "chair-conference-paper-detail",
+            component: () => import("../views/chair/ChairConferencePaperDetailView.vue"),
+            meta: { requiresAuth: true, roles: ["CHAIR"] }
+          },
+          {
             path: "chair/decisions",
             name: "chair-decisions",
             component: () => import("../views/chair/DecisionWorkbenchView.vue"),
-            meta: { requiresAuth: true, roles: ["CHAIR", "ADMIN"] }
+            meta: { requiresAuth: true, roles: ["CHAIR"] }
           },
           {
             path: "chair/assignment-operations",
             name: "chair-assignment-operations",
             component: () => import("../views/chair/AssignmentOperationsView.vue"),
-            meta: { requiresAuth: true, roles: ["CHAIR", "ADMIN"] }
-          },
-          {
-            path: "chair/publication-operations",
-            name: "chair-publication-operations",
-            component: () => import("../views/chair/PublicationOperationsView.vue"),
-            meta: { requiresAuth: true, roles: ["CHAIR", "ADMIN"] }
+            meta: { requiresAuth: true, roles: ["CHAIR"] }
           },
           {
             path: "admin/agents",
@@ -130,6 +130,12 @@ export function createAppRouter() {
             path: "admin/role-applications",
             name: "admin-role-applications",
             component: () => import("../views/admin/RoleApplicationsView.vue"),
+            meta: { requiresAuth: true, roles: ["ADMIN"] }
+          },
+          {
+            path: "admin/conference-approvals",
+            name: "admin-conference-approvals",
+            component: () => import("../views/admin/ConferenceApprovalsView.vue"),
             meta: { requiresAuth: true, roles: ["ADMIN"] }
           }
         ]

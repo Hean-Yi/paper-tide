@@ -191,6 +191,27 @@ apply_oracle_wave7_wave9_full_closure_schema() {
     >/dev/null
 }
 
+apply_oracle_publish_legacy_default_conference_schema() {
+  docker cp "$ROOT_DIR/database/oracle/027_publish_legacy_default_conference.sql" "$DEFAULT_ORACLE_CONTAINER:/tmp/027_publish_legacy_default_conference.sql" >/dev/null
+  docker exec "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE} @/tmp/027_publish_legacy_default_conference.sql" \
+    >/dev/null
+}
+
+apply_oracle_conference_rejection_feedback_schema() {
+  docker cp "$ROOT_DIR/database/oracle/028_conference_rejection_feedback.sql" "$DEFAULT_ORACLE_CONTAINER:/tmp/028_conference_rejection_feedback.sql" >/dev/null
+  docker exec "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE} @/tmp/028_conference_rejection_feedback.sql" \
+    >/dev/null
+}
+
+apply_oracle_abstract_submission_deadline_schema() {
+  docker cp "$ROOT_DIR/database/oracle/029_abstract_submission_deadline.sql" "$DEFAULT_ORACLE_CONTAINER:/tmp/029_abstract_submission_deadline.sql" >/dev/null
+  docker exec "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE} @/tmp/029_abstract_submission_deadline.sql" \
+    >/dev/null
+}
+
 oracle_column_exists() {
   local table_name="$1"
   local column_name="$2"
@@ -220,6 +241,28 @@ SQL
 )"
 
   [[ "$index_count" == "1" ]]
+}
+
+oracle_foreign_key_exists() {
+  local constraint_name="$1"
+  local referenced_table="$2"
+  local constraint_count
+
+  constraint_count="$(docker exec -i "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE}" <<SQL | tr -d '[:space:]'
+SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF
+SELECT COUNT(*)
+FROM USER_CONSTRAINTS fk
+JOIN USER_CONSTRAINTS pk
+  ON pk.CONSTRAINT_NAME = fk.R_CONSTRAINT_NAME
+WHERE fk.CONSTRAINT_NAME = UPPER('${constraint_name}')
+  AND fk.CONSTRAINT_TYPE = 'R'
+  AND pk.TABLE_NAME = UPPER('${referenced_table}');
+EXIT;
+SQL
+)"
+
+  [[ "$constraint_count" == "1" ]]
 }
 
 all_query_optimization_indexes_exist() {
@@ -286,6 +329,36 @@ wave7_wave9_full_closure_exists() {
     oracle_table_exists "DOI_INDEX_ADAPTER_SUBMISSION" &&
     oracle_table_exists "COMMUNICATION_COMPOSE_BATCH" &&
     oracle_table_exists "COMMUNICATION_REMINDER"
+}
+
+legacy_default_conference_published() {
+  local conference_count
+
+  conference_count="$(docker exec -i "$DEFAULT_ORACLE_CONTAINER" bash -lc \
+    "sqlplus -s ${DEFAULT_ORACLE_APP_USER}/${DEFAULT_ORACLE_APP_PASSWORD}@localhost/${DEFAULT_ORACLE_SERVICE}" <<SQL | tr -d '[:space:]'
+SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF
+SELECT COUNT(*)
+FROM CONFERENCE
+WHERE PUBLIC_SLUG = 'legacy-platform-default'
+  AND CFP_PUBLISHED = 1;
+EXIT;
+SQL
+)"
+
+  [[ "$conference_count" == "1" ]]
+}
+
+conference_rejection_feedback_exists() {
+  oracle_column_exists "CONFERENCE" "REJECTED_BY" &&
+    oracle_column_exists "CONFERENCE" "REJECTED_AT" &&
+    oracle_column_exists "CONFERENCE" "REJECTION_REASON" &&
+    oracle_foreign_key_exists "FK_CONFERENCE_REJECTED_BY" "SYS_USER"
+}
+
+abstract_submission_deadline_exists() {
+  oracle_column_exists "CONFERENCE_PHASE" "ABSTRACT_SUBMISSION_CLOSE_AT" &&
+    oracle_index_exists "IDX_CONFERENCE_PHASE_ABSTRACT_CLOSE" &&
+    oracle_constraint_mentions "CK_MANUSCRIPT_STATUS" "ABSTRACT_SUBMITTED"
 }
 
 oracle_constraint_mentions() {
@@ -417,6 +490,21 @@ ensure_oracle_schema() {
   if ! wave7_wave9_full_closure_exists; then
     echo "Oracle schema detected without 026 Wave7/Wave9 full closure objects. Applying incremental schema..." >&2
     apply_oracle_wave7_wave9_full_closure_schema
+  fi
+
+  if ! legacy_default_conference_published; then
+    echo "Oracle schema detected with unpublished legacy default conference. Applying publication migration..." >&2
+    apply_oracle_publish_legacy_default_conference_schema
+  fi
+
+  if ! conference_rejection_feedback_exists; then
+    echo "Oracle schema detected without 028 conference rejection feedback fields. Applying incremental schema..." >&2
+    apply_oracle_conference_rejection_feedback_schema
+  fi
+
+  if ! abstract_submission_deadline_exists; then
+    echo "Oracle schema detected without 029 abstract submission deadline fields. Applying incremental schema..." >&2
+    apply_oracle_abstract_submission_deadline_schema
   fi
 
   if verify_oracle_schema; then

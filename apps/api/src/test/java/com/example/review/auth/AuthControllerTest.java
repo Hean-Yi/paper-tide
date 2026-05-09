@@ -350,7 +350,7 @@ class AuthControllerTest {
                                     "representativeWorks": ["Conference Organization Record"],
                                     "conflictDomains": ["example.edu"],
                                     "defaultMaxLoad": 3,
-                                    "plannedConferenceTitle": "International Conference on Review Systems"
+                                    "plannedConferenceTitle": null
                                   },
                                   "researchAreas": []
                                 }

@@ -35,6 +35,15 @@ record ConferenceReviewerResponse(
 ) {
 }
 
+record PlatformReviewerSearchResult(
+        long reviewerId,
+        String realName,
+        String email,
+        String institution,
+        List<ResearchAreaSnapshot> researchAreas
+) {
+}
+
 record ReviewerBiddingItem(
         long manuscriptId,
         long versionId,

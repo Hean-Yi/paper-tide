@@ -35,4 +35,49 @@ class ConferenceSchemaTest {
         assertTrue(fullApply.contains("014_conference_cfp_lifecycle.sql"));
         assertTrue(devUp.contains("014_conference_cfp_lifecycle.sql"));
     }
+
+    @Test
+    void conferenceRejectionFeedbackSchemaIsWiredIntoOracleVerificationAndBootstrap() throws IOException {
+        String migration = Files.readString(Path.of("..", "..", "database", "oracle", "028_conference_rejection_feedback.sql"));
+        String verification = Files.readString(Path.of("..", "..", "database", "oracle", "verify_schema.sql"));
+        String fullApply = Files.readString(Path.of("..", "..", "scripts", "oracle-schema-apply.sh"));
+        String devUp = Files.readString(Path.of("..", "..", "scripts", "dev-up.sh"));
+        String testAll = Files.readString(Path.of("..", "..", "scripts", "test-all.sh"));
+
+        assertTrue(migration.contains("REJECTED_BY"));
+        assertTrue(migration.contains("REJECTED_AT"));
+        assertTrue(migration.contains("REJECTION_REASON"));
+        assertTrue(migration.contains("FK_CONFERENCE_REJECTED_BY"));
+
+        assertTrue(verification.contains("REJECTED_BY"));
+        assertTrue(verification.contains("REJECTED_AT"));
+        assertTrue(verification.contains("REJECTION_REASON"));
+        assertTrue(verification.contains("FK_CONFERENCE_REJECTED_BY"));
+
+        assertTrue(fullApply.contains("028_conference_rejection_feedback.sql"));
+        assertTrue(devUp.contains("028_conference_rejection_feedback.sql"));
+        assertTrue(devUp.contains("conference_rejection_feedback_exists"));
+        assertTrue(devUp.contains("oracle_foreign_key_exists"));
+        assertTrue(testAll.contains("028_conference_rejection_feedback.sql"));
+        assertTrue(testAll.contains("oracle_foreign_key_exists"));
+    }
+
+    @Test
+    void abstractSubmissionDeadlineSchemaIsWiredIntoOracleVerificationAndBootstrap() throws IOException {
+        String migration = Files.readString(Path.of("..", "..", "database", "oracle", "029_abstract_submission_deadline.sql"));
+        String verification = Files.readString(Path.of("..", "..", "database", "oracle", "verify_schema.sql"));
+        String fullApply = Files.readString(Path.of("..", "..", "scripts", "oracle-schema-apply.sh"));
+        String devUp = Files.readString(Path.of("..", "..", "scripts", "dev-up.sh"));
+        String testAll = Files.readString(Path.of("..", "..", "scripts", "test-all.sh"));
+
+        assertTrue(migration.contains("ABSTRACT_SUBMISSION_CLOSE_AT"));
+        assertTrue(migration.contains("CK_CONFERENCE_PHASE_ORDER"));
+        assertTrue(verification.contains("ABSTRACT_SUBMISSION_CLOSE_AT"));
+        assertTrue(verification.contains("IDX_CONFERENCE_PHASE_ABSTRACT_CLOSE"));
+
+        assertTrue(fullApply.contains("029_abstract_submission_deadline.sql"));
+        assertTrue(devUp.contains("029_abstract_submission_deadline.sql"));
+        assertTrue(devUp.contains("abstract_submission_deadline_exists"));
+        assertTrue(testAll.contains("029_abstract_submission_deadline.sql"));
+    }
 }

@@ -41,7 +41,36 @@ class ConferenceServiceTest {
         assertEquals(3, detail.targetReviewsPerPaper());
         assertEquals(4, detail.defaultReviewerMaxLoad());
         assertEquals(Instant.parse("2026-06-01T00:00:00Z"), detail.phase().submissionOpenAt());
+        assertEquals(Instant.parse("2026-06-15T00:00:00Z"), detail.phase().abstractSubmissionCloseAt());
         assertEquals(Instant.parse("2026-07-01T00:00:00Z"), detail.phase().submissionCloseAt());
+    }
+
+    @Test
+    void conferencePhaseRequiresAbstractDeadlineBeforeFullPaperDeadline() {
+        ConferenceDraftRequest request = new ConferenceDraftRequest(
+                "Review Systems 2026",
+                "RS",
+                2026,
+                "DOUBLE_BLIND",
+                "Call for papers",
+                List.of("NLP", "SE"),
+                3,
+                4,
+                "review-systems-2026",
+                new ConferencePhaseRequest(
+                        Instant.parse("2026-06-01T00:00:00Z"),
+                        Instant.parse("2026-07-02T00:00:00Z"),
+                        Instant.parse("2026-07-01T00:00:00Z"),
+                        Instant.parse("2026-07-10T00:00:00Z"),
+                        Instant.parse("2026-07-20T00:00:00Z"),
+                        Instant.parse("2026-08-20T00:00:00Z"),
+                        Instant.parse("2026-09-01T00:00:00Z")
+                )
+        );
+
+        assertThrows(ConferenceValidationException.class, () ->
+                service.createDraft(chairPrincipal(), request)
+        );
     }
 
     @Test
@@ -69,6 +98,95 @@ class ConferenceServiceTest {
 
         ConferenceDetail publicDetail = service.getPublicCfp("review-systems-2026");
         assertEquals("Call for papers", publicDetail.cfpText());
+    }
+
+    @Test
+    void adminRejectionReturnsPendingConferenceToDraftWithFeedback() {
+        ConferenceDetail draft = service.createDraft(chairPrincipal(), validDraftRequest());
+        service.submitForApproval(draft.conferenceId(), chairPrincipal());
+
+        ConferenceDetail rejected = service.rejectConference(
+                draft.conferenceId(),
+                adminPrincipal(),
+                new ConferenceRejectionRequest("Submission dates need a clearer review window.")
+        );
+
+        assertEquals("DRAFT", rejected.status());
+        assertEquals(false, rejected.cfpPublished());
+        assertEquals(1004L, rejected.rejectedBy());
+        assertEquals(Instant.parse("2026-05-06T00:00:00Z"), rejected.rejectedAt());
+        assertEquals("Submission dates need a clearer review window.", rejected.rejectionReason());
+        assertEquals(
+                "Submission dates need a clearer review window.",
+                service.getManageableConference(draft.conferenceId(), chairPrincipal()).rejectionReason()
+        );
+    }
+
+    @Test
+    void adminRejectionRequiresReason() {
+        ConferenceDetail draft = service.createDraft(chairPrincipal(), validDraftRequest());
+        service.submitForApproval(draft.conferenceId(), chairPrincipal());
+
+        assertThrows(ConferenceValidationException.class, () ->
+                service.rejectConference(draft.conferenceId(), adminPrincipal(), new ConferenceRejectionRequest(" "))
+        );
+    }
+
+    @Test
+    void chairCanEditRejectedDraftAndResubmitForApproval() {
+        ConferenceDetail draft = service.createDraft(chairPrincipal(), validDraftRequest());
+        service.submitForApproval(draft.conferenceId(), chairPrincipal());
+        service.rejectConference(
+                draft.conferenceId(),
+                adminPrincipal(),
+                new ConferenceRejectionRequest("CFP needs clearer reviewer workload limits.")
+        );
+
+        ConferenceDetail edited = service.updateDraft(
+                draft.conferenceId(),
+                chairPrincipal(),
+                new ConferenceDraftRequest(
+                        "Review Systems 2026 Revised",
+                        "RSR",
+                        2026,
+                        "DOUBLE_BLIND",
+                        "Updated call for papers",
+                        List.of("NLP", "Software Engineering"),
+                        4,
+                        5,
+                        "review-systems-2026-revised",
+                        new ConferencePhaseRequest(
+                                Instant.parse("2026-06-03T00:00:00Z"),
+                                Instant.parse("2026-06-20T00:00:00Z"),
+                                Instant.parse("2026-07-03T00:00:00Z"),
+                                Instant.parse("2026-07-12T00:00:00Z"),
+                                Instant.parse("2026-07-22T00:00:00Z"),
+                                Instant.parse("2026-08-22T00:00:00Z"),
+                                Instant.parse("2026-09-03T00:00:00Z")
+                        )
+                )
+        );
+
+        assertEquals("DRAFT", edited.status());
+        assertEquals("Review Systems 2026 Revised", edited.name());
+        assertEquals("review-systems-2026-revised", edited.publicSlug());
+        assertEquals(4, edited.targetReviewsPerPaper());
+        assertEquals("CFP needs clearer reviewer workload limits.", edited.rejectionReason());
+        assertEquals(Instant.parse("2026-06-03T00:00:00Z"), edited.phase().submissionOpenAt());
+
+        ConferenceDetail resubmitted = service.submitForApproval(draft.conferenceId(), chairPrincipal());
+        assertEquals("PENDING_APPROVAL", resubmitted.status());
+        assertEquals("Updated call for papers", resubmitted.cfpText());
+    }
+
+    @Test
+    void updateDraftRejectsNonDraftConferences() {
+        ConferenceDetail draft = service.createDraft(chairPrincipal(), validDraftRequest());
+        service.submitForApproval(draft.conferenceId(), chairPrincipal());
+
+        assertThrows(ConferenceValidationException.class, () ->
+                service.updateDraft(draft.conferenceId(), chairPrincipal(), validDraftRequest())
+        );
     }
 
     @Test
@@ -112,6 +230,7 @@ class ConferenceServiceTest {
                         "other-conference-2026",
                         new ConferencePhaseRequest(
                                 Instant.parse("2026-06-01T00:00:00Z"),
+                                Instant.parse("2026-06-15T00:00:00Z"),
                                 Instant.parse("2026-07-01T00:00:00Z"),
                                 Instant.parse("2026-07-10T00:00:00Z"),
                                 Instant.parse("2026-07-20T00:00:00Z"),
@@ -148,6 +267,7 @@ class ConferenceServiceTest {
                         "other-conference-2026",
                         new ConferencePhaseRequest(
                                 Instant.parse("2026-06-01T00:00:00Z"),
+                                Instant.parse("2026-06-15T00:00:00Z"),
                                 Instant.parse("2026-07-01T00:00:00Z"),
                                 Instant.parse("2026-07-10T00:00:00Z"),
                                 Instant.parse("2026-07-20T00:00:00Z"),
@@ -173,6 +293,7 @@ class ConferenceServiceTest {
                 "review-systems-2026",
                 new ConferencePhaseRequest(
                         Instant.parse("2026-06-01T00:00:00Z"),
+                        Instant.parse("2026-06-15T00:00:00Z"),
                         Instant.parse("2026-07-01T00:00:00Z"),
                         Instant.parse("2026-07-10T00:00:00Z"),
                         Instant.parse("2026-07-20T00:00:00Z"),
@@ -218,9 +339,37 @@ class ConferenceServiceTest {
                     draft.publicSlug(),
                     draft.cfpPublished(),
                     null,
+                    null,
+                    null,
+                    null,
                     null
             ));
             return id;
+        }
+
+        @Override
+        public void updateConference(long conferenceId, ConferenceDraft draft) {
+            StoredConference conference = conferences.get(conferenceId);
+            conferences.put(conferenceId, new StoredConference(
+                    conferenceId,
+                    draft.name(),
+                    draft.acronym(),
+                    draft.year(),
+                    conference.organizerUserId(),
+                    conference.status(),
+                    draft.blindMode(),
+                    draft.cfpText(),
+                    new ArrayList<>(draft.topicAreas()),
+                    draft.targetReviewsPerPaper(),
+                    draft.defaultReviewerMaxLoad(),
+                    draft.publicSlug(),
+                    draft.cfpPublished(),
+                    conference.approvedBy(),
+                    conference.approvedAt(),
+                    conference.rejectedBy(),
+                    conference.rejectedAt(),
+                    conference.rejectionReason()
+            ));
         }
 
         @Override
@@ -229,6 +378,22 @@ class ConferenceServiceTest {
                     nextPhaseId++,
                     conferenceId,
                     draft.submissionOpenAt(),
+                    draft.abstractSubmissionCloseAt(),
+                    draft.submissionCloseAt(),
+                    draft.biddingOpenAt(),
+                    draft.biddingCloseAt(),
+                    draft.reviewDeadlineAt(),
+                    draft.decisionReleaseAt()
+            ));
+        }
+
+        @Override
+        public void updatePhase(long conferenceId, ConferencePhaseDraft draft) {
+            phases.put(conferenceId, new ConferencePhase(
+                    nextPhaseId++,
+                    conferenceId,
+                    draft.submissionOpenAt(),
+                    draft.abstractSubmissionCloseAt(),
                     draft.submissionCloseAt(),
                     draft.biddingOpenAt(),
                     draft.biddingCloseAt(),
@@ -272,6 +437,7 @@ class ConferenceServiceTest {
                             conference.blindMode(),
                             conference.publicSlug(),
                             phases.get(conference.conferenceId()).submissionOpenAt(),
+                            phases.get(conference.conferenceId()).abstractSubmissionCloseAt(),
                             phases.get(conference.conferenceId()).submissionCloseAt()
                     ))
                     .toList();
@@ -290,6 +456,7 @@ class ConferenceServiceTest {
                             conference.blindMode(),
                             conference.publicSlug(),
                             phases.get(conference.conferenceId()).submissionOpenAt(),
+                            phases.get(conference.conferenceId()).abstractSubmissionCloseAt(),
                             phases.get(conference.conferenceId()).submissionCloseAt()
                     ))
                     .toList();
@@ -308,6 +475,7 @@ class ConferenceServiceTest {
                             conference.blindMode(),
                             conference.publicSlug(),
                             phases.get(conference.conferenceId()).submissionOpenAt(),
+                            phases.get(conference.conferenceId()).abstractSubmissionCloseAt(),
                             phases.get(conference.conferenceId()).submissionCloseAt()
                     ))
                     .toList();
@@ -322,6 +490,12 @@ class ConferenceServiceTest {
         public void updateStatus(long conferenceId, String status, boolean cfpPublished, Long approvedBy, Instant approvedAt) {
             StoredConference conference = conferences.get(conferenceId);
             conferences.put(conferenceId, conference.withStatus(status, cfpPublished, approvedBy, approvedAt));
+        }
+
+        @Override
+        public void rejectApproval(long conferenceId, long rejectedBy, Instant rejectedAt, String rejectionReason) {
+            StoredConference conference = conferences.get(conferenceId);
+            conferences.put(conferenceId, conference.withRejection(rejectedBy, rejectedAt, rejectionReason));
         }
 
         private ConferenceDetail toDetail(StoredConference conference) {
@@ -341,6 +515,9 @@ class ConferenceServiceTest {
                     conference.cfpPublished(),
                     conference.approvedBy(),
                     conference.approvedAt(),
+                    conference.rejectedBy(),
+                    conference.rejectedAt(),
+                    conference.rejectionReason(),
                     phases.get(conference.conferenceId())
             );
         }
@@ -360,12 +537,23 @@ class ConferenceServiceTest {
                 String publicSlug,
                 boolean cfpPublished,
                 Long approvedBy,
-                Instant approvedAt
+                Instant approvedAt,
+                Long rejectedBy,
+                Instant rejectedAt,
+                String rejectionReason
         ) {
             StoredConference withStatus(String nextStatus, boolean nextPublished, Long nextApprovedBy, Instant nextApprovedAt) {
                 return new StoredConference(conferenceId, name, acronym, year, organizerUserId, nextStatus,
                         blindMode, cfpText, new ArrayList<>(topicAreas), targetReviewsPerPaper,
-                        defaultReviewerMaxLoad, publicSlug, nextPublished, nextApprovedBy, nextApprovedAt);
+                        defaultReviewerMaxLoad, publicSlug, nextPublished, nextApprovedBy, nextApprovedAt,
+                        rejectedBy, rejectedAt, rejectionReason);
+            }
+
+            StoredConference withRejection(long nextRejectedBy, Instant nextRejectedAt, String nextRejectionReason) {
+                return new StoredConference(conferenceId, name, acronym, year, organizerUserId, "DRAFT",
+                        blindMode, cfpText, new ArrayList<>(topicAreas), targetReviewsPerPaper,
+                        defaultReviewerMaxLoad, publicSlug, false, approvedBy, approvedAt,
+                        nextRejectedBy, nextRejectedAt, nextRejectionReason);
             }
         }
     }

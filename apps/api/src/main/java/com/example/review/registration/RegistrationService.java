@@ -313,11 +313,6 @@ public class RegistrationService {
                 );
             }
         }
-        if (type == RegistrationType.ORGANIZER && isBlank(profile.plannedConferenceTitle())) {
-            throw new RegistrationValidationException(
-                    "Organizer applications require a planned conference title"
-            );
-        }
     }
 
     private String payloadSnapshot(RegistrationRequest request) {

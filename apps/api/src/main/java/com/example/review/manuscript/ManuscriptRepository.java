@@ -31,7 +31,7 @@ public class ManuscriptRepository {
                   BLIND_MODE,
                   SUBMITTED_AT,
                   LAST_DECISION_CODE
-                ) VALUES (?, ?, ?, NULL, 'DRAFT', 0, ?, NULL, NULL)
+                ) VALUES (?, ?, ?, NULL, 'ABSTRACT_SUBMITTED', 0, ?, NULL, NULL)
                 """,
                 manuscriptId,
                 submitterId,
@@ -78,6 +78,14 @@ public class ManuscriptRepository {
         jdbcTemplate.update(
                 "UPDATE MANUSCRIPT SET CURRENT_STATUS = ?, LAST_DECISION_CODE = ? WHERE MANUSCRIPT_ID = ?",
                 currentStatus,
+                lastDecisionCode,
+                manuscriptId
+        );
+    }
+
+    public void updateLastDecision(long manuscriptId, String lastDecisionCode) {
+        jdbcTemplate.update(
+                "UPDATE MANUSCRIPT SET LAST_DECISION_CODE = ? WHERE MANUSCRIPT_ID = ?",
                 lastDecisionCode,
                 manuscriptId
         );

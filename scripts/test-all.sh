@@ -47,6 +47,34 @@ SQL
   [[ "$index_count" == "1" ]]
 }
 
+oracle_foreign_key_exists() {
+  local constraint_name="$1"
+  local referenced_table="$2"
+  local container_name="${ORACLE_CONTAINER_NAME:-review-oracle}"
+  local app_user="${APP_USER:-review_app}"
+  local app_password="${APP_USER_PASSWORD:-ReviewApp12345}"
+  local oracle_service="${ORACLE_SERVICE:-FREEPDB1}"
+  local constraint_count
+
+  if ! docker ps --format '{{.Names}}' | grep -qx "$container_name"; then
+    return 1
+  fi
+  constraint_count="$(docker exec -i "$container_name" bash -lc \
+    "sqlplus -s ${app_user}/${app_password}@localhost/${oracle_service}" <<SQL | tr -d '[:space:]'
+SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF
+SELECT COUNT(*)
+FROM USER_CONSTRAINTS fk
+JOIN USER_CONSTRAINTS pk
+  ON pk.CONSTRAINT_NAME = fk.R_CONSTRAINT_NAME
+WHERE fk.CONSTRAINT_NAME = UPPER('${constraint_name}')
+  AND fk.CONSTRAINT_TYPE = 'R'
+  AND pk.TABLE_NAME = UPPER('${referenced_table}');
+EXIT;
+SQL
+)"
+  [[ "$constraint_count" == "1" ]]
+}
+
 oracle_constraint_mentions() {
   local constraint_name="$1"
   local expected_text="$2"
@@ -80,6 +108,29 @@ apply_single_oracle_migration() {
   docker exec "$container_name" bash -lc \
     "sqlplus -s ${app_user}/${app_password}@localhost/${oracle_service} @/tmp/${migration_file}" \
     >/dev/null
+}
+
+legacy_default_conference_published() {
+  local container_name="${ORACLE_CONTAINER_NAME:-review-oracle}"
+  local app_user="${APP_USER:-review_app}"
+  local app_password="${APP_USER_PASSWORD:-ReviewApp12345}"
+  local oracle_service="${ORACLE_SERVICE:-FREEPDB1}"
+  local conference_count
+
+  if ! docker ps --format '{{.Names}}' | grep -qx "$container_name"; then
+    return 1
+  fi
+  conference_count="$(docker exec -i "$container_name" bash -lc \
+    "sqlplus -s ${app_user}/${app_password}@localhost/${oracle_service}" <<SQL | tr -d '[:space:]'
+SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF
+SELECT COUNT(*)
+FROM CONFERENCE
+WHERE PUBLIC_SLUG = 'legacy-platform-default'
+  AND CFP_PUBLISHED = 1;
+EXIT;
+SQL
+)"
+  [[ "$conference_count" == "1" ]]
 }
 
 if [ -d "/opt/homebrew/opt/openjdk/bin" ]; then
@@ -151,6 +202,20 @@ if command -v mvn >/dev/null 2>&1 && command -v java >/dev/null 2>&1; then
       ! oracle_table_exists "COMMUNICATION_COMPOSE_BATCH" ||
       ! oracle_table_exists "COMMUNICATION_REMINDER"; then
       apply_single_oracle_migration "026_wave7_wave9_full_closure.sql"
+    fi
+    if ! legacy_default_conference_published; then
+      apply_single_oracle_migration "027_publish_legacy_default_conference.sql"
+    fi
+    if ! oracle_column_exists "CONFERENCE" "REJECTED_BY" ||
+      ! oracle_column_exists "CONFERENCE" "REJECTED_AT" ||
+      ! oracle_column_exists "CONFERENCE" "REJECTION_REASON" ||
+      ! oracle_foreign_key_exists "FK_CONFERENCE_REJECTED_BY" "SYS_USER"; then
+      apply_single_oracle_migration "028_conference_rejection_feedback.sql"
+    fi
+    if ! oracle_column_exists "CONFERENCE_PHASE" "ABSTRACT_SUBMISSION_CLOSE_AT" ||
+      ! oracle_index_exists "IDX_CONFERENCE_PHASE_ABSTRACT_CLOSE" ||
+      ! oracle_constraint_mentions "CK_MANUSCRIPT_STATUS" "ABSTRACT_SUBMITTED"; then
+      apply_single_oracle_migration "029_abstract_submission_deadline.sql"
     fi
   fi
   if [ -x "$ROOT_DIR/scripts/demo-seed.sh" ] && command -v docker >/dev/null 2>&1; then

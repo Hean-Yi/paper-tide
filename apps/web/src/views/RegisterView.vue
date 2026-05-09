@@ -46,10 +46,6 @@ async function submit() {
     error.value = "审稿人注册需要至少填写一篇代表作。";
     return;
   }
-  if (form.registrationType === "ORGANIZER" && !form.plannedConferenceTitle.trim()) {
-    error.value = "组织者注册需要填写拟举办会议名称。";
-    return;
-  }
   loading.value = true;
   try {
     const response = await apiRequest<RegistrationResponse>("/auth/register", {
@@ -164,10 +160,6 @@ function successMessage(response: RegistrationResponse): string {
           <label class="field">
             <span>研究领域</span>
             <el-input v-model="form.areaCode" placeholder="例如 NLP" />
-          </label>
-          <label v-if="form.registrationType === 'ORGANIZER'" class="field">
-            <span>拟举办会议名称</span>
-            <el-input v-model="form.plannedConferenceTitle" data-test="register-conference-title" />
           </label>
         </template>
 

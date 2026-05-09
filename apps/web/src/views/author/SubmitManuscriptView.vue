@@ -69,7 +69,15 @@ const draftRules: FormRules = {
 };
 
 const selectedConference = computed(() =>
-  conferences.value.find((conference) => conference.conferenceId === form.conferenceId) ?? null
+  submissionTargetConferences.value.find((conference) => conference.conferenceId === form.conferenceId) ?? null
+);
+
+const createdSubmissionNumber = computed(() =>
+  created.value?.submissionNumber ?? (created.value ? `PAPER-${created.value.manuscriptId}` : "")
+);
+
+const submissionTargetConferences = computed(() =>
+  conferences.value.filter(isOpenSubmissionConference)
 );
 
 function hasRequiredDraftValues() {
@@ -127,9 +135,9 @@ async function createDraft() {
       authors: form.authors
     });
     await loadSubmissionChecklist();
-    ElMessage.success("稿件已创建。");
+    ElMessage.success(`摘要已提交，取号编号：${createdSubmissionNumber.value}`);
   } catch (error) {
-    showApiError(error, "稿件创建失败。");
+    showApiError(error, "摘要提交失败。");
   } finally {
     submitting.value = false;
   }
@@ -213,8 +221,8 @@ async function loadConferences() {
   loadingConferences.value = true;
   try {
     conferences.value = await listPublicCfps();
-    if (!form.conferenceId && conferences.value.length > 0) {
-      form.conferenceId = conferences.value[0].conferenceId;
+    if (!submissionTargetConferences.value.some((conference) => conference.conferenceId === form.conferenceId)) {
+      form.conferenceId = submissionTargetConferences.value[0]?.conferenceId;
     }
   } catch (error) {
     showApiError(error, "会议加载失败。");
@@ -225,6 +233,18 @@ async function loadConferences() {
 
 function formatDeadline(value: string | null | undefined) {
   return formatDateTime(value);
+}
+
+function isOpenSubmissionConference(conference: ConferenceCfpSummary) {
+  if (conference.status !== "OPEN_FOR_SUBMISSION") {
+    return false;
+  }
+  const abstractCloseAt = conference.abstractSubmissionCloseAt ?? conference.submissionCloseAt;
+  if (!abstractCloseAt) {
+    return false;
+  }
+  const closeAt = Date.parse(abstractCloseAt);
+  return Number.isFinite(closeAt) && closeAt > Date.now();
 }
 
 onMounted(() => {
@@ -238,7 +258,7 @@ onMounted(() => {
       <div>
         <p class="eyebrow">作者</p>
         <h1>提交稿件</h1>
-        <p class="body">创建稿件记录、上传 PDF，然后提交当前版本。</p>
+        <p class="body">先提交摘要获取取号编号，再上传 PDF 并提交完整论文。</p>
         <p class="body">{{ PDF_UPLOAD_LIMIT_HINT }}</p>
       </div>
     </div>
@@ -247,21 +267,29 @@ onMounted(() => {
       <el-form-item label="会议" prop="conferenceId">
         <el-select v-model="form.conferenceId" data-test="manuscript-conference" :loading="loadingConferences" placeholder="选择会议">
           <el-option
-            v-for="conference in conferences"
+            v-for="conference in submissionTargetConferences"
             :key="conference.conferenceId"
             :label="`${conference.name} ${conference.year}`"
             :value="conference.conferenceId"
           />
         </el-select>
       </el-form-item>
+      <el-alert
+        v-if="!loadingConferences && !submissionTargetConferences.length"
+        class="workflow-alert compact-alert"
+        title="当前没有正在征稿且未过截止时间的会议。"
+        type="info"
+        :closable="false"
+      />
       <el-alert v-if="selectedConference" class="workflow-alert compact-alert" type="info" :closable="false">
         <template #title>
           {{ selectedConference.name }} 使用 {{ workflowLabel(selectedConference.blindMode) }} 评审。
         </template>
-        投稿截止时间 {{ formatDeadline(selectedConference.submissionCloseAt) }}。
+        摘要提交截止 {{ formatDeadline(selectedConference.abstractSubmissionCloseAt) }}；
+        论文提交截止 {{ formatDeadline(selectedConference.submissionCloseAt) }}。
       </el-alert>
       <el-form-item label="标题" prop="title">
-        <el-input v-model="form.title" placeholder="诞文标题" />
+        <el-input v-model="form.title" placeholder="论文标题" />
       </el-form-item>
       <el-form-item label="摘要" prop="abstract">
         <el-input v-model="form.abstract" type="textarea" :rows="5" />
@@ -284,7 +312,7 @@ onMounted(() => {
       </section>
 
       <el-button type="primary" native-type="submit" :loading="submitting" :disabled="!!created">
-        创建稿件
+        提交摘要并取号
       </el-button>
     </el-form>
 
@@ -295,12 +323,12 @@ onMounted(() => {
       :closable="false"
     >
       <template #title>
-        Manuscript record created.
+        摘要已提交，取号编号：{{ createdSubmissionNumber }}。
         <el-tag class="inline-status" :type="statusTagType(created.currentStatus)">
           {{ workflowLabel(created.currentStatus) }}
         </el-tag>
       </template>
-      上传 PDF 后方可最终提交。
+      请在论文提交截止前上传 PDF，并提交完整论文。
     </el-alert>
 
     <section v-if="created && submissionChecklist" class="workflow-form review-form-panel">

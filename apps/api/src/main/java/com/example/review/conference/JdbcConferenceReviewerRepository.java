@@ -28,16 +28,101 @@ class JdbcConferenceReviewerRepository implements ConferenceReviewerRepository {
                 """
                 SELECT COUNT(*)
                 FROM SYS_USER U
-                JOIN SYS_USER_ROLE UR ON UR.USER_ID = U.USER_ID
-                JOIN SYS_ROLE R ON R.ROLE_ID = UR.ROLE_ID
                 WHERE U.USER_ID = ?
                   AND U.STATUS = 'ACTIVE'
-                  AND R.ROLE_CODE = 'REVIEWER'
+                  AND EXISTS (
+                    SELECT 1
+                    FROM SYS_USER_ROLE UR
+                    JOIN SYS_ROLE R ON R.ROLE_ID = UR.ROLE_ID
+                    WHERE UR.USER_ID = U.USER_ID
+                      AND R.ROLE_CODE IN ('AUTHOR', 'REVIEWER')
+                  )
                 """,
                 Integer.class,
                 reviewerId
         );
         return count != null && count > 0;
+    }
+
+    @Override
+    public List<PlatformReviewerSearchResult> searchActivePlatformReviewers(String query, int limit) {
+        String normalizedQuery = query == null ? "" : query.trim().toLowerCase();
+        String likeQuery = "%" + normalizedQuery + "%";
+        String searchPredicate = normalizedQuery.isBlank() ? "" : """
+                    AND (
+                      LOWER(U.REAL_NAME) LIKE ?
+                      OR LOWER(U.EMAIL) LIKE ?
+                      OR LOWER(U.USERNAME) LIKE ?
+                      OR LOWER(NVL(U.INSTITUTION, '')) LIKE ?
+                    )
+                """;
+        String sql = """
+                SELECT *
+                FROM (
+                  SELECT U.USER_ID, U.REAL_NAME, U.EMAIL, U.INSTITUTION
+                  FROM SYS_USER U
+                  WHERE U.STATUS = 'ACTIVE'
+                    AND EXISTS (
+                      SELECT 1
+                      FROM SYS_USER_ROLE UR
+                      JOIN SYS_ROLE R ON R.ROLE_ID = UR.ROLE_ID
+                      WHERE UR.USER_ID = U.USER_ID
+                        AND R.ROLE_CODE IN ('AUTHOR', 'REVIEWER')
+                    )
+                %s
+                  ORDER BY
+                    CASE
+                      WHEN LOWER(U.EMAIL) = ? THEN 0
+                      WHEN LOWER(U.REAL_NAME) = ? THEN 1
+                      WHEN LOWER(U.USERNAME) = ? THEN 2
+                      ELSE 3
+                    END,
+                    U.REAL_NAME,
+                    U.USER_ID
+                )
+                WHERE ROWNUM <= ?
+                """.formatted(searchPredicate);
+        Object[] args = normalizedQuery.isBlank()
+                ? new Object[]{"", "", "", limit}
+                : new Object[]{likeQuery, likeQuery, likeQuery, likeQuery, normalizedQuery, normalizedQuery, normalizedQuery, limit};
+        List<PlatformReviewerUserRow> rows = jdbcTemplate.query(
+                sql,
+                (rs, rowNum) -> new PlatformReviewerUserRow(
+                        rs.getLong("USER_ID"),
+                        rs.getString("REAL_NAME"),
+                        rs.getString("EMAIL"),
+                        rs.getString("INSTITUTION")
+                ),
+                args
+        );
+        return rows.stream()
+                .map(row -> new PlatformReviewerSearchResult(
+                        row.userId(),
+                        row.realName(),
+                        row.email(),
+                        row.institution(),
+                        listUserResearchAreas(row.userId())
+                ))
+                .toList();
+    }
+
+    @Override
+    public void grantReviewerRole(long userId) {
+        jdbcTemplate.update(
+                """
+                MERGE INTO SYS_USER_ROLE UR
+                USING (
+                  SELECT ? AS USER_ID, R.ROLE_ID
+                  FROM SYS_ROLE R
+                  WHERE R.ROLE_CODE = 'REVIEWER'
+                ) S
+                ON (UR.USER_ID = S.USER_ID AND UR.ROLE_ID = S.ROLE_ID)
+                WHEN NOT MATCHED THEN
+                  INSERT (USER_ROLE_ID, USER_ID, ROLE_ID)
+                  VALUES (SEQ_SYS_USER_ROLE.NEXTVAL, S.USER_ID, S.ROLE_ID)
+                """,
+                userId
+        );
     }
 
     @Override
@@ -402,6 +487,14 @@ class JdbcConferenceReviewerRepository implements ConferenceReviewerRepository {
             String keywords,
             String bidValue,
             boolean conflictDeclared
+    ) {
+    }
+
+    private record PlatformReviewerUserRow(
+            long userId,
+            String realName,
+            String email,
+            String institution
     ) {
     }
 }

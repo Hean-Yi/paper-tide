@@ -21,7 +21,7 @@ public class ManuscriptService {
     private static final long MAX_PDF_BYTES = 100L * 1024L * 1024L;
     private static final String MAX_PDF_SIZE_LABEL = "100MB";
     private static final Set<String> VALID_BLIND_MODES = Set.of("DOUBLE_BLIND", "SINGLE_BLIND", "OPEN");
-    private static final Set<String> DRAFT_STATUSES = Set.of("DRAFT", "REVISION_REQUIRED");
+    private static final Set<String> EDITABLE_STATUSES = Set.of("ABSTRACT_SUBMITTED", "DRAFT", "REVISION_REQUIRED");
     private static final byte[] PDF_MAGIC = "%PDF-".getBytes(StandardCharsets.US_ASCII);
 
     private final ManuscriptRepository manuscriptRepository;
@@ -117,7 +117,7 @@ public class ManuscriptService {
         if (manuscript.currentVersionId() == null || manuscript.currentVersionId() != versionId) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "PDF upload is allowed only for the current version");
         }
-        if (!DRAFT_STATUSES.contains(manuscript.currentStatus())) {
+        if (!EDITABLE_STATUSES.contains(manuscript.currentStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Submitted versions cannot replace their PDF");
         }
 
@@ -166,6 +166,7 @@ public class ManuscriptService {
         }
 
         String nextStatus = switch (manuscript.currentStatus()) {
+            case "ABSTRACT_SUBMITTED" -> "SUBMITTED";
             case "DRAFT" -> "SUBMITTED";
             case "REVISION_REQUIRED" -> "REVISED_SUBMITTED";
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid manuscript state for submission");
@@ -211,6 +212,7 @@ public class ManuscriptService {
         return manuscriptRepository.listBySubmitter(principal.userId()).stream()
                 .map(row -> new ManuscriptSummaryResponse(
                         row.manuscriptId(),
+                        submissionNumber(row.manuscriptId()),
                         row.conferenceId(),
                         row.currentVersionId(),
                         row.currentStatus(),
@@ -243,6 +245,7 @@ public class ManuscriptService {
     private ManuscriptResponse toResponse(ManuscriptRow manuscript) {
         return new ManuscriptResponse(
                 manuscript.manuscriptId(),
+                submissionNumber(manuscript.manuscriptId()),
                 manuscript.submitterId(),
                 manuscript.conferenceId(),
                 manuscript.currentVersionId() == null ? 0 : manuscript.currentVersionId(),
@@ -312,8 +315,8 @@ public class ManuscriptService {
         if (!"OPEN_FOR_SUBMISSION".equals(conference.status())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Conference is not open for submission");
         }
-        if (!Instant.now(clock).isBefore(conference.submissionCloseAt())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Conference submission deadline has passed");
+        if (!Instant.now(clock).isBefore(conference.abstractSubmissionCloseAt())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Conference abstract submission deadline has passed");
         }
         return conference;
     }
@@ -325,8 +328,12 @@ public class ManuscriptService {
         ConferenceSubmissionTarget conference = conferenceRepository.findSubmissionTarget(manuscript.conferenceId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Conference not found"));
         if (!Instant.now(clock).isBefore(conference.submissionCloseAt())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Conference submission deadline has passed");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Conference full paper submission deadline has passed");
         }
+    }
+
+    private String submissionNumber(long manuscriptId) {
+        return "PAPER-" + manuscriptId;
     }
 
     private void validateAuthors(List<AuthorRequest> authors) {

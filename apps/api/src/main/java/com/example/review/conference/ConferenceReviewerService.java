@@ -48,6 +48,7 @@ public class ConferenceReviewerService {
         if (maxLoad < 1 || maxLoad > 20) {
             throw new ConferenceValidationException("Reviewer max load is invalid");
         }
+        reviewerRepository.grantReviewerRole(request.reviewerId());
         List<ResearchAreaSnapshot> researchAreas = reviewerRepository.listUserResearchAreas(request.reviewerId());
         return toResponse(reviewerRepository.upsertConferenceReviewer(
                 conferenceId,
@@ -56,6 +57,11 @@ public class ConferenceReviewerService {
                 principal.userId(),
                 researchAreas
         ));
+    }
+
+    public List<PlatformReviewerSearchResult> searchActivePlatformReviewers(CurrentUserPrincipal principal, String query) {
+        requireChairOrAdmin(principal);
+        return reviewerRepository.searchActivePlatformReviewers(query, 20);
     }
 
     public List<ReviewerBiddingItem> listOpenBiddingItems(long conferenceId, CurrentUserPrincipal principal) {

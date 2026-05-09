@@ -31,8 +31,12 @@ class JdbcConferenceRepository implements ConferenceRepository {
               c.CFP_PUBLISHED,
               c.APPROVED_BY,
               c.APPROVED_AT,
+              c.REJECTED_BY,
+              c.REJECTED_AT,
+              c.REJECTION_REASON,
               p.PHASE_ID,
               p.SUBMISSION_OPEN_AT,
+              p.ABSTRACT_SUBMISSION_CLOSE_AT,
               p.SUBMISSION_CLOSE_AT,
               p.BIDDING_OPEN_AT,
               p.BIDDING_CLOSE_AT,
@@ -83,21 +87,77 @@ class JdbcConferenceRepository implements ConferenceRepository {
     }
 
     @Override
+    public void updateConference(long conferenceId, ConferenceDraft draft) {
+        jdbcTemplate.update(
+                """
+                UPDATE CONFERENCE
+                SET NAME = ?,
+                    ACRONYM = ?,
+                    CONFERENCE_YEAR = ?,
+                    BLIND_MODE = ?,
+                    CFP_TEXT = ?,
+                    TOPIC_AREAS_JSON = ?,
+                    TARGET_REVIEWS_PER_PAPER = ?,
+                    DEFAULT_REVIEWER_MAX_LOAD = ?,
+                    PUBLIC_SLUG = ?,
+                    UPDATED_AT = CURRENT_TIMESTAMP
+                WHERE CONFERENCE_ID = ?
+                """,
+                draft.name(),
+                draft.acronym(),
+                draft.year(),
+                draft.blindMode(),
+                draft.cfpText(),
+                toJson(draft.topicAreas()),
+                draft.targetReviewsPerPaper(),
+                draft.defaultReviewerMaxLoad(),
+                draft.publicSlug(),
+                conferenceId
+        );
+    }
+
+    @Override
     public void createPhase(long conferenceId, ConferencePhaseDraft draft) {
         jdbcTemplate.update(
                 """
                 INSERT INTO CONFERENCE_PHASE (
-                  PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, SUBMISSION_CLOSE_AT,
+                  PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, ABSTRACT_SUBMISSION_CLOSE_AT, SUBMISSION_CLOSE_AT,
                   BIDDING_OPEN_AT, BIDDING_CLOSE_AT, REVIEW_DEADLINE_AT, DECISION_RELEASE_AT
-                ) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 conferenceId,
                 timestamp(draft.submissionOpenAt()),
+                timestamp(draft.abstractSubmissionCloseAt()),
                 timestamp(draft.submissionCloseAt()),
                 timestamp(draft.biddingOpenAt()),
                 timestamp(draft.biddingCloseAt()),
                 timestamp(draft.reviewDeadlineAt()),
                 timestamp(draft.decisionReleaseAt())
+        );
+    }
+
+    @Override
+    public void updatePhase(long conferenceId, ConferencePhaseDraft draft) {
+        jdbcTemplate.update(
+                """
+                UPDATE CONFERENCE_PHASE
+                SET SUBMISSION_OPEN_AT = ?,
+                    ABSTRACT_SUBMISSION_CLOSE_AT = ?,
+                    SUBMISSION_CLOSE_AT = ?,
+                    BIDDING_OPEN_AT = ?,
+                    BIDDING_CLOSE_AT = ?,
+                    REVIEW_DEADLINE_AT = ?,
+                    DECISION_RELEASE_AT = ?
+                WHERE CONFERENCE_ID = ?
+                """,
+                timestamp(draft.submissionOpenAt()),
+                timestamp(draft.abstractSubmissionCloseAt()),
+                timestamp(draft.submissionCloseAt()),
+                timestamp(draft.biddingOpenAt()),
+                timestamp(draft.biddingCloseAt()),
+                timestamp(draft.reviewDeadlineAt()),
+                timestamp(draft.decisionReleaseAt()),
+                conferenceId
         );
     }
 
@@ -138,6 +198,7 @@ class JdbcConferenceRepository implements ConferenceRepository {
                   c.BLIND_MODE,
                   c.PUBLIC_SLUG,
                   p.SUBMISSION_OPEN_AT,
+                  p.ABSTRACT_SUBMISSION_CLOSE_AT,
                   p.SUBMISSION_CLOSE_AT
                 FROM CONFERENCE c
                 JOIN CONFERENCE_PHASE p ON p.CONFERENCE_ID = c.CONFERENCE_ID
@@ -162,6 +223,7 @@ class JdbcConferenceRepository implements ConferenceRepository {
                   c.BLIND_MODE,
                   c.PUBLIC_SLUG,
                   p.SUBMISSION_OPEN_AT,
+                  p.ABSTRACT_SUBMISSION_CLOSE_AT,
                   p.SUBMISSION_CLOSE_AT
                 FROM CONFERENCE c
                 JOIN CONFERENCE_PHASE p ON p.CONFERENCE_ID = c.CONFERENCE_ID
@@ -187,6 +249,7 @@ class JdbcConferenceRepository implements ConferenceRepository {
                   c.BLIND_MODE,
                   c.PUBLIC_SLUG,
                   p.SUBMISSION_OPEN_AT,
+                  p.ABSTRACT_SUBMISSION_CLOSE_AT,
                   p.SUBMISSION_CLOSE_AT
                 FROM CONFERENCE c
                 JOIN CONFERENCE_PHASE p ON p.CONFERENCE_ID = c.CONFERENCE_ID
@@ -228,12 +291,33 @@ class JdbcConferenceRepository implements ConferenceRepository {
         );
     }
 
+    @Override
+    public void rejectApproval(long conferenceId, long rejectedBy, Instant rejectedAt, String rejectionReason) {
+        jdbcTemplate.update(
+                """
+                UPDATE CONFERENCE
+                SET CONFERENCE_STATUS = 'DRAFT',
+                    CFP_PUBLISHED = 0,
+                    REJECTED_BY = ?,
+                    REJECTED_AT = ?,
+                    REJECTION_REASON = ?,
+                    UPDATED_AT = CURRENT_TIMESTAMP
+                WHERE CONFERENCE_ID = ?
+                """,
+                rejectedBy,
+                timestamp(rejectedAt),
+                rejectionReason,
+                conferenceId
+        );
+    }
+
     private ConferenceDetail mapDetail(ResultSet rs, int rowNum) throws SQLException {
         long conferenceId = rs.getLong("CONFERENCE_ID");
         ConferencePhase phase = new ConferencePhase(
                 rs.getLong("PHASE_ID"),
                 conferenceId,
                 instant(rs.getTimestamp("SUBMISSION_OPEN_AT")),
+                instant(rs.getTimestamp("ABSTRACT_SUBMISSION_CLOSE_AT")),
                 instant(rs.getTimestamp("SUBMISSION_CLOSE_AT")),
                 instant(rs.getTimestamp("BIDDING_OPEN_AT")),
                 instant(rs.getTimestamp("BIDDING_CLOSE_AT")),
@@ -256,6 +340,9 @@ class JdbcConferenceRepository implements ConferenceRepository {
                 rs.getInt("CFP_PUBLISHED") == 1,
                 nullableLong(rs, "APPROVED_BY"),
                 instant(rs.getTimestamp("APPROVED_AT")),
+                nullableLong(rs, "REJECTED_BY"),
+                instant(rs.getTimestamp("REJECTED_AT")),
+                rs.getString("REJECTION_REASON"),
                 phase
         );
     }
@@ -270,6 +357,7 @@ class JdbcConferenceRepository implements ConferenceRepository {
                 rs.getString("BLIND_MODE"),
                 rs.getString("PUBLIC_SLUG"),
                 instant(rs.getTimestamp("SUBMISSION_OPEN_AT")),
+                instant(rs.getTimestamp("ABSTRACT_SUBMISSION_CLOSE_AT")),
                 instant(rs.getTimestamp("SUBMISSION_CLOSE_AT"))
         );
     }

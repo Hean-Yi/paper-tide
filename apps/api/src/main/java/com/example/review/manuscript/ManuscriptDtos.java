@@ -35,6 +35,7 @@ record AuthorRequest(
 
 record ManuscriptResponse(
         long manuscriptId,
+        String submissionNumber,
         long submitterId,
         Long conferenceId,
         long currentVersionId,
@@ -50,6 +51,7 @@ record ManuscriptResponse(
 
 record ManuscriptSummaryResponse(
         long manuscriptId,
+        String submissionNumber,
         Long conferenceId,
         long currentVersionId,
         String currentStatus,

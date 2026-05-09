@@ -10,8 +10,19 @@ export function listPendingConferenceApprovals() {
   return apiRequest<ConferenceCfpSummary[]>("/admin/conferences/pending");
 }
 
+export function getAdminConference(conferenceId: number) {
+  return apiRequest<ConferenceDetail>(`/admin/conferences/${conferenceId}`);
+}
+
 export function approveConference(conferenceId: number) {
   return apiRequest<ConferenceDetail>(`/admin/conferences/${conferenceId}/approve`, { method: "POST" });
+}
+
+export function rejectConference(conferenceId: number, rejectionReason: string) {
+  return apiRequest<ConferenceDetail>(`/admin/conferences/${conferenceId}/reject`, {
+    method: "POST",
+    json: { rejectionReason }
+  });
 }
 
 export function listAdminAnalysisMonitor(filters: AdminAnalysisMonitorFilters = {}) {

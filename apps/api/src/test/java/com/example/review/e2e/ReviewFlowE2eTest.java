@@ -455,12 +455,13 @@ class ReviewFlowE2eTest {
         jdbcTemplate.update(
                 """
                 INSERT INTO CONFERENCE_PHASE (
-                  PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, SUBMISSION_CLOSE_AT, BIDDING_OPEN_AT,
+                  PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, ABSTRACT_SUBMISSION_CLOSE_AT, SUBMISSION_CLOSE_AT, BIDDING_OPEN_AT,
                   BIDDING_CLOSE_AT, REVIEW_DEADLINE_AT, DECISION_RELEASE_AT
-                ) VALUES (SEQ_CONFERENCE_PHASE.NEXTVAL, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (SEQ_CONFERENCE_PHASE.NEXTVAL, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 conferenceId,
                 Timestamp.from(submissionCloseAt.minusSeconds(30 * 24 * 60 * 60)),
+                Timestamp.from(submissionCloseAt.minusSeconds(7 * 24 * 60 * 60)),
                 Timestamp.from(submissionCloseAt),
                 Timestamp.from(submissionCloseAt.plusSeconds(24 * 60 * 60)),
                 Timestamp.from(submissionCloseAt.plusSeconds(7 * 24 * 60 * 60)),

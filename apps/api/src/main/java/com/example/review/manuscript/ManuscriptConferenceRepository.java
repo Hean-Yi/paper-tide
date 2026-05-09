@@ -22,6 +22,7 @@ class ManuscriptConferenceRepository {
                   c.CONFERENCE_ID,
                   c.CONFERENCE_STATUS,
                   c.BLIND_MODE,
+                  p.ABSTRACT_SUBMISSION_CLOSE_AT,
                   p.SUBMISSION_CLOSE_AT
                 FROM CONFERENCE c
                 JOIN CONFERENCE_PHASE p ON p.CONFERENCE_ID = c.CONFERENCE_ID
@@ -31,6 +32,7 @@ class ManuscriptConferenceRepository {
                         rs.getLong("CONFERENCE_ID"),
                         rs.getString("CONFERENCE_STATUS"),
                         rs.getString("BLIND_MODE"),
+                        toInstant(rs.getTimestamp("ABSTRACT_SUBMISSION_CLOSE_AT")),
                         toInstant(rs.getTimestamp("SUBMISSION_CLOSE_AT"))
                 ),
                 conferenceId
@@ -47,6 +49,7 @@ record ConferenceSubmissionTarget(
         long conferenceId,
         String status,
         String blindMode,
+        Instant abstractSubmissionCloseAt,
         Instant submissionCloseAt
 ) {
 }

@@ -3,27 +3,28 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 
 import { apiErrorMessage } from "../../composables/useApiError";
-import { authState } from "../../stores/auth";
+import { conferenceSchedulePayload } from "../../lib/conference-schedule";
 import {
   addConferenceReviewer,
-  approveConference,
   createConferenceDraft,
   listChairConferences,
-  listPendingConferenceApprovals,
+  searchPlatformReviewers,
   submitConferenceForApproval,
   type ConferenceCfpSummary,
-  type ConferenceDetail
+  type ConferenceDetail,
+  type PlatformReviewerSearchResult
 } from "../../lib/workflow-api";
 import { formatDateTime, statusTagType, workflowLabel } from "../../lib/workflow-format";
+import { hasRole } from "../../stores/auth";
 
-const isAdmin = computed(() => authState.user?.roles.includes("ADMIN") ?? false);
 const loading = ref(false);
-const pendingLoading = ref(false);
 const error = ref("");
 const createdConference = ref<ConferenceDetail | null>(null);
-const pendingConferences = ref<ConferenceCfpSummary[]>([]);
 const chairConferences = ref<ConferenceCfpSummary[]>([]);
 const conferenceHistoryLoading = ref(false);
+const reviewerOptions = ref<PlatformReviewerSearchResult[]>([]);
+const reviewerSearchLoading = ref(false);
+const canOperateConferences = computed(() => hasRole("CHAIR"));
 
 const form = reactive({
   name: "",
@@ -36,24 +37,33 @@ const form = reactive({
   targetReviewsPerPaper: 3,
   defaultReviewerMaxLoad: 4,
   submissionOpenAt: "2026-05-01T00:00:00Z",
+  abstractSubmissionCloseAt: "2026-05-20T00:00:00Z",
   submissionCloseAt: "2026-06-01T00:00:00Z",
-  biddingOpenAt: "2026-06-02T00:00:00Z",
-  biddingCloseAt: "2026-06-10T00:00:00Z",
   reviewDeadlineAt: "2026-07-01T00:00:00Z",
   decisionReleaseAt: "2026-07-15T00:00:00Z"
 });
 
 const reviewerForm = reactive({
-  conferenceId: 0,
-  reviewerId: 0,
+  conferenceId: undefined as number | undefined,
+  reviewerId: undefined as number | undefined,
   maxLoad: 3
 });
 
+const selectedReviewerConference = computed(() =>
+  chairConferences.value.find((conference) => conference.conferenceId === reviewerForm.conferenceId) ?? null
+);
+
+function reviewerOptionLabel(reviewer: PlatformReviewerSearchResult) {
+  const institution = reviewer.institution ? ` · ${reviewer.institution}` : "";
+  return `${reviewer.realName} · ${reviewer.email}${institution}`;
+}
+
+function reviewerAreaText(reviewer: PlatformReviewerSearchResult) {
+  return reviewer.researchAreas.map((area) => area.areaName || area.areaCode).join(", ") || "暂无研究方向";
+}
+
 onMounted(() => {
   void loadChairConferences();
-  if (isAdmin.value) {
-    void loadPending();
-  }
 });
 
 async function createDraft() {
@@ -70,14 +80,13 @@ async function createDraft() {
       targetReviewsPerPaper: Number(form.targetReviewsPerPaper),
       defaultReviewerMaxLoad: Number(form.defaultReviewerMaxLoad),
       publicSlug: form.publicSlug.trim(),
-      phase: {
+      phase: conferenceSchedulePayload({
         submissionOpenAt: form.submissionOpenAt,
+        abstractSubmissionCloseAt: form.abstractSubmissionCloseAt,
         submissionCloseAt: form.submissionCloseAt,
-        biddingOpenAt: form.biddingOpenAt,
-        biddingCloseAt: form.biddingCloseAt,
         reviewDeadlineAt: form.reviewDeadlineAt,
         decisionReleaseAt: form.decisionReleaseAt
-      }
+      })
     });
     reviewerForm.conferenceId = createdConference.value.conferenceId;
     ElMessage.success("会议草稿已创建。");
@@ -99,20 +108,32 @@ async function submitCreatedConference() {
 }
 
 async function addReviewerToConference() {
-  await addConferenceReviewer(
-    Number(reviewerForm.conferenceId),
-    Number(reviewerForm.reviewerId),
-    Number(reviewerForm.maxLoad)
-  );
-  ElMessage.success("审稿人已加入会议审稿人池。");
+  if (!reviewerForm.conferenceId || !reviewerForm.reviewerId) {
+    error.value = "请选择会议并搜索选择审稿人。";
+    return;
+  }
+  error.value = "";
+  try {
+    await addConferenceReviewer(
+      Number(reviewerForm.conferenceId),
+      Number(reviewerForm.reviewerId),
+      Number(reviewerForm.maxLoad)
+    );
+    ElMessage.success("审稿人已加入会议审稿人池。");
+  } catch (err) {
+    error.value = apiErrorMessage(err, "审稿人加入失败。");
+  }
 }
 
-async function loadPending() {
-  pendingLoading.value = true;
+async function searchReviewers(query: string) {
+  reviewerSearchLoading.value = true;
   try {
-    pendingConferences.value = await listPendingConferenceApprovals();
+    reviewerOptions.value = await searchPlatformReviewers(query);
+  } catch (err) {
+    error.value = apiErrorMessage(err, "审稿人搜索失败。");
+    reviewerOptions.value = [];
   } finally {
-    pendingLoading.value = false;
+    reviewerSearchLoading.value = false;
   }
 }
 
@@ -120,6 +141,9 @@ async function loadChairConferences() {
   conferenceHistoryLoading.value = true;
   try {
     chairConferences.value = await listChairConferences();
+    if (!reviewerForm.conferenceId && chairConferences.value.length > 0) {
+      reviewerForm.conferenceId = chairConferences.value[0].conferenceId;
+    }
   } catch (err) {
     error.value = apiErrorMessage(err, "会议列表加载失败。");
   } finally {
@@ -127,21 +151,17 @@ async function loadChairConferences() {
   }
 }
 
-async function approve(row: ConferenceCfpSummary) {
-  await approveConference(row.conferenceId);
-  await loadChairConferences();
-  await loadPending();
-  ElMessage.success("会议已审批通过。");
-}
 </script>
 
 <template>
   <section class="workflow-page">
     <div class="page-heading">
       <div>
-        <p class="eyebrow">主席控制台</p>
+        <p class="eyebrow">{{ canOperateConferences ? "主席控制台" : "会议运营辅助" }}</p>
         <h1>会议管理</h1>
-        <p class="body">创建征稿启事草稿、管理过往会议状态并进入会议论文审核。</p>
+        <p class="body">
+          {{ canOperateConferences ? "创建征稿启事草稿、管理过往会议状态并进入会议论文审核。" : "查看所有会议的状态和详情；论文内容与运营动作由会议主席处理。" }}
+        </p>
       </div>
     </div>
 
@@ -165,7 +185,10 @@ async function approve(row: ConferenceCfpSummary) {
             <el-tag :type="statusTagType(row.status)">{{ workflowLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="投稿截止" min-width="170">
+        <el-table-column label="摘要截止" min-width="170">
+          <template #default="{ row }">{{ formatDateTime(row.abstractSubmissionCloseAt) }}</template>
+        </el-table-column>
+        <el-table-column label="论文截止" min-width="170">
           <template #default="{ row }">{{ formatDateTime(row.submissionCloseAt) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="150">
@@ -178,7 +201,7 @@ async function approve(row: ConferenceCfpSummary) {
       </el-table>
     </section>
 
-    <section class="workflow-section">
+    <section v-if="canOperateConferences" class="workflow-section">
       <h2>创建征稿启事草稿</h2>
       <el-form class="workflow-form" label-position="top" @submit.prevent="createDraft">
         <div class="score-grid">
@@ -203,6 +226,51 @@ async function approve(row: ConferenceCfpSummary) {
               <el-option label="单盲" value="SINGLE_BLIND" />
             </el-select>
           </el-form-item>
+          <el-form-item label="投稿开放时间">
+            <el-date-picker
+              v-model="form.submissionOpenAt"
+              data-test="conference-submission-open"
+              type="datetime"
+              value-format="YYYY-MM-DDTHH:mm:ss[Z]"
+              placeholder="选择投稿开放时间"
+            />
+          </el-form-item>
+          <el-form-item label="摘要提交截止日期">
+            <el-date-picker
+              v-model="form.abstractSubmissionCloseAt"
+              data-test="conference-abstract-deadline"
+              type="datetime"
+              value-format="YYYY-MM-DDTHH:mm:ss[Z]"
+              placeholder="选择摘要截止日期"
+            />
+          </el-form-item>
+          <el-form-item label="论文提交截止日期">
+            <el-date-picker
+              v-model="form.submissionCloseAt"
+              data-test="conference-paper-deadline"
+              type="datetime"
+              value-format="YYYY-MM-DDTHH:mm:ss[Z]"
+              placeholder="选择论文截止日期"
+            />
+          </el-form-item>
+          <el-form-item label="评审截止时间">
+            <el-date-picker
+              v-model="form.reviewDeadlineAt"
+              data-test="conference-review-deadline"
+              type="datetime"
+              value-format="YYYY-MM-DDTHH:mm:ss[Z]"
+              placeholder="选择评审截止时间"
+            />
+          </el-form-item>
+          <el-form-item label="决策发布时间">
+            <el-date-picker
+              v-model="form.decisionReleaseAt"
+              data-test="conference-decision-release"
+              type="datetime"
+              value-format="YYYY-MM-DDTHH:mm:ss[Z]"
+              placeholder="选择决策发布时间"
+            />
+          </el-form-item>
         </div>
         <el-form-item label="征稿文本">
           <el-input v-model="form.cfpText" type="textarea" :rows="3" />
@@ -220,48 +288,67 @@ async function approve(row: ConferenceCfpSummary) {
       />
     </section>
 
-    <section class="workflow-section">
-      <h2>审稿人池</h2>
+    <section v-if="canOperateConferences" class="workflow-section">
+      <div class="subsection-heading">
+        <div>
+          <h2>会议审稿人池准备</h2>
+          <p class="muted-line">把已批准的平台审稿人加入指定会议候选池；后续投标、利益冲突校验、随机分配预览和确认分配都会使用这批候选人。</p>
+        </div>
+        <RouterLink class="text-link" :to="{ name: 'chair-assignment-operations' }">进入审稿人分配</RouterLink>
+      </div>
       <el-form class="workflow-form" label-position="top" @submit.prevent="addReviewerToConference">
         <div class="score-grid">
-          <el-form-item label="会议 ID">
-            <el-input-number v-model="reviewerForm.conferenceId" :min="1" />
+          <el-form-item label="选择会议">
+            <el-select v-model="reviewerForm.conferenceId" data-test="reviewer-pool-conference" placeholder="选择会议">
+              <el-option
+                v-for="conference in chairConferences"
+                :key="conference.conferenceId"
+                :label="`${conference.name} ${conference.year}`"
+                :value="conference.conferenceId"
+              />
+            </el-select>
           </el-form-item>
-          <el-form-item label="审稿人 ID">
-            <el-input-number v-model="reviewerForm.reviewerId" :min="1" />
+          <el-form-item label="搜索审稿人">
+            <el-select
+              v-model="reviewerForm.reviewerId"
+              data-test="reviewer-pool-reviewer"
+              filterable
+              remote
+              reserve-keyword
+              :remote-method="searchReviewers"
+              :loading="reviewerSearchLoading"
+              placeholder="输入真实姓名或邮箱搜索"
+            >
+              <el-option
+                v-for="reviewer in reviewerOptions"
+                :key="reviewer.reviewerId"
+                :label="reviewerOptionLabel(reviewer)"
+                :value="reviewer.reviewerId"
+              >
+                <div>
+                  <strong>{{ reviewer.realName }}</strong>
+                  <p class="muted-line">{{ reviewer.email }} · {{ reviewer.institution || "未知机构" }}</p>
+                  <p class="muted-line">研究方向：{{ reviewerAreaText(reviewer) }}</p>
+                </div>
+              </el-option>
+            </el-select>
           </el-form-item>
           <el-form-item label="最大负荷">
             <el-input-number v-model="reviewerForm.maxLoad" :min="1" :max="20" />
           </el-form-item>
         </div>
-        <el-button type="primary" native-type="submit">添加审稿人</el-button>
+        <el-alert
+          v-if="selectedReviewerConference"
+          class="workflow-alert compact-alert"
+          type="info"
+          :closable="false"
+          :title="`${selectedReviewerConference.name} 当前状态：${workflowLabel(selectedReviewerConference.status)}`"
+        />
+        <el-button type="primary" native-type="submit" :disabled="!reviewerForm.conferenceId || !reviewerForm.reviewerId">
+          加入会议候选池
+        </el-button>
       </el-form>
     </section>
 
-    <section v-if="isAdmin" class="workflow-section">
-      <div class="subsection-heading">
-        <h2>会议审批</h2>
-        <el-button @click="loadPending">刷新</el-button>
-      </div>
-      <el-table v-loading="pendingLoading" :data="pendingConferences" empty-text="暂无待审批的会议。">
-        <el-table-column prop="acronym" label="缩写" width="120" />
-        <el-table-column label="会议">
-          <template #default="{ row }">
-            <strong>{{ row.name }}</strong>
-            <p class="muted-line">{{ formatDateTime(row.submissionCloseAt) }}</p>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="180">
-          <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)">{{ workflowLabel(row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="160">
-          <template #default="{ row }">
-            <el-button size="small" type="primary" @click="approve(row)">审批通过</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </section>
   </section>
 </template>

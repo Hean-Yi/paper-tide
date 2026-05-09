@@ -15,6 +15,12 @@ DECLARE
   v_execution_job_governance_columns NUMBER;
   v_manuscript_conference_column NUMBER;
   v_manuscript_conference_fk NUMBER;
+  v_conference_rejection_columns NUMBER;
+  v_conference_rejected_by_fk NUMBER;
+  v_abstract_submission_deadline_column NUMBER;
+  v_abstract_submission_deadline_index NUMBER;
+  v_manuscript_abstract_status_constraint NUMBER;
+  v_legacy_default_conference_published NUMBER;
   v_assignment_assist_type_constraints NUMBER;
   v_business_operations_tables NUMBER;
   v_real_platform_wave6_wave7_tables NUMBER;
@@ -259,6 +265,7 @@ BEGIN
      'IDX_EMAIL_VERIFICATION_USER_PURPOSE',
      'IDX_CONFERENCE_PUBLIC_STATUS',
      'IDX_CONFERENCE_ORGANIZER_STATUS',
+     'IDX_CONFERENCE_PHASE_ABSTRACT_CLOSE',
      'IDX_CONFERENCE_PHASE_SUBMISSION_CLOSE',
      'IDX_CONFERENCE_PHASE_BIDDING_CLOSE',
      'IDX_CONFERENCE_REVIEWER_CONF_STATUS',
@@ -557,6 +564,42 @@ BEGIN
      AND CONSTRAINT_TYPE = 'R';
 
   SELECT COUNT(*)
+    INTO v_conference_rejection_columns
+    FROM USER_TAB_COLUMNS
+   WHERE TABLE_NAME = 'CONFERENCE'
+     AND COLUMN_NAME IN ('REJECTED_BY', 'REJECTED_AT', 'REJECTION_REASON');
+
+  SELECT COUNT(*)
+    INTO v_conference_rejected_by_fk
+    FROM USER_CONSTRAINTS
+   WHERE TABLE_NAME = 'CONFERENCE'
+     AND CONSTRAINT_NAME = 'FK_CONFERENCE_REJECTED_BY'
+     AND CONSTRAINT_TYPE = 'R';
+
+  SELECT COUNT(*)
+    INTO v_abstract_submission_deadline_column
+    FROM USER_TAB_COLUMNS
+   WHERE TABLE_NAME = 'CONFERENCE_PHASE'
+     AND COLUMN_NAME = 'ABSTRACT_SUBMISSION_CLOSE_AT';
+
+  SELECT COUNT(*)
+    INTO v_abstract_submission_deadline_index
+    FROM USER_INDEXES
+   WHERE INDEX_NAME = 'IDX_CONFERENCE_PHASE_ABSTRACT_CLOSE';
+
+  SELECT COUNT(*)
+    INTO v_manuscript_abstract_status_constraint
+    FROM USER_CONSTRAINTS
+   WHERE CONSTRAINT_NAME = 'CK_MANUSCRIPT_STATUS'
+     AND SEARCH_CONDITION_VC LIKE '%ABSTRACT_SUBMITTED%';
+
+  SELECT COUNT(*)
+    INTO v_legacy_default_conference_published
+    FROM CONFERENCE
+   WHERE PUBLIC_SLUG = 'legacy-platform-default'
+     AND CFP_PUBLISHED = 1;
+
+  SELECT COUNT(*)
     INTO v_assignment_assist_type_constraints
     FROM USER_CONSTRAINTS
    WHERE CONSTRAINT_NAME IN (
@@ -716,8 +759,8 @@ BEGIN
     RAISE_APPLICATION_ERROR(-20004, 'Expected 2 procedures, found ' || v_procedure_count);
   END IF;
 
-  IF v_index_count <> 97 THEN
-    RAISE_APPLICATION_ERROR(-20005, 'Expected 97 indexes, found ' || v_index_count);
+  IF v_index_count <> 98 THEN
+    RAISE_APPLICATION_ERROR(-20005, 'Expected 98 indexes, found ' || v_index_count);
   END IF;
 
   IF v_wave8_wave9_slice_b_constraint <> 1 THEN
@@ -750,6 +793,30 @@ BEGIN
 
   IF v_manuscript_conference_fk <> 1 THEN
     RAISE_APPLICATION_ERROR(-20011, 'Expected FK_MANUSCRIPT_CONFERENCE constraint to exist');
+  END IF;
+
+  IF v_conference_rejection_columns <> 3 THEN
+    RAISE_APPLICATION_ERROR(-20027, 'Expected CONFERENCE rejection feedback columns to exist');
+  END IF;
+
+  IF v_conference_rejected_by_fk <> 1 THEN
+    RAISE_APPLICATION_ERROR(-20028, 'Expected FK_CONFERENCE_REJECTED_BY constraint to exist');
+  END IF;
+
+  IF v_abstract_submission_deadline_column <> 1 THEN
+    RAISE_APPLICATION_ERROR(-20029, 'Expected CONFERENCE_PHASE.ABSTRACT_SUBMISSION_CLOSE_AT column to exist');
+  END IF;
+
+  IF v_abstract_submission_deadline_index <> 1 THEN
+    RAISE_APPLICATION_ERROR(-20030, 'Expected IDX_CONFERENCE_PHASE_ABSTRACT_CLOSE index to exist');
+  END IF;
+
+  IF v_manuscript_abstract_status_constraint <> 1 THEN
+    RAISE_APPLICATION_ERROR(-20031, 'Expected CK_MANUSCRIPT_STATUS to allow ABSTRACT_SUBMITTED');
+  END IF;
+
+  IF v_legacy_default_conference_published <> 1 THEN
+    RAISE_APPLICATION_ERROR(-20026, 'Expected legacy default conference CFP to be published');
   END IF;
 
   IF v_assignment_assist_type_constraints <> 3 THEN

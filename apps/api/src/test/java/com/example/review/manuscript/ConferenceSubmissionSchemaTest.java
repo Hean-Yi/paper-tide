@@ -28,4 +28,23 @@ class ConferenceSubmissionSchemaTest {
         assertTrue(fullApply.contains("015_conference_scoped_submission.sql"));
         assertTrue(devUp.contains("015_conference_scoped_submission.sql"));
     }
+
+    @Test
+    void legacyDefaultConferencePublicationMigrationIsWiredIntoBootstrap() throws IOException {
+        Path migrationPath = Path.of("..", "..", "database", "oracle", "027_publish_legacy_default_conference.sql");
+        assertTrue(Files.exists(migrationPath));
+
+        String migration = Files.readString(migrationPath);
+        String fullApply = Files.readString(Path.of("..", "..", "scripts", "oracle-schema-apply.sh"));
+        String devUp = Files.readString(Path.of("..", "..", "scripts", "dev-up.sh"));
+        String testAll = Files.readString(Path.of("..", "..", "scripts", "test-all.sh"));
+
+        assertTrue(migration.contains("PUBLIC_SLUG = 'legacy-platform-default'"));
+        assertTrue(migration.contains("CFP_PUBLISHED = 1"));
+        assertTrue(fullApply.contains("027_publish_legacy_default_conference.sql"));
+        assertTrue(devUp.contains("027_publish_legacy_default_conference.sql"));
+        assertTrue(testAll.contains("027_publish_legacy_default_conference.sql"));
+        assertTrue(devUp.contains("legacy_default_conference_published"));
+        assertTrue(testAll.contains("legacy_default_conference_published"));
+    }
 }

@@ -68,6 +68,39 @@ public class ConferenceService {
     }
 
     @Transactional
+    public ConferenceDetail updateDraft(long conferenceId, CurrentUserPrincipal principal, ConferenceDraftRequest request) {
+        requireChairOrAdmin(principal);
+        ValidatedDraft validated = validateDraft(request);
+        ConferenceDetail detail = getRequired(conferenceId);
+        if (!RoleGuard.hasRole(principal, "ADMIN") && detail.organizerUserId() != principal.userId()) {
+            throw new ConferenceAccessException("Only the conference organizer or an admin can edit this conference");
+        }
+        if (!"DRAFT".equals(detail.status())) {
+            throw new ConferenceValidationException("Only draft conferences can be edited");
+        }
+        if (!detail.publicSlug().equals(validated.publicSlug()) && repository.publicSlugExists(validated.publicSlug())) {
+            throw new ConferenceValidationException("Conference public slug already exists");
+        }
+
+        repository.updateConference(conferenceId, new ConferenceDraft(
+                validated.name(),
+                validated.acronym(),
+                validated.year(),
+                detail.organizerUserId(),
+                detail.status(),
+                validated.blindMode(),
+                validated.cfpText(),
+                validated.topicAreas(),
+                validated.targetReviewsPerPaper(),
+                validated.defaultReviewerMaxLoad(),
+                validated.publicSlug(),
+                detail.cfpPublished()
+        ));
+        repository.updatePhase(conferenceId, validated.phase());
+        return getRequired(conferenceId);
+    }
+
+    @Transactional
     public ConferenceDetail submitForApproval(long conferenceId, CurrentUserPrincipal principal) {
         requireChairOrAdmin(principal);
         ConferenceDetail detail = getRequired(conferenceId);
@@ -95,6 +128,25 @@ public class ConferenceService {
             throw new ConferenceValidationException("Only pending conferences can be approved");
         }
         repository.updateStatus(conferenceId, "OPEN_FOR_SUBMISSION", true, principal.userId(), Instant.now(clock));
+        return getRequired(conferenceId);
+    }
+
+    @Transactional
+    public ConferenceDetail rejectConference(
+            long conferenceId,
+            CurrentUserPrincipal principal,
+            ConferenceRejectionRequest request
+    ) {
+        requireAdmin(principal);
+        ConferenceDetail detail = getRequired(conferenceId);
+        if (!detail.status().equals("PENDING_APPROVAL")) {
+            throw new ConferenceValidationException("Only pending conferences can be rejected");
+        }
+        String rejectionReason = requireText(
+                request == null ? null : request.rejectionReason(),
+                "Rejection reason is required"
+        );
+        repository.rejectApproval(conferenceId, principal.userId(), Instant.now(clock), rejectionReason);
         return getRequired(conferenceId);
     }
 
@@ -152,6 +204,11 @@ public class ConferenceService {
         return detail;
     }
 
+    public ConferenceDetail getAdminConference(long conferenceId, CurrentUserPrincipal principal) {
+        requireAdmin(principal);
+        return getRequired(conferenceId);
+    }
+
     private ConferenceDetail getRequired(long conferenceId) {
         return repository.findDetail(conferenceId)
                 .orElseThrow(() -> new ConferenceNotFoundException("Conference was not found"));
@@ -193,19 +250,21 @@ public class ConferenceService {
             throw new ConferenceValidationException("Conference phase schedule is required");
         }
         requireInstant(phase.submissionOpenAt(), "Submission open time is required");
+        requireInstant(phase.abstractSubmissionCloseAt(), "Abstract submission deadline is required");
         requireInstant(phase.submissionCloseAt(), "Submission close time is required");
         requireInstant(phase.biddingOpenAt(), "Bidding open time is required");
         requireInstant(phase.biddingCloseAt(), "Bidding close time is required");
         requireInstant(phase.reviewDeadlineAt(), "Review deadline is required");
         requireInstant(phase.decisionReleaseAt(), "Decision release time is required");
-        if (!phase.submissionOpenAt().isBefore(phase.submissionCloseAt())
+        if (!phase.submissionOpenAt().isBefore(phase.abstractSubmissionCloseAt())
+                || !phase.abstractSubmissionCloseAt().isBefore(phase.submissionCloseAt())
                 || !phase.submissionCloseAt().isBefore(phase.biddingOpenAt())
                 || !phase.biddingOpenAt().isBefore(phase.biddingCloseAt())
                 || !phase.biddingCloseAt().isBefore(phase.reviewDeadlineAt())
                 || !phase.reviewDeadlineAt().isBefore(phase.decisionReleaseAt())) {
             throw new ConferenceValidationException("Conference phase timestamps must be in lifecycle order");
         }
-        return new ConferencePhaseDraft(phase.submissionOpenAt(), phase.submissionCloseAt(),
+        return new ConferencePhaseDraft(phase.submissionOpenAt(), phase.abstractSubmissionCloseAt(), phase.submissionCloseAt(),
                 phase.biddingOpenAt(), phase.biddingCloseAt(), phase.reviewDeadlineAt(), phase.decisionReleaseAt());
     }
 

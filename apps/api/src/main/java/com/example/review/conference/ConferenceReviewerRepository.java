@@ -6,7 +6,11 @@ import java.util.Optional;
 interface ConferenceReviewerRepository {
     boolean isActivePlatformReviewer(long reviewerId);
 
+    List<PlatformReviewerSearchResult> searchActivePlatformReviewers(String query, int limit);
+
     List<ResearchAreaSnapshot> listUserResearchAreas(long userId);
+
+    void grantReviewerRole(long userId);
 
     ConferenceReviewerMembership upsertConferenceReviewer(
             long conferenceId,

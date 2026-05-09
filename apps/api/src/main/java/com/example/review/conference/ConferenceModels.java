@@ -19,6 +19,7 @@ record ConferenceDraftRequest(
 
 record ConferencePhaseRequest(
         Instant submissionOpenAt,
+        Instant abstractSubmissionCloseAt,
         Instant submissionCloseAt,
         Instant biddingOpenAt,
         Instant biddingCloseAt,
@@ -28,6 +29,9 @@ record ConferencePhaseRequest(
 }
 
 record ConferenceStatusTransitionRequest(String status) {
+}
+
+record ConferenceRejectionRequest(String rejectionReason) {
 }
 
 record ConferenceDraft(
@@ -48,6 +52,7 @@ record ConferenceDraft(
 
 record ConferencePhaseDraft(
         Instant submissionOpenAt,
+        Instant abstractSubmissionCloseAt,
         Instant submissionCloseAt,
         Instant biddingOpenAt,
         Instant biddingCloseAt,
@@ -60,6 +65,7 @@ record ConferencePhase(
         long phaseId,
         long conferenceId,
         Instant submissionOpenAt,
+        Instant abstractSubmissionCloseAt,
         Instant submissionCloseAt,
         Instant biddingOpenAt,
         Instant biddingCloseAt,
@@ -84,6 +90,9 @@ record ConferenceDetail(
         boolean cfpPublished,
         Long approvedBy,
         Instant approvedAt,
+        Long rejectedBy,
+        Instant rejectedAt,
+        String rejectionReason,
         ConferencePhase phase
 ) {
 }
@@ -97,6 +106,7 @@ record ConferenceSummary(
         String blindMode,
         String publicSlug,
         Instant submissionOpenAt,
+        Instant abstractSubmissionCloseAt,
         Instant submissionCloseAt
 ) {
 }

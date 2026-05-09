@@ -7,6 +7,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,6 +36,18 @@ public class ConferenceReviewerController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, ex.getMessage());
         } catch (ConferenceValidationException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        }
+    }
+
+    @GetMapping("/chair/reviewers/search")
+    public List<PlatformReviewerSearchResult> searchReviewers(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @RequestParam(name = "query", required = false) String query
+    ) {
+        try {
+            return reviewerService.searchActivePlatformReviewers(principal, query);
+        } catch (ConferenceAccessException ex) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage());
         }
     }
 

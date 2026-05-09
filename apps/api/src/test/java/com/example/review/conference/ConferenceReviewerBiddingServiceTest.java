@@ -118,6 +118,51 @@ class ConferenceReviewerBiddingServiceTest {
     }
 
     @Test
+    void chairSearchesActivePlatformReviewersByNameOrEmail() throws Exception {
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+
+        mockMvc.perform(get("/api/chair/reviewers/search")
+                        .param("query", "reviewer_demo@example.com")
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].reviewerId").value(1002))
+                .andExpect(jsonPath("$[0].realName").value("Reviewer Demo"))
+                .andExpect(jsonPath("$[0].email").value("reviewer_demo@example.com"))
+                .andExpect(jsonPath("$[0].institution").value("Nanjing University"))
+                .andExpect(jsonPath("$[0].researchAreas[0].areaCode").value("NLP"));
+    }
+
+    @Test
+    void chairCanSearchAndAddActiveAuthorToReviewerPoolAndReviewerRoleIsGranted() throws Exception {
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        long conferenceId = seedConference("author-reviewer-2026", "BIDDING_OPEN", Instant.parse("2026-12-31T00:00:00Z"));
+
+        mockMvc.perform(get("/api/chair/reviewers/search")
+                        .param("query", "author_demo@example.com")
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].reviewerId").value(1001))
+                .andExpect(jsonPath("$[0].realName").value("Author Demo"))
+                .andExpect(jsonPath("$[0].email").value("author_demo@example.com"));
+
+        mockMvc.perform(post("/api/chair/conferences/{conferenceId}/reviewers", conferenceId)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "reviewerId", 1001,
+                                "maxLoad", 3
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reviewerId").value(1001))
+                .andExpect(jsonPath("$.membershipStatus").value("ACTIVE"));
+
+        String authorToken = loginAndExtractToken("author_demo", "demo123");
+        String payload = new String(java.util.Base64.getUrlDecoder().decode(authorToken.split("\\.")[1]));
+        org.junit.jupiter.api.Assertions.assertTrue(payload.contains("\"AUTHOR\""));
+        org.junit.jupiter.api.Assertions.assertTrue(payload.contains("\"REVIEWER\""));
+    }
+
+    @Test
     void reviewerBiddingViewIsConferenceScopedAndDeidentified() throws Exception {
         String chairToken = loginAndExtractToken("chair_demo", "demo123");
         String reviewerToken = loginAndExtractToken("reviewer_demo", "demo123");
@@ -233,12 +278,13 @@ class ConferenceReviewerBiddingServiceTest {
         jdbcTemplate.update(
                 """
                 INSERT INTO CONFERENCE_PHASE (
-                  PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, SUBMISSION_CLOSE_AT,
+                  PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, ABSTRACT_SUBMISSION_CLOSE_AT, SUBMISSION_CLOSE_AT,
                   BIDDING_OPEN_AT, BIDDING_CLOSE_AT, REVIEW_DEADLINE_AT, DECISION_RELEASE_AT
-                ) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 conferenceId,
                 Timestamp.from(biddingCloseAt.minusSeconds(31_536_000)),
+                Timestamp.from(biddingCloseAt.minusSeconds(259_200)),
                 Timestamp.from(biddingCloseAt.minusSeconds(172_800)),
                 Timestamp.from(biddingCloseAt.minusSeconds(86_400)),
                 Timestamp.from(biddingCloseAt),

@@ -7,10 +7,9 @@ import { useApiError } from "../../composables/useApiError";
 import { useAsyncAction } from "../../composables/useAsyncAction";
 import {
   createReviewRound,
-  decide,
   downloadPdf,
   listScreeningQueue,
-  requestScreeningAnalysis,
+  screeningDeskReject,
   startScreening,
   type ScreeningQueueItem
 } from "../../lib/workflow-api";
@@ -20,17 +19,18 @@ const loading = ref(false);
 const queue = ref<ScreeningQueueItem[]>([]);
 const actions = useAsyncAction();
 const { showApiError } = useApiError();
+const screeningDialogOpen = ref(false);
+const screeningDialogRow = ref<ScreeningQueueItem | null>(null);
 const roundFormRef = ref<FormInstance>();
 const roundForm = reactive({ manuscriptId: 0, versionId: 0, deadlineAt: "" });
 const roundDialogOpen = ref(false);
 const deskRejectFormRef = ref<FormInstance>();
-const deskRejectForm = reactive({ manuscriptId: 0, versionId: 0, roundId: 0, decisionReason: "" });
+const deskRejectForm = reactive({ manuscriptId: 0, versionId: 0, decisionReason: "" });
 const deskRejectDialogOpen = ref(false);
 const roundRules: FormRules = {
   deadlineAt: [{ required: true, message: "截止日期为必填", trigger: "change" }]
 };
 const deskRejectRules: FormRules = {
-  roundId: [{ required: true, message: "轮次 ID 为必填", trigger: "blur" }],
   decisionReason: [{ required: true, message: "原因为必填", trigger: "blur" }]
 };
 
@@ -50,22 +50,15 @@ async function loadQueue() {
 async function start(row: ScreeningQueueItem) {
   await actions.run(`start:${row.manuscriptId}:${row.versionId}`, async () => {
     try {
-      await startScreening(row.manuscriptId, row.versionId);
-      ElMessage.success("Screening started.");
-      await loadQueue();
+      if (row.currentStatus !== "UNDER_SCREENING") {
+        await startScreening(row.manuscriptId, row.versionId);
+        row.currentStatus = "UNDER_SCREENING";
+        ElMessage.success("初筛已开始。");
+      }
+      screeningDialogRow.value = { ...row };
+      screeningDialogOpen.value = true;
     } catch (error) {
       showApiError(error, "Screening could not be started.");
-    }
-  });
-}
-
-async function triggerAgent(row: ScreeningQueueItem) {
-  await actions.run(`agent:${row.manuscriptId}:${row.versionId}`, async () => {
-    try {
-      await requestScreeningAnalysis(row.manuscriptId, row.versionId);
-      ElMessage.success("初筛分析已请求。");
-    } catch (error) {
-      showApiError(error, "初筛分析请求失败。");
     }
   });
 }
@@ -90,6 +83,14 @@ function openRound(row: ScreeningQueueItem) {
     deadlineAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
   });
   roundDialogOpen.value = true;
+}
+
+function openRoundFromScreeningDialog() {
+  if (!screeningDialogRow.value) {
+    return;
+  }
+  screeningDialogOpen.value = false;
+  openRound(screeningDialogRow.value);
 }
 
 async function submitRound() {
@@ -117,10 +118,21 @@ function openDeskReject(row: ScreeningQueueItem) {
   Object.assign(deskRejectForm, {
     manuscriptId: row.manuscriptId,
     versionId: row.versionId,
-    roundId: row.currentRoundNo,
     decisionReason: ""
   });
   deskRejectDialogOpen.value = true;
+}
+
+function openDeskRejectFromScreeningDialog() {
+  if (!screeningDialogRow.value) {
+    return;
+  }
+  screeningDialogOpen.value = false;
+  openDeskReject(screeningDialogRow.value);
+}
+
+function screeningEntryLabel(row: ScreeningQueueItem) {
+  return row.currentStatus === "UNDER_SCREENING" ? "查看初筛" : "开始初筛";
 }
 
 async function submitDeskReject() {
@@ -130,8 +142,8 @@ async function submitDeskReject() {
   }
   try {
     await ElMessageBox.confirm(
-      "桥面拒稿将在外部评审前关闭此稿件，确认继续？",
-      "确认桥面拒稿",
+      "桌面拒稿将在外部评审前关闭此稿件，确认继续？",
+      "确认桌面拒稿",
       { type: "warning", confirmButtonText: "拒稿" }
     );
   } catch {
@@ -139,18 +151,16 @@ async function submitDeskReject() {
   }
   await actions.run("desk-reject", async () => {
     try {
-      await decide({
+      await screeningDeskReject({
         manuscriptId: deskRejectForm.manuscriptId,
         versionId: deskRejectForm.versionId,
-        roundId: deskRejectForm.roundId,
-        decisionCode: "DESK_REJECT",
         decisionReason: deskRejectForm.decisionReason
       });
       deskRejectDialogOpen.value = false;
-      ElMessage.success("桥面拒稿已记录。");
+      ElMessage.success("桌面拒稿已记录。");
       await loadQueue();
     } catch (error) {
-      showApiError(error, "桥面拒稿记录失败。");
+      showApiError(error, "桌面拒稿记录失败。");
     }
   });
 }
@@ -194,7 +204,7 @@ async function submitDeskReject() {
           <span v-else>缺失</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="430">
+      <el-table-column label="操作" width="250">
         <template #default="{ row }">
           <div class="action-row">
             <el-button
@@ -202,16 +212,8 @@ async function submitDeskReject() {
               :loading="actions.isPending(`start:${row.manuscriptId}:${row.versionId}`)"
               @click="start(row)"
             >
-              开始初筛
+              {{ screeningEntryLabel(row) }}
             </el-button>
-            <el-button
-              size="small"
-              :loading="actions.isPending(`agent:${row.manuscriptId}:${row.versionId}`)"
-              @click="triggerAgent(row)"
-            >
-              运行分析
-            </el-button>
-            <el-button size="small" @click="openRound(row)">创建轮次</el-button>
             <el-button size="small" type="danger" @click="openDeskReject(row)">桌面拒稿</el-button>
           </div>
         </template>
@@ -220,6 +222,57 @@ async function submitDeskReject() {
         <el-empty description="暂无等待初筛的稿件。" />
       </template>
     </el-table>
+
+    <el-dialog
+      v-model="screeningDialogOpen"
+      class="screening-dialog"
+      title="投稿信息"
+      width="min(640px, calc(100vw - 32px))"
+    >
+      <template v-if="screeningDialogRow">
+        <div class="screening-dialog-body">
+          <el-descriptions :column="1" border>
+            <el-descriptions-item label="稿件 ID">{{ screeningDialogRow.manuscriptId }}</el-descriptions-item>
+            <el-descriptions-item label="版本">v{{ screeningDialogRow.versionNo }}</el-descriptions-item>
+            <el-descriptions-item label="标题">{{ screeningDialogRow.title }}</el-descriptions-item>
+            <el-descriptions-item label="摘要">
+              <div class="preformatted-text">{{ screeningDialogRow.abstractText || "未填写" }}</div>
+            </el-descriptions-item>
+            <el-descriptions-item label="关键词">{{ screeningDialogRow.keywords || "未填写" }}</el-descriptions-item>
+            <el-descriptions-item label="当前状态">
+              <el-tag :type="statusTagType(screeningDialogRow.currentStatus)">
+                {{ workflowLabel(screeningDialogRow.currentStatus) }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="审稿模式">
+              {{ workflowLabel(screeningDialogRow.blindMode) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="投稿时间">
+              {{ formatDateTime(screeningDialogRow.submittedAt) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="PDF">
+              <el-button
+                v-if="screeningDialogRow.pdfFileName"
+                class="screening-file-button"
+                link
+                :loading="actions.isPending(`download:${screeningDialogRow.manuscriptId}:${screeningDialogRow.versionId}`)"
+                @click="download(screeningDialogRow)"
+              >
+                <span class="screening-file-name">
+                  {{ screeningDialogRow.pdfFileName }} · {{ formatFileSize(screeningDialogRow.pdfFileSize) }}
+                </span>
+              </el-button>
+              <span v-else>缺失</span>
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
+      </template>
+      <template #footer>
+        <el-button @click="screeningDialogOpen = false">关闭</el-button>
+        <el-button type="primary" @click="openRoundFromScreeningDialog">创建轮次</el-button>
+        <el-button type="danger" @click="openDeskRejectFromScreeningDialog">桌面拒稿</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="roundDialogOpen" title="创建评审轮次" width="520px">
       <el-form ref="roundFormRef" :model="roundForm" :rules="roundRules" label-position="top">
@@ -240,9 +293,6 @@ async function submitDeskReject() {
 
     <el-dialog v-model="deskRejectDialogOpen" title="桌面拒稿" width="520px">
       <el-form ref="deskRejectFormRef" :model="deskRejectForm" :rules="deskRejectRules" label-position="top">
-        <el-form-item label="轮次 ID" prop="roundId">
-          <el-input-number v-model="deskRejectForm.roundId" :min="0" />
-        </el-form-item>
         <el-form-item label="原因" prop="decisionReason">
           <el-input v-model="deskRejectForm.decisionReason" type="textarea" :rows="4" />
         </el-form-item>

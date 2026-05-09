@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { FormInstance, FormRules } from "element-plus";
 import { ElMessage } from "element-plus";
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 
 import { useApiError } from "../../composables/useApiError";
 import { useAsyncAction } from "../../composables/useAsyncAction";
@@ -11,19 +11,17 @@ import {
   decide,
   generateAssignmentDrafts,
   getAssignmentAssist,
-  getManuscriptForm,
   listAssignmentCandidates,
   listDecisionWorkbench,
   markOverdue,
   runAssignmentAssist,
-  saveManuscriptFormResponse,
   triggerConflictAnalysis,
+  type AnalysisIntentResponse,
   type AssignmentAssistState,
   type AssignmentCandidate,
   type AssignmentDraft,
   type AnalysisProjectionResponse,
-  type DecisionWorkbenchItem,
-  type WorkflowFormPackage
+  type DecisionWorkbenchItem
 } from "../../lib/workflow-api";
 import { formatDateTime, printableTrace, statusTagType, workflowLabel } from "../../lib/workflow-format";
 
@@ -32,11 +30,14 @@ const rows = ref<DecisionWorkbenchItem[]>([]);
 const draftsByRound = reactive<Record<number, AssignmentDraft[]>>({});
 const assignmentAssistByRound = reactive<Record<number, AssignmentAssistState>>({});
 const draftDeadlineByRound = reactive<Record<number, string>>({});
+const localConflictIntentByRound = reactive<Record<number, AnalysisIntentResponse>>({});
+const conflictPollTimers = new Map<number, number>();
+const conflictAnalysisPanelOpen = ref(false);
+const selectedConflictRoundId = ref<number | null>(null);
 const actions = useAsyncAction();
 const { showApiError } = useApiError();
 const assignDialogOpen = ref(false);
 const decisionDialogOpen = ref(false);
-const metaReviewDialogOpen = ref(false);
 const assignFormRef = ref<FormInstance>();
 const assignForm = reactive({ roundId: 0, reviewerId: 1002, deadlineAt: "" });
 const assignmentCandidates = ref<AssignmentCandidate[]>([]);
@@ -48,9 +49,6 @@ const decisionForm = reactive({
   decisionCode: "MINOR_REVISION",
   decisionReason: ""
 });
-const metaReviewManuscriptId = ref<number | null>(null);
-const metaReviewForm = ref<WorkflowFormPackage | null>(null);
-const metaReviewAnswers = reactive<Record<string, unknown>>({});
 const assignRules: FormRules = {
   reviewerId: [{ required: true, message: "审稿人 ID 为必填", trigger: "blur" }],
   deadlineAt: [{ required: true, message: "截止日期为必填", trigger: "change" }]
@@ -61,15 +59,32 @@ const decisionRules: FormRules = {
 };
 
 onMounted(loadWorkbench);
+onUnmounted(stopAllConflictPolling);
 
-async function loadWorkbench() {
-  loading.value = true;
+const selectedConflictRow = computed(() => {
+  if (selectedConflictRoundId.value == null) {
+    return null;
+  }
+  return rows.value.find((row) => row.roundId === selectedConflictRoundId.value) ?? null;
+});
+
+const selectedConflictProjections = computed(() =>
+  selectedConflictRow.value ? conflictProjections(selectedConflictRow.value) : []
+);
+
+async function loadWorkbench(showLoading = true) {
+  if (showLoading) {
+    loading.value = true;
+  }
   try {
     rows.value = await listDecisionWorkbench();
+    syncConflictPolling();
   } catch (error) {
     showApiError(error, "决策工作台加载失败。");
   } finally {
-    loading.value = false;
+    if (showLoading) {
+      loading.value = false;
+    }
   }
 }
 
@@ -127,10 +142,17 @@ async function overdue(assignmentId: number) {
 }
 
 async function conflict(row: DecisionWorkbenchItem) {
+  if (hasAvailableConflictAnalysis(row)) {
+    openConflictAnalysis(row);
+    return;
+  }
+  if (isConflictInProgress(row)) {
+    return;
+  }
   await actions.run(`conflict:${row.roundId}`, async () => {
     try {
-      await triggerConflictAnalysis(row.roundId);
-      ElMessage.success("冲突分析已请求。");
+      localConflictIntentByRound[row.roundId] = await triggerConflictAnalysis(row.roundId);
+      startConflictPolling(row.roundId);
       await loadWorkbench();
     } catch (error) {
       showApiError(error, "冲突分析请求失败。");
@@ -184,12 +206,130 @@ function conflictProjections(row: DecisionWorkbenchItem): AnalysisProjectionResp
   return row.conflictProjections ?? [];
 }
 
+function conflictIntent(row: DecisionWorkbenchItem) {
+  return row.conflictIntent ?? localConflictIntentByRound[row.roundId] ?? null;
+}
+
+function hasAvailableConflictAnalysis(row: DecisionWorkbenchItem): boolean {
+  return conflictProjections(row).some((projection) => !projection.superseded && projection.businessStatus === "AVAILABLE");
+}
+
+function isConflictInProgress(row: DecisionWorkbenchItem): boolean {
+  const status = conflictIntent(row)?.businessStatus;
+  return !hasAvailableConflictAnalysis(row) && (status === "REQUESTED" || status === "PROCESSING" || status === "PENDING");
+}
+
+function isConflictButtonDisabled(row: DecisionWorkbenchItem): boolean {
+  return actions.isPending(`conflict:${row.roundId}`) || isConflictInProgress(row);
+}
+
+function isConflictFailed(row: DecisionWorkbenchItem): boolean {
+  return conflictIntent(row)?.businessStatus === "FAILED_VISIBLE";
+}
+
+function conflictButtonLabel(row: DecisionWorkbenchItem): string {
+  if (actions.isPending(`conflict:${row.roundId}`) || isConflictInProgress(row)) {
+    return "LLM 分析中";
+  }
+  if (hasAvailableConflictAnalysis(row)) {
+    return "查看冲突分析";
+  }
+  if (isConflictFailed(row)) {
+    return "重试冲突分析";
+  }
+  return "冲突分析";
+}
+
+function openConflictAnalysis(row: DecisionWorkbenchItem) {
+  selectedConflictRoundId.value = row.roundId;
+  conflictAnalysisPanelOpen.value = true;
+}
+
+function closeConflictAnalysis() {
+  conflictAnalysisPanelOpen.value = false;
+}
+
+function startConflictPolling(roundId: number) {
+  if (conflictPollTimers.has(roundId)) {
+    return;
+  }
+  const timer = window.setInterval(() => {
+    void loadWorkbench(false);
+  }, 2000);
+  conflictPollTimers.set(roundId, timer);
+}
+
+function stopConflictPolling(roundId: number) {
+  const timer = conflictPollTimers.get(roundId);
+  if (!timer) {
+    return;
+  }
+  window.clearInterval(timer);
+  conflictPollTimers.delete(roundId);
+}
+
+function stopAllConflictPolling() {
+  Array.from(conflictPollTimers.keys()).forEach(stopConflictPolling);
+}
+
+function syncConflictPolling() {
+  const activeRoundIds = new Set(
+    rows.value
+      .filter((row) => isConflictInProgress(row))
+      .map((row) => row.roundId)
+  );
+  activeRoundIds.forEach(startConflictPolling);
+  Array.from(conflictPollTimers.keys()).forEach((roundId) => {
+    if (!activeRoundIds.has(roundId)) {
+      stopConflictPolling(roundId);
+    }
+  });
+}
+
 function pendingDrafts(roundId: number): AssignmentDraft[] {
   return (draftsByRound[roundId] ?? []).filter((draft) => draft.draftStatus === "PROPOSED");
 }
 
 function assignmentAssistProjections(row: DecisionWorkbenchItem): AnalysisProjectionResponse[] {
   return assignmentAssistByRound[row.roundId]?.projections ?? [];
+}
+
+function structuredConflictResult(projection: AnalysisProjectionResponse): {
+  decisionSummary: string;
+  consensusPoints: string[];
+  conflictPoints: string[];
+  highRiskIssues: string[];
+  confidence: number | null;
+} {
+  const result = projection.redactedResult ?? {};
+  return {
+    decisionSummary: stringValue(result.decisionSummary) || projection.summaryText || "暂无冲突分析摘要。",
+    consensusPoints: stringList(result.consensusPoints),
+    conflictPoints: stringList(result.conflictPoints),
+    highRiskIssues: stringList(result.highRiskIssues),
+    confidence: numberValue(result.confidence)
+  };
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function formatConfidence(value: number | null): string {
+  if (value == null) {
+    return "未提供";
+  }
+  return `${Math.round(value * 100)}%`;
 }
 
 function defaultReviewDeadline(): string {
@@ -220,49 +360,6 @@ async function submitDecision() {
       await loadWorkbench();
     } catch (error) {
       showApiError(error, "决策提交失败。");
-    }
-  });
-}
-
-async function openMetaReview(row: DecisionWorkbenchItem) {
-  metaReviewManuscriptId.value = row.manuscriptId;
-  Object.keys(metaReviewAnswers).forEach((key) => delete metaReviewAnswers[key]);
-  await actions.run(`load-meta-review:${row.manuscriptId}`, async () => {
-    try {
-      metaReviewForm.value = await getManuscriptForm(row.manuscriptId, "META_REVIEW");
-      for (const field of metaReviewForm.value.form.fields) {
-        metaReviewAnswers[field.fieldKey] = metaReviewForm.value.currentResponse?.answers?.[field.fieldKey] ?? "";
-      }
-      metaReviewDialogOpen.value = true;
-    } catch (error) {
-      showApiError(error, "元评审表单加载失败。");
-    }
-  });
-}
-
-async function submitMetaReview() {
-  if (!metaReviewManuscriptId.value || !metaReviewForm.value) {
-    return;
-  }
-  const missingRequired = metaReviewForm.value.form.fields.some((field) =>
-    field.required && !String(metaReviewAnswers[field.fieldKey] ?? "").trim()
-  );
-  if (missingRequired) {
-    ElMessage.error("元评审必填项尚未填写完整。");
-    return;
-  }
-  await actions.run(`submit-meta-review:${metaReviewManuscriptId.value}`, async () => {
-    try {
-      await saveManuscriptFormResponse(metaReviewManuscriptId.value!, {
-        formId: metaReviewForm.value!.form.formId,
-        responseStatus: "SUBMITTED",
-        answers: { ...metaReviewAnswers }
-      });
-      metaReviewDialogOpen.value = false;
-      ElMessage.success("元评审已提交。");
-      await loadWorkbench();
-    } catch (error) {
-      showApiError(error, "元评审提交失败。");
     }
   });
 }
@@ -390,8 +487,51 @@ async function submitMetaReview() {
                   {{ workflowLabel(projection.businessStatus) }}
                 </el-tag>
               </div>
-              <p v-if="projection.summaryText" class="body">{{ projection.summaryText }}</p>
-              <pre class="json-block">{{ printableTrace(projection.redactedResult) }}</pre>
+              <div class="conflict-result">
+                <div class="conflict-result-summary">
+                  <h3>决策摘要</h3>
+                  <p>{{ structuredConflictResult(projection).decisionSummary }}</p>
+                  <el-tag type="info">置信度 {{ formatConfidence(structuredConflictResult(projection).confidence) }}</el-tag>
+                </div>
+                <div class="conflict-result-grid">
+                  <section>
+                    <h3>共识点</h3>
+                    <ul v-if="structuredConflictResult(projection).consensusPoints.length">
+                      <li
+                        v-for="(item, index) in structuredConflictResult(projection).consensusPoints"
+                        :key="`consensus-${projection.projectionId}-${index}`"
+                      >
+                        {{ item }}
+                      </li>
+                    </ul>
+                    <p v-else class="muted-line">暂无明确共识。</p>
+                  </section>
+                  <section>
+                    <h3>分歧点</h3>
+                    <ul v-if="structuredConflictResult(projection).conflictPoints.length">
+                      <li
+                        v-for="(item, index) in structuredConflictResult(projection).conflictPoints"
+                        :key="`conflict-${projection.projectionId}-${index}`"
+                      >
+                        {{ item }}
+                      </li>
+                    </ul>
+                    <p v-else class="muted-line">暂无显著分歧。</p>
+                  </section>
+                  <section>
+                    <h3>高风险事项</h3>
+                    <ul v-if="structuredConflictResult(projection).highRiskIssues.length">
+                      <li
+                        v-for="(item, index) in structuredConflictResult(projection).highRiskIssues"
+                        :key="`risk-${projection.projectionId}-${index}`"
+                      >
+                        {{ item }}
+                      </li>
+                    </ul>
+                    <p v-else class="muted-line">暂无高风险事项。</p>
+                  </section>
+                </div>
+              </div>
             </article>
           </div>
         </template>
@@ -419,18 +559,15 @@ async function submitMetaReview() {
             <el-button size="small" @click="openAssign(row)">分配审稿人</el-button>
             <el-button
               size="small"
+              :disabled="isConflictButtonDisabled(row)"
               :loading="actions.isPending(`conflict:${row.roundId}`)"
               @click="conflict(row)"
             >
-              冲突分析
+              {{ conflictButtonLabel(row) }}
             </el-button>
-            <el-button
-              size="small"
-              :loading="actions.isPending(`load-meta-review:${row.manuscriptId}`)"
-              @click="openMetaReview(row)"
-            >
-              元评审
-            </el-button>
+            <div v-if="isConflictInProgress(row)" class="conflict-progress" aria-label="LLM 冲突分析进度">
+              <span />
+            </div>
             <el-button size="small" type="primary" @click="openDecision(row)">提交决策</el-button>
           </div>
         </template>
@@ -542,44 +679,81 @@ async function submitMetaReview() {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="metaReviewDialogOpen" title="元评审" width="640px">
-      <template v-if="metaReviewForm">
-        <h2>{{ metaReviewForm.form.formName }}</h2>
-        <el-form label-position="top">
-          <el-form-item
-            v-for="field in metaReviewForm.form.fields"
-            :key="field.fieldId"
-            :label="field.fieldLabel"
-            :required="field.required"
-            :data-test="`meta-review-${field.fieldKey}`"
+    <Transition name="conflict-panel">
+      <div
+        v-if="conflictAnalysisPanelOpen && selectedConflictRow"
+        class="conflict-analysis-backdrop"
+        @click.self="closeConflictAnalysis"
+      >
+        <section class="conflict-analysis-panel" role="dialog" aria-modal="true" aria-label="冲突分析结果">
+          <div class="conflict-analysis-header">
+            <div>
+              <p class="eyebrow">LLM 冲突分析</p>
+              <h2>{{ selectedConflictRow.title }}</h2>
+              <p class="body">Round {{ selectedConflictRow.roundNo }} · Manuscript {{ selectedConflictRow.manuscriptId }}</p>
+            </div>
+            <el-button circle aria-label="关闭冲突分析" @click="closeConflictAnalysis">×</el-button>
+          </div>
+          <article
+            v-for="projection in selectedConflictProjections"
+            :key="projection.projectionId"
+            class="trace-entry"
           >
-            <el-input
-              v-if="field.fieldType === 'LONG_TEXT' || field.fieldType === 'TEXT'"
-              v-model="metaReviewAnswers[field.fieldKey]"
-              type="textarea"
-              :rows="field.fieldType === 'LONG_TEXT' ? 4 : 2"
-            />
-            <el-input-number
-              v-else-if="field.fieldType === 'NUMBER' || field.fieldType === 'SCORE'"
-              v-model="metaReviewAnswers[field.fieldKey]"
-              :min="field.fieldType === 'SCORE' ? 1 : undefined"
-              :max="field.fieldType === 'SCORE' ? 5 : undefined"
-            />
-            <el-switch v-else-if="field.fieldType === 'BOOLEAN'" v-model="metaReviewAnswers[field.fieldKey]" />
-            <el-input v-else v-model="metaReviewAnswers[field.fieldKey]" />
-          </el-form-item>
-        </el-form>
-      </template>
-      <template #footer>
-        <el-button @click="metaReviewDialogOpen = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="metaReviewManuscriptId ? actions.isPending(`submit-meta-review:${metaReviewManuscriptId}`) : false"
-          @click="submitMetaReview"
-        >
-          提交元评审
-        </el-button>
-      </template>
-    </el-dialog>
+            <div class="trace-entry-heading">
+              <strong>{{ workflowLabel(projection.analysisType) }}</strong>
+              <el-tag :type="statusTagType(projection.businessStatus)">
+                {{ workflowLabel(projection.businessStatus) }}
+              </el-tag>
+            </div>
+            <p v-if="projection.summaryText" class="body">{{ projection.summaryText }}</p>
+            <div class="conflict-result">
+              <div class="conflict-result-summary">
+                <h3>决策摘要</h3>
+                <p>{{ structuredConflictResult(projection).decisionSummary }}</p>
+                <el-tag type="info">置信度 {{ formatConfidence(structuredConflictResult(projection).confidence) }}</el-tag>
+              </div>
+              <div class="conflict-result-grid">
+                <section>
+                  <h3>共识点</h3>
+                  <ul v-if="structuredConflictResult(projection).consensusPoints.length">
+                    <li
+                      v-for="(item, index) in structuredConflictResult(projection).consensusPoints"
+                      :key="`panel-consensus-${projection.projectionId}-${index}`"
+                    >
+                      {{ item }}
+                    </li>
+                  </ul>
+                  <p v-else class="muted-line">暂无明确共识。</p>
+                </section>
+                <section>
+                  <h3>分歧点</h3>
+                  <ul v-if="structuredConflictResult(projection).conflictPoints.length">
+                    <li
+                      v-for="(item, index) in structuredConflictResult(projection).conflictPoints"
+                      :key="`panel-conflict-${projection.projectionId}-${index}`"
+                    >
+                      {{ item }}
+                    </li>
+                  </ul>
+                  <p v-else class="muted-line">暂无显著分歧。</p>
+                </section>
+                <section>
+                  <h3>高风险事项</h3>
+                  <ul v-if="structuredConflictResult(projection).highRiskIssues.length">
+                    <li
+                      v-for="(item, index) in structuredConflictResult(projection).highRiskIssues"
+                      :key="`panel-risk-${projection.projectionId}-${index}`"
+                    >
+                      {{ item }}
+                    </li>
+                  </ul>
+                  <p v-else class="muted-line">暂无高风险事项。</p>
+                </section>
+              </div>
+            </div>
+          </article>
+        </section>
+      </div>
+    </Transition>
   </section>
 </template>

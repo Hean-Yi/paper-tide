@@ -545,6 +545,12 @@ public class RealPlatformAssignmentRepository extends RealPlatformRepository {
                   )
                   AND NOT EXISTS (
                     SELECT 1
+                    FROM MANUSCRIPT_AUTHOR MA
+                    WHERE MA.MANUSCRIPT_ID = ?
+                      AND MA.USER_ID = CR.REVIEWER_ID
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1
                     FROM CONFLICT_RELATIONSHIP HARD
                     WHERE HARD.CONFERENCE_ID = CR.CONFERENCE_ID
                       AND HARD.MANUSCRIPT_ID = ?
@@ -564,6 +570,7 @@ public class RealPlatformAssignmentRepository extends RealPlatformRepository {
                 manuscriptId,
                 conferenceId,
                 roundId,
+                manuscriptId,
                 manuscriptId,
                 limit
         );
@@ -646,9 +653,17 @@ public class RealPlatformAssignmentRepository extends RealPlatformRepository {
                        COALESCE((
                          SELECT COUNT(*)
                          FROM REVIEW_ASSIGNMENT A
+                         JOIN MANUSCRIPT AM ON AM.MANUSCRIPT_ID = A.MANUSCRIPT_ID
                          WHERE A.REVIEWER_ID = CR.REVIEWER_ID
                            AND A.TASK_STATUS IN ('ASSIGNED', 'ACCEPTED', 'IN_REVIEW', 'SUBMITTED', 'OVERDUE')
+                           AND AM.CONFERENCE_ID = M.CONFERENCE_ID
                        ), 0) AS CURRENT_LOAD,
+                       COALESCE((
+                         SELECT COUNT(*)
+                         FROM MANUSCRIPT_AUTHOR MA
+                         WHERE MA.MANUSCRIPT_ID = ?
+                           AND MA.USER_ID = CR.REVIEWER_ID
+                       ), 0) AS MANUSCRIPT_AUTHOR_COUNT,
                        COALESCE((
                          SELECT COUNT(*)
                          FROM CONFLICT_RELATIONSHIP C
@@ -682,10 +697,12 @@ public class RealPlatformAssignmentRepository extends RealPlatformRepository {
                         rs.getLong("REVIEWER_ID"),
                         rs.getInt("CURRENT_LOAD"),
                         rs.getInt("MAX_LOAD"),
+                        rs.getInt("MANUSCRIPT_AUTHOR_COUNT"),
                         rs.getInt("HARD_CONFLICT_COUNT"),
                         rs.getInt("ROUND_ASSIGNMENT_COUNT"),
                         rs.getInt("OPEN_DRAFT_COUNT")
                 ),
+                manuscriptId,
                 manuscriptId,
                 roundId,
                 roundId,

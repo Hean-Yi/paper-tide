@@ -27,8 +27,10 @@ public class AssignmentDraftRepository {
                        COALESCE((
                          SELECT COUNT(*)
                          FROM REVIEW_ASSIGNMENT A
+                         JOIN MANUSCRIPT AM ON AM.MANUSCRIPT_ID = A.MANUSCRIPT_ID
                          WHERE A.REVIEWER_ID = CR.REVIEWER_ID
                            AND A.TASK_STATUS IN (%s)
+                           AND AM.CONFERENCE_ID = M.CONFERENCE_ID
                        ), 0) AS CURRENT_LOAD,
                        COALESCE(B.BID_VALUE, 'NEUTRAL') AS BID_VALUE
                 FROM REVIEW_ROUND R
@@ -57,8 +59,10 @@ public class AssignmentDraftRepository {
                   AND (
                     SELECT COUNT(*)
                     FROM REVIEW_ASSIGNMENT A
+                    JOIN MANUSCRIPT AM ON AM.MANUSCRIPT_ID = A.MANUSCRIPT_ID
                     WHERE A.REVIEWER_ID = CR.REVIEWER_ID
                       AND A.TASK_STATUS IN (%s)
+                      AND AM.CONFERENCE_ID = M.CONFERENCE_ID
                   ) < CR.MAX_LOAD
                 ORDER BY
                   CASE COALESCE(B.BID_VALUE, 'NEUTRAL')
@@ -129,6 +133,39 @@ public class AssignmentDraftRepository {
         );
     }
 
+    public List<AssignmentDraftRow> listOpenByConference(long conferenceId) {
+        return jdbcTemplate.query(
+                """
+                SELECT D.ASSIGNMENT_DRAFT_ID, D.ROUND_ID, D.MANUSCRIPT_ID, D.VERSION_ID, D.REVIEWER_ID,
+                       D.RANK_ORDER, D.SCORE, D.CURRENT_LOAD, D.MAX_LOAD, D.BID_VALUE, D.REASON, D.DRAFT_STATUS
+                FROM ASSIGNMENT_DRAFT D
+                JOIN MANUSCRIPT M ON M.MANUSCRIPT_ID = D.MANUSCRIPT_ID
+                WHERE COALESCE(M.CONFERENCE_ID, 0) = ?
+                  AND D.DRAFT_STATUS = 'PROPOSED'
+                ORDER BY D.MANUSCRIPT_ID, D.RANK_ORDER, D.ASSIGNMENT_DRAFT_ID
+                """,
+                this::mapDraft,
+                conferenceId
+        );
+    }
+
+    public List<AssignmentDraftRow> findOpenByConferenceForUpdate(long conferenceId) {
+        return jdbcTemplate.query(
+                """
+                SELECT D.ASSIGNMENT_DRAFT_ID, D.ROUND_ID, D.MANUSCRIPT_ID, D.VERSION_ID, D.REVIEWER_ID,
+                       D.RANK_ORDER, D.SCORE, D.CURRENT_LOAD, D.MAX_LOAD, D.BID_VALUE, D.REASON, D.DRAFT_STATUS
+                FROM ASSIGNMENT_DRAFT D
+                JOIN MANUSCRIPT M ON M.MANUSCRIPT_ID = D.MANUSCRIPT_ID
+                WHERE COALESCE(M.CONFERENCE_ID, 0) = ?
+                  AND D.DRAFT_STATUS = 'PROPOSED'
+                ORDER BY D.MANUSCRIPT_ID, D.RANK_ORDER, D.ASSIGNMENT_DRAFT_ID
+                FOR UPDATE
+                """,
+                this::mapDraft,
+                conferenceId
+        );
+    }
+
     public List<AssignmentDraftRow> findDraftsForUpdate(long roundId, List<Long> draftIds) {
         if (draftIds == null || draftIds.isEmpty()) {
             return List.of();
@@ -176,16 +213,19 @@ public class AssignmentDraftRepository {
         );
     }
 
-    public int currentLoad(long reviewerId) {
+    public int currentLoad(long conferenceId, long reviewerId) {
         Integer count = jdbcTemplate.queryForObject(
                 """
                 SELECT COUNT(*)
-                FROM REVIEW_ASSIGNMENT
-                WHERE REVIEWER_ID = ?
-                  AND TASK_STATUS IN (%s)
+                FROM REVIEW_ASSIGNMENT A
+                JOIN MANUSCRIPT M ON M.MANUSCRIPT_ID = A.MANUSCRIPT_ID
+                WHERE A.REVIEWER_ID = ?
+                  AND A.TASK_STATUS IN (%s)
+                  AND M.CONFERENCE_ID = ?
                 """.formatted(ACTIVE_ASSIGNMENT_STATUSES),
                 Integer.class,
-                reviewerId
+                reviewerId,
+                conferenceId
         );
         return count == null ? 0 : count;
     }

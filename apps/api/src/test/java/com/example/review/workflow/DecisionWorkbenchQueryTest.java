@@ -2,6 +2,7 @@ package com.example.review.workflow;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.example.review.analysis.domain.AnalysisType;
@@ -34,7 +35,7 @@ class DecisionWorkbenchQueryTest {
                 102L, 2L, 22L, 1, "PENDING", now, "SUBMITTED", null, 
                 "Paper 2", 1, 0, 0, 0);
 
-        when(repository.findPendingAndInProgressRounds()).thenReturn(List.of(round1, round2));
+        when(repository.findPendingAndInProgressRounds(1L)).thenReturn(List.of(round1, round2));
         
         DecisionAssignmentItem assignment = new DecisionAssignmentItem(
                 501L, 901L, "SUBMITTED", now, now, now, now, null);
@@ -73,5 +74,33 @@ class DecisionWorkbenchQueryTest {
         assertThat(item2.assignments()).isEmpty();
         assertThat(item2.conflictIntent()).isNull();
         assertThat(item2.conflictProjections()).isEmpty();
+    }
+
+    @Test
+    void listDecisionWorkbench_filtersRegularChairByOrganizerScope() {
+        DecisionWorkbenchReadRepository repository = mock(DecisionWorkbenchReadRepository.class);
+        DecisionWorkbenchQueryService service = new DecisionWorkbenchQueryService(repository);
+        CurrentUserPrincipal chair = new CurrentUserPrincipal(2003L, "new_chair", List.of("CHAIR"));
+
+        when(repository.findPendingAndInProgressRounds(2003L)).thenReturn(List.of());
+
+        List<DecisionWorkbenchItem> result = service.listDecisionWorkbench(chair);
+
+        assertThat(result).isEmpty();
+        verify(repository).findPendingAndInProgressRounds(2003L);
+    }
+
+    @Test
+    void listDecisionWorkbench_allowsAdminGlobalScope() {
+        DecisionWorkbenchReadRepository repository = mock(DecisionWorkbenchReadRepository.class);
+        DecisionWorkbenchQueryService service = new DecisionWorkbenchQueryService(repository);
+        CurrentUserPrincipal admin = new CurrentUserPrincipal(1004L, "admin", List.of("ADMIN"));
+
+        when(repository.findPendingAndInProgressRounds(null)).thenReturn(List.of());
+
+        List<DecisionWorkbenchItem> result = service.listDecisionWorkbench(admin);
+
+        assertThat(result).isEmpty();
+        verify(repository).findPendingAndInProgressRounds(null);
     }
 }

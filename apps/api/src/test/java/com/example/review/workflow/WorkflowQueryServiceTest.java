@@ -1,6 +1,7 @@
 package com.example.review.workflow;
 
 import static org.hamcrest.Matchers.blankOrNullString;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -109,6 +110,7 @@ class WorkflowQueryServiceTest {
         jdbcTemplate.update("UPDATE MANUSCRIPT SET CURRENT_VERSION_ID = NULL");
         jdbcTemplate.update("DELETE FROM MANUSCRIPT_VERSION");
         jdbcTemplate.update("DELETE FROM MANUSCRIPT");
+        ensureLegacyConference();
     }
 
     @Test
@@ -199,6 +201,20 @@ class WorkflowQueryServiceTest {
                 .andExpect(jsonPath("$[0].title").value("Workflow Seed"))
                 .andExpect(jsonPath("$[0].currentStatus").value("SUBMITTED"));
 
+        mockMvc.perform(post("/api/manuscripts/{id}/versions/{versionId}/screening-analysis", fixture.manuscriptId(), fixture.versionId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.analysisType").value("SCREENING"))
+                .andExpect(jsonPath("$.businessStatus").value("REQUESTED"));
+
+        mockMvc.perform(get("/api/chair/screening-queue")
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].screeningIntent.analysisType").value("SCREENING"))
+                .andExpect(jsonPath("$[0].screeningIntent.businessStatus").value("REQUESTED"));
+
         mockMvc.perform(post("/api/manuscripts/{id}/versions/{versionId}/start-screening", fixture.manuscriptId(), fixture.versionId())
                         .header("Authorization", "Bearer " + chairToken))
                 .andExpect(status().isOk())
@@ -208,6 +224,46 @@ class WorkflowQueryServiceTest {
                         .header("Authorization", "Bearer " + chairToken))
                 .andExpect(status().isOk())
                 .andExpect(content().bytes(PDF_BYTES));
+    }
+
+    @Test
+    void chairScreeningQueueExcludesOtherOrganizerConferenceManuscripts() throws Exception {
+        WorkflowFixture ownFixture = seedSubmittedManuscript("SUBMITTED", true);
+        long otherConferenceId = 991001L;
+        ensureConference(otherConferenceId, 1004L, "Other Organizer Conference", "OT991001", "other-organizer-conference");
+        WorkflowFixture otherFixture = seedSubmittedManuscript(
+                "SUBMITTED",
+                true,
+                otherConferenceId,
+                "Other Organizer Paper"
+        );
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+
+        mockMvc.perform(get("/api/chair/screening-queue")
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].manuscriptId", hasItem((int) ownFixture.manuscriptId())))
+                .andExpect(jsonPath("$[*].manuscriptId", not(hasItem((int) otherFixture.manuscriptId()))));
+    }
+
+    @Test
+    void adminScreeningQueueKeepsExplicitGlobalScope() throws Exception {
+        WorkflowFixture ownFixture = seedSubmittedManuscript("SUBMITTED", true);
+        long otherConferenceId = 991002L;
+        ensureConference(otherConferenceId, 1004L, "Admin Visible Other Conference", "OT991002", "admin-visible-other-conference");
+        WorkflowFixture otherFixture = seedSubmittedManuscript(
+                "SUBMITTED",
+                true,
+                otherConferenceId,
+                "Admin Visible Other Paper"
+        );
+        String adminToken = loginAndExtractToken("admin_demo", "demo123");
+
+        mockMvc.perform(get("/api/chair/screening-queue")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].manuscriptId", hasItem((int) ownFixture.manuscriptId())))
+                .andExpect(jsonPath("$[*].manuscriptId", hasItem((int) otherFixture.manuscriptId())));
     }
 
     @Test
@@ -226,25 +282,126 @@ class WorkflowQueryServiceTest {
                 .andExpect(jsonPath("$[0].assignments[0].taskStatus").value("SUBMITTED"));
     }
 
+    @Test
+    void chairConferencePaperListIncludesReviewerScoresAndAverage() throws Exception {
+        WorkflowFixture fixture = seedUnderReviewWorkflow("SUBMITTED", true, true);
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+
+        mockMvc.perform(get("/api/chair/conferences/{conferenceId}/papers", 0)
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].manuscriptId").value(fixture.manuscriptId()))
+                .andExpect(jsonPath("$[0].averageOverallScore").value(4.0))
+                .andExpect(jsonPath("$[0].reviewerScores[0].assignmentId").value(fixture.assignmentId()))
+                .andExpect(jsonPath("$[0].reviewerScores[0].reviewerId").value(1002))
+                .andExpect(jsonPath("$[0].reviewerScores[0].reviewerName").value("Reviewer Demo"))
+                .andExpect(jsonPath("$[0].reviewerScores[0].overallScore").value(4))
+                .andExpect(jsonPath("$[0].reviewerScores[0].recommendation").value("MINOR_REVISION"));
+    }
+
+    @Test
+    void chairReadsConferencePaperReviewDetailAndRenderedPages() throws Exception {
+        WorkflowFixture fixture = seedUnderReviewWorkflow("SUBMITTED", true, true);
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+
+        mockMvc.perform(get("/api/chair/conferences/{conferenceId}/papers/{manuscriptId}/review-detail", 0, fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.manuscriptId").value(fixture.manuscriptId()))
+                .andExpect(jsonPath("$.versionId").value(fixture.versionId()))
+                .andExpect(jsonPath("$.title").value("Workflow Seed"))
+                .andExpect(jsonPath("$.abstractText").value("workflow abstract"))
+                .andExpect(jsonPath("$.pageCount").value(1))
+                .andExpect(jsonPath("$.averageOverallScore").value(4.0))
+                .andExpect(jsonPath("$.reviews[0].assignmentId").value(fixture.assignmentId()))
+                .andExpect(jsonPath("$.reviews[0].reviewerName").value("Reviewer Demo"))
+                .andExpect(jsonPath("$.reviews[0].noveltyScore").value(4))
+                .andExpect(jsonPath("$.reviews[0].commentsToAuthor").value("good paper"))
+                .andExpect(jsonPath("$.reviews[0].commentsToChair").value("ready for decision"));
+
+        MvcResult page = mockMvc.perform(get("/api/chair/conferences/{conferenceId}/papers/{manuscriptId}/paper/pages/1", 0, fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("image/png"))
+                .andExpect(header().string("Cache-Control", "private, no-store"))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andReturn();
+        byte[] image = page.getResponse().getContentAsByteArray();
+        org.junit.jupiter.api.Assertions.assertEquals((byte) 0x89, image[0]);
+        org.junit.jupiter.api.Assertions.assertEquals((byte) 'P', image[1]);
+        org.junit.jupiter.api.Assertions.assertEquals((byte) 'N', image[2]);
+        org.junit.jupiter.api.Assertions.assertEquals((byte) 'G', image[3]);
+    }
+
+    @Test
+    void adminCannotReadConferencePaperContent() throws Exception {
+        WorkflowFixture fixture = seedUnderReviewWorkflow("SUBMITTED", true, true);
+        String adminToken = loginAndExtractToken("admin_demo", "demo123");
+
+        mockMvc.perform(get("/api/chair/conferences/{conferenceId}/papers/{manuscriptId}/review-detail", 0, fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/chair/conferences/{conferenceId}/papers/{manuscriptId}/paper/pages/1", 0, fixture.manuscriptId())
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void authorReviewerInterfaceChoicePromptsOnlyForOpenConferenceAssignments() throws Exception {
+        seedUnderReviewWorkflow("ASSIGNED", true, false);
+        jdbcTemplate.update(
+                """
+                MERGE INTO SYS_USER_ROLE UR
+                USING (SELECT 1002 AS USER_ID, R.ROLE_ID FROM SYS_ROLE R WHERE R.ROLE_CODE = 'AUTHOR') S
+                ON (UR.USER_ID = S.USER_ID AND UR.ROLE_ID = S.ROLE_ID)
+                WHEN NOT MATCHED THEN
+                  INSERT (USER_ROLE_ID, USER_ID, ROLE_ID)
+                  VALUES (SEQ_SYS_USER_ROLE.NEXTVAL, S.USER_ID, S.ROLE_ID)
+                """
+        );
+        String reviewerAuthorToken = loginAndExtractToken("reviewer_demo", "demo123");
+
+        mockMvc.perform(get("/api/reviewer/interface-choice")
+                        .header("Authorization", "Bearer " + reviewerAuthorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shouldPrompt").value(true))
+                .andExpect(jsonPath("$.activeAssignmentCount").value(1));
+
+        jdbcTemplate.update("UPDATE CONFERENCE SET CONFERENCE_STATUS = 'CLOSED' WHERE CONFERENCE_ID = 0");
+
+        mockMvc.perform(get("/api/reviewer/interface-choice")
+                        .header("Authorization", "Bearer " + reviewerAuthorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shouldPrompt").value(false))
+                .andExpect(jsonPath("$.activeAssignmentCount").value(0));
+    }
+
     private WorkflowFixture seedSubmittedManuscript(String status, boolean withPdf) {
+        return seedSubmittedManuscript(status, withPdf, 0L, "Workflow Seed");
+    }
+
+    private WorkflowFixture seedSubmittedManuscript(String status, boolean withPdf, long conferenceId, String title) {
         long manuscriptId = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT.NEXTVAL FROM DUAL", Long.class);
         long versionId = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT_VERSION.NEXTVAL FROM DUAL", Long.class);
         jdbcTemplate.update(
                 """
-                INSERT INTO MANUSCRIPT (MANUSCRIPT_ID, SUBMITTER_ID, CURRENT_VERSION_ID, CURRENT_STATUS, CURRENT_ROUND_NO, BLIND_MODE, SUBMITTED_AT, LAST_DECISION_CODE)
-                VALUES (?, 1001, NULL, ?, 0, 'DOUBLE_BLIND', ?, NULL)
+                INSERT INTO MANUSCRIPT (MANUSCRIPT_ID, SUBMITTER_ID, CURRENT_VERSION_ID, CURRENT_STATUS, CURRENT_ROUND_NO, BLIND_MODE, SUBMITTED_AT, LAST_DECISION_CODE, CONFERENCE_ID)
+                VALUES (?, 1001, NULL, ?, 0, 'DOUBLE_BLIND', ?, NULL, ?)
                 """,
                 manuscriptId,
                 status,
-                Timestamp.from(Instant.now())
+                Timestamp.from(Instant.now()),
+                conferenceId
         );
         jdbcTemplate.update(
                 """
                 INSERT INTO MANUSCRIPT_VERSION (VERSION_ID, MANUSCRIPT_ID, VERSION_NO, VERSION_TYPE, TITLE, ABSTRACT, KEYWORDS, PDF_FILE, PDF_FILE_NAME, PDF_FILE_SIZE, SUBMITTED_BY, SUBMITTED_AT, SOURCE_DECISION_ID)
-                VALUES (?, ?, 1, 'INITIAL', 'Workflow Seed', 'workflow abstract', 'workflow,pdf', ?, ?, ?, 1001, ?, NULL)
+                VALUES (?, ?, 1, 'INITIAL', ?, 'workflow abstract', 'workflow,pdf', ?, ?, ?, 1001, ?, NULL)
                 """,
                 versionId,
                 manuscriptId,
+                title,
                 withPdf ? PDF_BYTES : null,
                 withPdf ? "workflow.pdf" : null,
                 withPdf ? PDF_BYTES.length : null,
@@ -323,6 +480,142 @@ class WorkflowQueryServiceTest {
             );
         }
         return new WorkflowFixture(manuscript.manuscriptId(), manuscript.versionId(), roundId, assignmentId);
+    }
+
+    private void ensureLegacyConference() {
+        jdbcTemplate.update(
+                """
+                MERGE INTO CONFERENCE C
+                USING (
+                  SELECT 0 AS CONFERENCE_ID,
+                         'Legacy / Platform Default' AS NAME,
+                         'LEGACY' AS ACRONYM,
+                         2026 AS CONFERENCE_YEAR,
+                         1003 AS ORGANIZER_USER_ID,
+                         'OPEN_FOR_SUBMISSION' AS CONFERENCE_STATUS,
+                         'DOUBLE_BLIND' AS BLIND_MODE,
+                         'Default conference for workflow tests.' AS CFP_TEXT,
+                         '["LEGACY"]' AS TOPIC_AREAS_JSON,
+                         3 AS TARGET_REVIEWS_PER_PAPER,
+                         3 AS DEFAULT_REVIEWER_MAX_LOAD,
+                         'legacy-platform-default' AS PUBLIC_SLUG,
+                         0 AS CFP_PUBLISHED
+                  FROM DUAL
+                ) S
+                ON (C.CONFERENCE_ID = S.CONFERENCE_ID)
+                WHEN MATCHED THEN
+                  UPDATE SET C.NAME = S.NAME,
+                             C.ACRONYM = S.ACRONYM,
+                             C.CONFERENCE_YEAR = S.CONFERENCE_YEAR,
+                             C.ORGANIZER_USER_ID = S.ORGANIZER_USER_ID,
+                             C.CONFERENCE_STATUS = S.CONFERENCE_STATUS,
+                             C.BLIND_MODE = S.BLIND_MODE,
+                             C.CFP_TEXT = S.CFP_TEXT,
+                             C.TOPIC_AREAS_JSON = S.TOPIC_AREAS_JSON,
+                             C.TARGET_REVIEWS_PER_PAPER = S.TARGET_REVIEWS_PER_PAPER,
+                             C.DEFAULT_REVIEWER_MAX_LOAD = S.DEFAULT_REVIEWER_MAX_LOAD,
+                             C.PUBLIC_SLUG = S.PUBLIC_SLUG,
+                             C.CFP_PUBLISHED = S.CFP_PUBLISHED
+                WHEN NOT MATCHED THEN
+                  INSERT (
+                    CONFERENCE_ID, NAME, ACRONYM, CONFERENCE_YEAR, ORGANIZER_USER_ID,
+                    CONFERENCE_STATUS, BLIND_MODE, CFP_TEXT, TOPIC_AREAS_JSON,
+                    TARGET_REVIEWS_PER_PAPER, DEFAULT_REVIEWER_MAX_LOAD, PUBLIC_SLUG, CFP_PUBLISHED
+                  )
+                  VALUES (
+                    S.CONFERENCE_ID, S.NAME, S.ACRONYM, S.CONFERENCE_YEAR, S.ORGANIZER_USER_ID,
+                    S.CONFERENCE_STATUS, S.BLIND_MODE, S.CFP_TEXT, S.TOPIC_AREAS_JSON,
+                    S.TARGET_REVIEWS_PER_PAPER, S.DEFAULT_REVIEWER_MAX_LOAD, S.PUBLIC_SLUG, S.CFP_PUBLISHED
+                  )
+                """);
+        jdbcTemplate.update(
+                """
+                MERGE INTO CONFERENCE_PHASE P
+                USING (
+                  SELECT 0 AS CONFERENCE_ID,
+                         TIMESTAMP '2099-01-01 00:00:00' AS SUBMISSION_OPEN_AT,
+                         TIMESTAMP '2099-02-01 00:00:00' AS ABSTRACT_SUBMISSION_CLOSE_AT,
+                         TIMESTAMP '2099-03-01 00:00:00' AS SUBMISSION_CLOSE_AT,
+                         TIMESTAMP '2099-04-01 00:00:00' AS BIDDING_OPEN_AT,
+                         TIMESTAMP '2099-05-01 00:00:00' AS BIDDING_CLOSE_AT,
+                         TIMESTAMP '2099-06-01 00:00:00' AS REVIEW_DEADLINE_AT,
+                         TIMESTAMP '2099-07-01 00:00:00' AS DECISION_RELEASE_AT
+                  FROM DUAL
+                ) S
+                ON (P.CONFERENCE_ID = S.CONFERENCE_ID)
+                WHEN MATCHED THEN
+                  UPDATE SET P.SUBMISSION_OPEN_AT = S.SUBMISSION_OPEN_AT,
+                             P.ABSTRACT_SUBMISSION_CLOSE_AT = S.ABSTRACT_SUBMISSION_CLOSE_AT,
+                             P.SUBMISSION_CLOSE_AT = S.SUBMISSION_CLOSE_AT,
+                             P.BIDDING_OPEN_AT = S.BIDDING_OPEN_AT,
+                             P.BIDDING_CLOSE_AT = S.BIDDING_CLOSE_AT,
+                             P.REVIEW_DEADLINE_AT = S.REVIEW_DEADLINE_AT,
+                             P.DECISION_RELEASE_AT = S.DECISION_RELEASE_AT
+                WHEN NOT MATCHED THEN
+                  INSERT (
+                    PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, ABSTRACT_SUBMISSION_CLOSE_AT, SUBMISSION_CLOSE_AT,
+                    BIDDING_OPEN_AT, BIDDING_CLOSE_AT, REVIEW_DEADLINE_AT, DECISION_RELEASE_AT
+                  )
+                  VALUES (
+                    SEQ_CONFERENCE_PHASE.NEXTVAL, S.CONFERENCE_ID, S.SUBMISSION_OPEN_AT, S.ABSTRACT_SUBMISSION_CLOSE_AT, S.SUBMISSION_CLOSE_AT,
+                    S.BIDDING_OPEN_AT, S.BIDDING_CLOSE_AT, S.REVIEW_DEADLINE_AT, S.DECISION_RELEASE_AT
+                  )
+                """
+        );
+    }
+
+    private void ensureConference(long conferenceId, long organizerUserId, String name, String acronym, String publicSlug) {
+        jdbcTemplate.update(
+                """
+                MERGE INTO CONFERENCE C
+                USING (
+                  SELECT ? AS CONFERENCE_ID,
+                         ? AS NAME,
+                         ? AS ACRONYM,
+                         2026 AS CONFERENCE_YEAR,
+                         ? AS ORGANIZER_USER_ID,
+                         'OPEN_FOR_SUBMISSION' AS CONFERENCE_STATUS,
+                         'DOUBLE_BLIND' AS BLIND_MODE,
+                         'Other conference for workflow scope tests.' AS CFP_TEXT,
+                         '["SCOPE"]' AS TOPIC_AREAS_JSON,
+                         3 AS TARGET_REVIEWS_PER_PAPER,
+                         3 AS DEFAULT_REVIEWER_MAX_LOAD,
+                         ? AS PUBLIC_SLUG,
+                         0 AS CFP_PUBLISHED
+                  FROM DUAL
+                ) S
+                ON (C.CONFERENCE_ID = S.CONFERENCE_ID)
+                WHEN MATCHED THEN
+                  UPDATE SET C.NAME = S.NAME,
+                             C.ACRONYM = S.ACRONYM,
+                             C.CONFERENCE_YEAR = S.CONFERENCE_YEAR,
+                             C.ORGANIZER_USER_ID = S.ORGANIZER_USER_ID,
+                             C.CONFERENCE_STATUS = S.CONFERENCE_STATUS,
+                             C.BLIND_MODE = S.BLIND_MODE,
+                             C.CFP_TEXT = S.CFP_TEXT,
+                             C.TOPIC_AREAS_JSON = S.TOPIC_AREAS_JSON,
+                             C.TARGET_REVIEWS_PER_PAPER = S.TARGET_REVIEWS_PER_PAPER,
+                             C.DEFAULT_REVIEWER_MAX_LOAD = S.DEFAULT_REVIEWER_MAX_LOAD,
+                             C.PUBLIC_SLUG = S.PUBLIC_SLUG,
+                             C.CFP_PUBLISHED = S.CFP_PUBLISHED
+                WHEN NOT MATCHED THEN
+                  INSERT (
+                    CONFERENCE_ID, NAME, ACRONYM, CONFERENCE_YEAR, ORGANIZER_USER_ID,
+                    CONFERENCE_STATUS, BLIND_MODE, CFP_TEXT, TOPIC_AREAS_JSON,
+                    TARGET_REVIEWS_PER_PAPER, DEFAULT_REVIEWER_MAX_LOAD, PUBLIC_SLUG, CFP_PUBLISHED
+                  )
+                  VALUES (
+                    S.CONFERENCE_ID, S.NAME, S.ACRONYM, S.CONFERENCE_YEAR, S.ORGANIZER_USER_ID,
+                    S.CONFERENCE_STATUS, S.BLIND_MODE, S.CFP_TEXT, S.TOPIC_AREAS_JSON,
+                    S.TARGET_REVIEWS_PER_PAPER, S.DEFAULT_REVIEWER_MAX_LOAD, S.PUBLIC_SLUG, S.CFP_PUBLISHED
+                  )
+                """,
+                conferenceId,
+                name,
+                acronym,
+                organizerUserId,
+                publicSlug
+        );
     }
 
     private void ensureSecondReviewer() {

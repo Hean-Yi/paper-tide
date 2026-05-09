@@ -97,7 +97,7 @@ class AssignmentDraftServiceTest {
         addConferenceReviewer(conferenceId, 1023L, 1);
         seedBid(conferenceId, manuscript.manuscriptId(), 1002L, "WANT_TO_REVIEW");
         seedConflict(manuscript.manuscriptId(), 1022L, "INSTITUTION");
-        seedExistingAssignmentForLoad(1023L);
+        seedExistingAssignmentForLoad(conferenceId, 1023L);
 
         MvcResult generateResult = mockMvc.perform(post("/api/review-rounds/{roundId}/assignment-drafts/generate", roundId)
                         .header("Authorization", "Bearer " + chairToken)
@@ -173,7 +173,7 @@ class AssignmentDraftServiceTest {
                 .path("draftId")
                 .asLong();
 
-        seedExistingAssignmentForLoad(1002L);
+        seedExistingAssignmentForLoad(conferenceId, 1002L);
 
         mockMvc.perform(post("/api/review-rounds/{roundId}/assignment-drafts/confirm", roundId)
                         .header("Authorization", "Bearer " + chairToken)
@@ -183,6 +183,32 @@ class AssignmentDraftServiceTest {
                                 "deadlineAt", "2026-08-01T00:00:00Z"
                         ))))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void confirmDraftsRejectsManuscriptAuthorEvenWhenDraftAlreadyExists() throws Exception {
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        long conferenceId = seedConference();
+        ManuscriptSeed manuscript = seedSubmittedManuscript(conferenceId);
+        long roundId = seedReviewRound(manuscript);
+        addConferenceReviewer(conferenceId, 1001L, 2);
+        long draftId = seedAssignmentDraft(roundId, manuscript, 1001L);
+
+        mockMvc.perform(post("/api/review-rounds/{roundId}/assignment-drafts/confirm", roundId)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "draftIds", List.of(draftId),
+                                "deadlineAt", "2026-08-01T00:00:00Z"
+                        ))))
+                .andExpect(status().isConflict());
+
+        Integer assignmentCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM REVIEW_ASSIGNMENT WHERE ROUND_ID = ? AND REVIEWER_ID = 1001",
+                Integer.class,
+                roundId
+        );
+        org.junit.jupiter.api.Assertions.assertEquals(0, assignmentCount);
     }
 
     private long seedConference() {
@@ -203,12 +229,13 @@ class AssignmentDraftServiceTest {
         jdbcTemplate.update(
                 """
                 INSERT INTO CONFERENCE_PHASE (
-                  PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, SUBMISSION_CLOSE_AT,
+                  PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, ABSTRACT_SUBMISSION_CLOSE_AT, SUBMISSION_CLOSE_AT,
                   BIDDING_OPEN_AT, BIDDING_CLOSE_AT, REVIEW_DEADLINE_AT, DECISION_RELEASE_AT
-                ) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 conferenceId,
                 Timestamp.from(Instant.parse("2026-01-01T00:00:00Z")),
+                Timestamp.from(Instant.parse("2026-01-20T00:00:00Z")),
                 Timestamp.from(Instant.parse("2026-02-01T00:00:00Z")),
                 Timestamp.from(Instant.parse("2026-02-02T00:00:00Z")),
                 Timestamp.from(Instant.parse("2026-02-10T00:00:00Z")),
@@ -317,18 +344,19 @@ class AssignmentDraftServiceTest {
         );
     }
 
-    private void seedExistingAssignmentForLoad(long reviewerId) {
+    private void seedExistingAssignmentForLoad(long conferenceId, long reviewerId) {
         long manuscriptId = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT.NEXTVAL FROM DUAL", Long.class);
         long versionId = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT_VERSION.NEXTVAL FROM DUAL", Long.class);
         long roundId = jdbcTemplate.queryForObject("SELECT SEQ_REVIEW_ROUND.NEXTVAL FROM DUAL", Long.class);
         jdbcTemplate.update(
                 """
                 INSERT INTO MANUSCRIPT (
-                  MANUSCRIPT_ID, SUBMITTER_ID, CURRENT_VERSION_ID, CURRENT_STATUS, CURRENT_ROUND_NO,
+                  MANUSCRIPT_ID, SUBMITTER_ID, CONFERENCE_ID, CURRENT_VERSION_ID, CURRENT_STATUS, CURRENT_ROUND_NO,
                   BLIND_MODE, SUBMITTED_AT
-                ) VALUES (?, 1001, NULL, 'UNDER_REVIEW', 1, 'DOUBLE_BLIND', CURRENT_TIMESTAMP)
+                ) VALUES (?, 1001, ?, NULL, 'UNDER_REVIEW', 1, 'DOUBLE_BLIND', CURRENT_TIMESTAMP)
                 """,
-                manuscriptId
+                manuscriptId,
+                conferenceId
         );
         jdbcTemplate.update(
                 """
@@ -362,6 +390,26 @@ class AssignmentDraftServiceTest {
                 versionId,
                 reviewerId
         );
+    }
+
+    private long seedAssignmentDraft(long roundId, ManuscriptSeed manuscript, long reviewerId) {
+        long draftId = jdbcTemplate.queryForObject("SELECT SEQ_ASSIGNMENT_DRAFT.NEXTVAL FROM DUAL", Long.class);
+        jdbcTemplate.update(
+                """
+                INSERT INTO ASSIGNMENT_DRAFT (
+                  ASSIGNMENT_DRAFT_ID, ROUND_ID, MANUSCRIPT_ID, VERSION_ID, REVIEWER_ID,
+                  RANK_ORDER, SCORE, CURRENT_LOAD, MAX_LOAD, BID_VALUE, REASON, DRAFT_STATUS,
+                  CREATED_BY, CREATED_AT, UPDATED_AT
+                ) VALUES (?, ?, ?, ?, ?, 1, 100, 0, 2, 'NEUTRAL', 'stale draft', 'PROPOSED',
+                  1003, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                draftId,
+                roundId,
+                manuscript.manuscriptId(),
+                manuscript.versionId(),
+                reviewerId
+        );
+        return draftId;
     }
 
     private void seedReviewerUser(long userId, String username, String institution) {

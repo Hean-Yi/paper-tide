@@ -22,10 +22,16 @@ async function submit() {
   }
   try {
     await login(form.username.trim(), form.password);
-    await router.push("/dashboard");
   } catch {
     // The auth store owns the user-facing message.
+    return;
   }
+  const target = postLoginTarget();
+  await router.push(target);
+}
+
+function postLoginTarget() {
+  return "/dashboard";
 }
 </script>
 

@@ -256,6 +256,7 @@ class RealPlatformWorkflowServiceTest {
                 """
                 UPDATE CONFERENCE_PHASE
                 SET SUBMISSION_OPEN_AT = ?,
+                    ABSTRACT_SUBMISSION_CLOSE_AT = ?,
                     SUBMISSION_CLOSE_AT = ?,
                     BIDDING_OPEN_AT = ?,
                     BIDDING_CLOSE_AT = ?,
@@ -264,6 +265,7 @@ class RealPlatformWorkflowServiceTest {
                 WHERE CONFERENCE_ID = 0
                 """,
                 Timestamp.from(past),
+                Timestamp.from(past.plusSeconds(300)),
                 Timestamp.from(past.plusSeconds(600)),
                 Timestamp.from(past.plusSeconds(1200)),
                 Timestamp.from(past.plusSeconds(1800)),
@@ -512,6 +514,7 @@ class RealPlatformWorkflowServiceTest {
                 USING (
                   SELECT 0 AS CONFERENCE_ID,
                          TIMESTAMP '2099-01-01 00:00:00' AS SUBMISSION_OPEN_AT,
+                         TIMESTAMP '2099-01-15 00:00:00' AS ABSTRACT_SUBMISSION_CLOSE_AT,
                          TIMESTAMP '2099-02-01 00:00:00' AS SUBMISSION_CLOSE_AT,
                          TIMESTAMP '2099-03-01 00:00:00' AS BIDDING_OPEN_AT,
                          TIMESTAMP '2099-04-01 00:00:00' AS BIDDING_CLOSE_AT,
@@ -522,6 +525,7 @@ class RealPlatformWorkflowServiceTest {
                 ON (P.CONFERENCE_ID = S.CONFERENCE_ID)
                 WHEN MATCHED THEN UPDATE SET
                   P.SUBMISSION_OPEN_AT = S.SUBMISSION_OPEN_AT,
+                  P.ABSTRACT_SUBMISSION_CLOSE_AT = S.ABSTRACT_SUBMISSION_CLOSE_AT,
                   P.SUBMISSION_CLOSE_AT = S.SUBMISSION_CLOSE_AT,
                   P.BIDDING_OPEN_AT = S.BIDDING_OPEN_AT,
                   P.BIDDING_CLOSE_AT = S.BIDDING_CLOSE_AT,
@@ -532,10 +536,10 @@ class RealPlatformWorkflowServiceTest {
                   P.CAMERA_READY_OPEN_AT = NULL,
                   P.CAMERA_READY_CLOSE_AT = NULL
                 WHEN NOT MATCHED THEN INSERT (
-                  PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, SUBMISSION_CLOSE_AT,
+                  PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, ABSTRACT_SUBMISSION_CLOSE_AT, SUBMISSION_CLOSE_AT,
                   BIDDING_OPEN_AT, BIDDING_CLOSE_AT, REVIEW_DEADLINE_AT, DECISION_RELEASE_AT
                 ) VALUES (
-                  SEQ_CONFERENCE_PHASE.NEXTVAL, S.CONFERENCE_ID, S.SUBMISSION_OPEN_AT, S.SUBMISSION_CLOSE_AT,
+                  SEQ_CONFERENCE_PHASE.NEXTVAL, S.CONFERENCE_ID, S.SUBMISSION_OPEN_AT, S.ABSTRACT_SUBMISSION_CLOSE_AT, S.SUBMISSION_CLOSE_AT,
                   S.BIDDING_OPEN_AT, S.BIDDING_CLOSE_AT, S.REVIEW_DEADLINE_AT, S.DECISION_RELEASE_AT
                 )
                 """

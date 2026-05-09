@@ -34,6 +34,14 @@ public class DecisionController {
         return decisionService.decide(principal, request);
     }
 
+    @PostMapping("/screening-desk-reject")
+    public DecisionResponse screeningDeskReject(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @RequestBody ScreeningDeskRejectRequest request
+    ) {
+        return decisionService.screeningDeskReject(principal, request);
+    }
+
     @GetMapping("/manuscripts/{manuscriptId}/package")
     public DecisionPackageResponse getAuthorDecisionPackage(
             @AuthenticationPrincipal CurrentUserPrincipal principal,

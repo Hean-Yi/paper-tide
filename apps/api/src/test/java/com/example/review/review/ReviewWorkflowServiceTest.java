@@ -52,10 +52,14 @@ class ReviewWorkflowServiceTest {
         jdbcTemplate.update("DELETE FROM REVIEW_DISCUSSION_MESSAGE");
         jdbcTemplate.update("DELETE FROM COMMUNICATION_LOG");
         jdbcTemplate.update("DELETE FROM CONFLICT_CHECK_RECORD");
+        jdbcTemplate.update("DELETE FROM EXTERNAL_REVIEWER_DELEGATION");
         jdbcTemplate.update("DELETE FROM REVIEW_REPORT");
         jdbcTemplate.update("DELETE FROM REVIEWER_BID");
         jdbcTemplate.update("DELETE FROM REVIEW_ASSIGNMENT");
         jdbcTemplate.update("DELETE FROM ASSIGNMENT_DRAFT");
+        jdbcTemplate.update("DELETE FROM ASSIGNMENT_OVERRIDE_AUDIT");
+        jdbcTemplate.update("DELETE FROM ASSIGNMENT_PROPOSAL");
+        jdbcTemplate.update("DELETE FROM ASSIGNMENT_PROPOSAL_BUNDLE");
         jdbcTemplate.update("DELETE FROM CONFERENCE_REVIEWER");
         jdbcTemplate.update("UPDATE MANUSCRIPT_VERSION SET SOURCE_DECISION_ID = NULL");
         jdbcTemplate.update("DELETE FROM DECISION_RECORD");
@@ -119,6 +123,7 @@ class ReviewWorkflowServiceTest {
         TestManuscript manuscript = seedSubmittedManuscript();
         String chairToken = loginAndExtractToken("chair_demo", "demo123");
         long roundId = createRound(chairToken, manuscript.manuscriptId(), manuscript.versionId(), 1);
+        seedConferenceReviewer(0L, 1001L, 3);
         seedBid(0L, manuscript.manuscriptId(), 1002L, "WANT_TO_REVIEW");
         seedBid(0L, manuscript.manuscriptId(), 1012L, "DECLINE");
 
@@ -132,6 +137,47 @@ class ReviewWorkflowServiceTest {
                 .andExpect(jsonPath("$[0].currentLoad").value(0))
                 .andExpect(jsonPath("$[0].maxLoad").value(3))
                 .andExpect(jsonPath("$[0].bidValue").value("WANT_TO_REVIEW"));
+    }
+
+    @Test
+    void assignmentCandidatesUseConferenceScopedReviewerLoad() throws Exception {
+        TestManuscript manuscript = seedSubmittedManuscript();
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        long roundId = createRound(chairToken, manuscript.manuscriptId(), manuscript.versionId(), 1);
+        jdbcTemplate.update("UPDATE CONFERENCE_REVIEWER SET MAX_LOAD = 1 WHERE CONFERENCE_ID = 0 AND REVIEWER_ID = 1002");
+        seedExistingAssignmentForLoad(1002L);
+
+        mockMvc.perform(get("/api/review-rounds/{roundId}/assignment-candidates", roundId)
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].reviewerId", org.hamcrest.Matchers.hasItem(1002)))
+                .andExpect(jsonPath("$[0].reviewerId").value(1002))
+                .andExpect(jsonPath("$[0].currentLoad").value(0))
+                .andExpect(jsonPath("$[0].maxLoad").value(1));
+    }
+
+    @Test
+    void manuscriptAuthorInReviewerPoolIsNotSearchableForOwnAssignmentAndDirectAssignmentIsRejected() throws Exception {
+        TestManuscript manuscript = seedSubmittedManuscript();
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        long roundId = createRound(chairToken, manuscript.manuscriptId(), manuscript.versionId(), 1);
+        seedConferenceReviewer(0L, 1001L, 3);
+
+        mockMvc.perform(get("/api/review-rounds/{roundId}/assignment-candidates", roundId)
+                        .header("Authorization", "Bearer " + chairToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].reviewerId", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(1001))));
+
+        mockMvc.perform(post("/api/review-rounds/{roundId}/assignments", roundId)
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "reviewerId": 1001,
+                                  "deadlineAt": "2099-05-01T12:00:00Z"
+                                }
+                                """))
+                .andExpect(status().isConflict());
     }
 
     @Test
@@ -169,6 +215,97 @@ class ReviewWorkflowServiceTest {
         );
         org.junit.jupiter.api.Assertions.assertEquals(1, firstCount);
         org.junit.jupiter.api.Assertions.assertEquals(1, secondCount);
+    }
+
+    @Test
+    void randomAssignmentPreviewCreatesDraftsWithoutAssignments() throws Exception {
+        TestManuscript first = seedSubmittedManuscript("Preview Seed A");
+        TestManuscript second = seedSubmittedManuscript("Preview Seed B");
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        long firstRoundId = createRound(chairToken, first.manuscriptId(), first.versionId(), 1);
+        long secondRoundId = createRound(chairToken, second.manuscriptId(), second.versionId(), 1);
+        seedBid(0L, first.manuscriptId(), 1002L, "WANT_TO_REVIEW");
+        seedBid(0L, second.manuscriptId(), 1012L, "WANT_TO_REVIEW");
+
+        mockMvc.perform(post("/api/conferences/0/assignment-previews/random")
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "reviewsPerPaper": 1,
+                                  "deadlineAt": "2099-05-01T12:00:00Z"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conferenceId").value(0))
+                .andExpect(jsonPath("$.requestedReviewsPerPaper").value(1))
+                .andExpect(jsonPath("$.createdDraftCount").value(2))
+                .andExpect(jsonPath("$.drafts", hasSize(2)))
+                .andExpect(jsonPath("$.drafts[0].draftId").isNumber())
+                .andExpect(jsonPath("$.drafts[0].manuscriptId").isNumber())
+                .andExpect(jsonPath("$.drafts[0].reviewerId").isNumber())
+                .andExpect(jsonPath("$.drafts[0].draftStatus").value("PROPOSED"));
+
+        Integer assignmentCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM REVIEW_ASSIGNMENT WHERE ROUND_ID IN (?, ?)",
+                Integer.class,
+                firstRoundId,
+                secondRoundId
+        );
+        Integer draftCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ASSIGNMENT_DRAFT WHERE ROUND_ID IN (?, ?) AND DRAFT_STATUS = 'PROPOSED'",
+                Integer.class,
+                firstRoundId,
+                secondRoundId
+        );
+        org.junit.jupiter.api.Assertions.assertEquals(0, assignmentCount);
+        org.junit.jupiter.api.Assertions.assertEquals(2, draftCount);
+    }
+
+    @Test
+    void confirmingRandomAssignmentPreviewCreatesAssignments() throws Exception {
+        TestManuscript manuscript = seedSubmittedManuscript("Confirm Preview Seed");
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        long roundId = createRound(chairToken, manuscript.manuscriptId(), manuscript.versionId(), 1);
+        seedBid(0L, manuscript.manuscriptId(), 1002L, "WANT_TO_REVIEW");
+
+        mockMvc.perform(post("/api/conferences/0/assignment-previews/random")
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "reviewsPerPaper": 1,
+                                  "deadlineAt": "2099-05-01T12:00:00Z"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/conferences/0/assignment-previews/confirm")
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "deadlineAt": "2099-05-01T12:00:00Z"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conferenceId").value(0))
+                .andExpect(jsonPath("$.createdCount").value(1))
+                .andExpect(jsonPath("$.assignments", hasSize(1)))
+                .andExpect(jsonPath("$.assignments[0].taskStatus").value("ASSIGNED"));
+
+        Integer assignmentCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM REVIEW_ASSIGNMENT WHERE ROUND_ID = ?",
+                Integer.class,
+                roundId
+        );
+        Integer confirmedDraftCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ASSIGNMENT_DRAFT WHERE ROUND_ID = ? AND DRAFT_STATUS = 'CONFIRMED'",
+                Integer.class,
+                roundId
+        );
+        org.junit.jupiter.api.Assertions.assertEquals(1, assignmentCount);
+        org.junit.jupiter.api.Assertions.assertEquals(1, confirmedDraftCount);
     }
 
     @Test
@@ -393,6 +530,10 @@ class ReviewWorkflowServiceTest {
     }
 
     private TestManuscript seedSubmittedManuscript() {
+        return seedSubmittedManuscript("Task 5 Seed");
+    }
+
+    private TestManuscript seedSubmittedManuscript(String title) {
         long manuscriptId = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT.NEXTVAL FROM DUAL", Long.class);
         long versionId = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT_VERSION.NEXTVAL FROM DUAL", Long.class);
 
@@ -407,10 +548,11 @@ class ReviewWorkflowServiceTest {
         jdbcTemplate.update(
                 """
                 INSERT INTO MANUSCRIPT_VERSION (VERSION_ID, MANUSCRIPT_ID, VERSION_NO, VERSION_TYPE, TITLE, ABSTRACT, KEYWORDS, SUBMITTED_BY, SUBMITTED_AT, SOURCE_DECISION_ID)
-                VALUES (?, ?, 1, 'INITIAL', 'Task 5 Seed', 'seed abstract', 'seed', 1001, ?, NULL)
+                VALUES (?, ?, 1, 'INITIAL', ?, 'seed abstract', 'seed', 1001, ?, NULL)
                 """,
                 versionId,
                 manuscriptId,
+                title,
                 Timestamp.from(Instant.now())
         );
         jdbcTemplate.update("UPDATE MANUSCRIPT SET CURRENT_VERSION_ID = ? WHERE MANUSCRIPT_ID = ?", versionId, manuscriptId);
@@ -515,6 +657,7 @@ class ReviewWorkflowServiceTest {
                     0 AS PHASE_ID,
                     0 AS CONFERENCE_ID,
                     TIMESTAMP '2026-01-01 00:00:00' AS SUBMISSION_OPEN_AT,
+                    TIMESTAMP '2099-12-30 00:00:00' AS ABSTRACT_SUBMISSION_CLOSE_AT,
                     TIMESTAMP '2099-12-31 00:00:00' AS SUBMISSION_CLOSE_AT,
                     TIMESTAMP '2100-01-01 00:00:00' AS BIDDING_OPEN_AT,
                     TIMESTAMP '2100-01-02 00:00:00' AS BIDDING_CLOSE_AT,
@@ -526,6 +669,7 @@ class ReviewWorkflowServiceTest {
                 WHEN MATCHED THEN
                   UPDATE SET
                     P.SUBMISSION_OPEN_AT = S.SUBMISSION_OPEN_AT,
+                    P.ABSTRACT_SUBMISSION_CLOSE_AT = S.ABSTRACT_SUBMISSION_CLOSE_AT,
                     P.SUBMISSION_CLOSE_AT = S.SUBMISSION_CLOSE_AT,
                     P.BIDDING_OPEN_AT = S.BIDDING_OPEN_AT,
                     P.BIDDING_CLOSE_AT = S.BIDDING_CLOSE_AT,
@@ -533,10 +677,10 @@ class ReviewWorkflowServiceTest {
                     P.DECISION_RELEASE_AT = S.DECISION_RELEASE_AT
                 WHEN NOT MATCHED THEN
                   INSERT (
-                    PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, SUBMISSION_CLOSE_AT,
+                    PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, ABSTRACT_SUBMISSION_CLOSE_AT, SUBMISSION_CLOSE_AT,
                     BIDDING_OPEN_AT, BIDDING_CLOSE_AT, REVIEW_DEADLINE_AT, DECISION_RELEASE_AT
                   ) VALUES (
-                    S.PHASE_ID, S.CONFERENCE_ID, S.SUBMISSION_OPEN_AT, S.SUBMISSION_CLOSE_AT,
+                    S.PHASE_ID, S.CONFERENCE_ID, S.SUBMISSION_OPEN_AT, S.ABSTRACT_SUBMISSION_CLOSE_AT, S.SUBMISSION_CLOSE_AT,
                     S.BIDDING_OPEN_AT, S.BIDDING_CLOSE_AT, S.REVIEW_DEADLINE_AT, S.DECISION_RELEASE_AT
                   )
                 """
@@ -561,6 +705,53 @@ class ReviewWorkflowServiceTest {
                 conferenceId,
                 reviewerId,
                 maxLoad
+        );
+    }
+
+    private void seedExistingAssignmentForLoad(long reviewerId) {
+        long manuscriptId = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT.NEXTVAL FROM DUAL", Long.class);
+        long versionId = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT_VERSION.NEXTVAL FROM DUAL", Long.class);
+        long roundId = jdbcTemplate.queryForObject("SELECT SEQ_REVIEW_ROUND.NEXTVAL FROM DUAL", Long.class);
+        jdbcTemplate.update(
+                """
+                INSERT INTO MANUSCRIPT (
+                  MANUSCRIPT_ID, SUBMITTER_ID, CONFERENCE_ID, CURRENT_VERSION_ID, CURRENT_STATUS, CURRENT_ROUND_NO,
+                  BLIND_MODE, SUBMITTED_AT
+                ) VALUES (?, 1001, NULL, NULL, 'UNDER_REVIEW', 1, 'DOUBLE_BLIND', CURRENT_TIMESTAMP)
+                """,
+                manuscriptId
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO MANUSCRIPT_VERSION (
+                  VERSION_ID, MANUSCRIPT_ID, VERSION_NO, VERSION_TYPE, TITLE, ABSTRACT, KEYWORDS, SUBMITTED_BY
+                ) VALUES (?, ?, 1, 'INITIAL', 'Different Conference Load Paper', 'load', 'load', 1001)
+                """,
+                versionId,
+                manuscriptId
+        );
+        jdbcTemplate.update("UPDATE MANUSCRIPT SET CURRENT_VERSION_ID = ? WHERE MANUSCRIPT_ID = ?", versionId, manuscriptId);
+        jdbcTemplate.update(
+                """
+                INSERT INTO REVIEW_ROUND (
+                  ROUND_ID, MANUSCRIPT_ID, ROUND_NO, VERSION_ID, ROUND_STATUS, ASSIGNMENT_STRATEGY,
+                  SCREENING_REQUIRED, DEADLINE_AT, CREATED_BY, CREATED_AT
+                ) VALUES (?, ?, 1, ?, 'IN_PROGRESS', 'REALLOCATE_REVIEWERS', 1, NULL, 1003, CURRENT_TIMESTAMP)
+                """,
+                roundId,
+                manuscriptId,
+                versionId
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO REVIEW_ASSIGNMENT (
+                  ASSIGNMENT_ID, ROUND_ID, MANUSCRIPT_ID, VERSION_ID, REVIEWER_ID, TASK_STATUS, ASSIGNED_AT
+                ) VALUES (SEQ_REVIEW_ASSIGNMENT.NEXTVAL, ?, ?, ?, ?, 'ASSIGNED', CURRENT_TIMESTAMP)
+                """,
+                roundId,
+                manuscriptId,
+                versionId,
+                reviewerId
         );
     }
 

@@ -23,3 +23,5 @@ Object.defineProperty(globalThis, "localStorage", {
     }
   }
 });
+
+globalThis.history = window.history;

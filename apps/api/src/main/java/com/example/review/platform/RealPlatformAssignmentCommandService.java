@@ -311,6 +311,9 @@ public class RealPlatformAssignmentCommandService {
                     bundle.roundId(),
                     proposal.reviewerId()
             );
+            if (validation.manuscriptAuthorCount() > 0) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Manuscript author cannot be assigned as reviewer");
+            }
             if (validation.hardConflictCount() > 0) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Hard conflict blocks proposal confirmation");
             }

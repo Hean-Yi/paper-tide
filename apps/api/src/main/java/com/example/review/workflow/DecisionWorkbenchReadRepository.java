@@ -25,7 +25,12 @@ public class DecisionWorkbenchReadRepository {
         this.objectMapper = objectMapper;
     }
 
-    public List<DecisionWorkbenchBase> findPendingAndInProgressRounds() {
+    public List<DecisionWorkbenchBase> findPendingAndInProgressRounds(Long organizerUserId) {
+        String ownerPredicate = organizerUserId == null ? "" : "  AND CF.ORGANIZER_USER_ID = :organizerUserId\n";
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        if (organizerUserId != null) {
+            params.addValue("organizerUserId", organizerUserId);
+        }
         return jdbcTemplate.query(
                 """
                 SELECT R.ROUND_ID,
@@ -47,10 +52,13 @@ public class DecisionWorkbenchReadRepository {
                         )) AS CONFLICT_COUNT
                 FROM REVIEW_ROUND R
                 JOIN MANUSCRIPT M ON M.MANUSCRIPT_ID = R.MANUSCRIPT_ID
+                JOIN CONFERENCE CF ON CF.CONFERENCE_ID = M.CONFERENCE_ID
                 JOIN MANUSCRIPT_VERSION V ON V.VERSION_ID = R.VERSION_ID
                 WHERE R.ROUND_STATUS IN ('PENDING', 'IN_PROGRESS')
+                %s
                 ORDER BY R.ROUND_ID
-                """,
+                """.formatted(ownerPredicate),
+                params,
                 (rs, rowNum) -> new DecisionWorkbenchBase(
                         rs.getLong("ROUND_ID"),
                         rs.getLong("MANUSCRIPT_ID"),

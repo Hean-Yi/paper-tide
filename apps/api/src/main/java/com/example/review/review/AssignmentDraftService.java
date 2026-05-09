@@ -107,8 +107,9 @@ public class AssignmentDraftService {
         if (!"PROPOSED".equals(draft.draftStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only proposed drafts can be confirmed");
         }
+        ensureReviewerCanBeAssigned(draft.manuscriptId(), draft.reviewerId());
         ConferenceReviewerLockRow reviewer = assignmentDraftRepository.lockConferenceReviewer(draft.manuscriptId(), draft.reviewerId());
-        int currentLoad = assignmentDraftRepository.currentLoad(reviewer.reviewerId());
+        int currentLoad = assignmentDraftRepository.currentLoad(reviewer.conferenceId(), reviewer.reviewerId());
         if (currentLoad >= reviewer.maxLoad()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Reviewer max load would be exceeded");
         }
@@ -132,6 +133,14 @@ public class AssignmentDraftService {
         }
         conflictCheckService.detectSameInstitutionConflict(assignmentId, round.manuscriptId(), round.versionId(), reviewer.reviewerId());
         return toAssignmentResponse(reviewAssignmentRepository.findById(assignmentId).orElseThrow());
+    }
+
+    private void ensureReviewerCanBeAssigned(long manuscriptId, long reviewerId) {
+        AssignmentEligibilityRow eligibility = reviewAssignmentRepository.findEligibilityForAssignment(manuscriptId, reviewerId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
+        if (!eligibility.eligible()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Reviewer is not eligible for this manuscript assignment");
+        }
     }
 
     private int score(AssignmentCandidateRow candidate) {

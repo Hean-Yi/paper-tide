@@ -587,6 +587,21 @@ class RealPlatformWaveEightServiceTest {
                 .andExpect(jsonPath("$.overrideAudits[0].overrideReason").value("Chair reviewed soft constraints and approved context"));
     }
 
+    @Test
+    void assignmentProposalCandidatesExcludeManuscriptAuthorByUserId() throws Exception {
+        AssignmentFixture fixture = seedAcceptedAssignment();
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+        addConferenceReviewer(1001, 3);
+        seedManuscriptAuthor(fixture.manuscriptId(), 1001L);
+
+        mockMvc.perform(post("/api/review-rounds/{roundId}/assignment-proposals", fixture.roundId())
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"proposalName\":\"Author exclusion proposal\",\"limit\":5}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.proposalCount").value(0));
+    }
+
     private long createReviewerInvitation(String chairToken, long reviewerId) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/conferences/{conferenceId}/reviewer-invitations", 0)
                         .header("Authorization", "Bearer " + chairToken)
@@ -679,6 +694,26 @@ class RealPlatformWaveEightServiceTest {
                 Timestamp.from(Instant.now().plusSeconds(86400))
         );
         return new AssignmentFixture(manuscriptId, roundId, assignmentId);
+    }
+
+    private void seedManuscriptAuthor(long manuscriptId, long userId) {
+        Long versionId = jdbcTemplate.queryForObject(
+                "SELECT CURRENT_VERSION_ID FROM MANUSCRIPT WHERE MANUSCRIPT_ID = ?",
+                Long.class,
+                manuscriptId
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO MANUSCRIPT_AUTHOR (
+                  MANUSCRIPT_AUTHOR_ID, MANUSCRIPT_ID, VERSION_ID, USER_ID, AUTHOR_NAME, EMAIL,
+                  INSTITUTION, AUTHOR_ORDER, IS_CORRESPONDING, IS_EXTERNAL
+                ) VALUES (SEQ_MANUSCRIPT_AUTHOR.NEXTVAL, ?, ?, ?, 'Author Demo',
+                  'author_demo@example.com', 'Southeast University', 1, 1, 0)
+                """,
+                manuscriptId,
+                versionId,
+                userId
+        );
     }
 
     private void addConferenceReviewer(long reviewerId, int maxLoad) {

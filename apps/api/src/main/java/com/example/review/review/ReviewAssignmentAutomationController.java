@@ -25,4 +25,22 @@ public class ReviewAssignmentAutomationController {
     ) {
         return reviewWorkflowService.autoAssignConferenceReviewers(principal, conferenceId, request);
     }
+
+    @PostMapping("/conferences/{conferenceId}/assignment-previews/random")
+    public RandomAssignmentPreviewResponse previewRandomConferenceAssignments(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long conferenceId,
+            @RequestBody RandomAssignmentPreviewRequest request
+    ) {
+        return reviewWorkflowService.previewRandomConferenceAssignments(principal, conferenceId, request);
+    }
+
+    @PostMapping("/conferences/{conferenceId}/assignment-previews/confirm")
+    public ConfirmAssignmentPreviewResponse confirmRandomConferenceAssignmentPreview(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable long conferenceId,
+            @RequestBody ConfirmAssignmentPreviewRequest request
+    ) {
+        return reviewWorkflowService.confirmRandomConferenceAssignmentPreview(principal, conferenceId, request);
+    }
 }

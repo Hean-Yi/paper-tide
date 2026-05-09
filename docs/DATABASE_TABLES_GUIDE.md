@@ -1,8 +1,4 @@
-# 数据库表结构全解析
-
-> **数据库**：Oracle Free 23c，用户 `review_app`，服务名 `FREEPDB1`  
-> **当前表数量**：71 张业务表  
-> **迁移文件**：`database/oracle/001_init.sql` 到 `025_wave3_wave6_full_closure.sql`（共 25 个版本）
+# 数据库表结构留档
 
 ---
 
@@ -19,13 +15,6 @@
 | 分配辅助 | 5 张 | 草稿、提案、覆盖审计 |
 | AI 分析（API 侧） | 4 张 | 意图、投影、收发件箱 |
 | AI 执行（Agent 侧） | 5 张 | 任务、尝试、产物、收发件箱 |
-| 遗留 Agent（已弃用） | 3 张 | 兼容旧版保留 |
-| 会议表单 | 5 张 | 自定义评审表单、响应、修订 |
-| 出版管理 | 5 张 | 终稿、元数据、论文集导出 |
-| 通信与邮件 | 7 张 | 通知、日志、邮件模板、历史 |
-| COI 与邀请 | 4 张 | 冲突关系、邀请、外部委托、匹配分 |
-| 运营工具 | 8 张 | 审计日志、标签、批量操作、过滤器 |
-| 文件存储 | 2 张 | 通用文件、DOI 适配器 |
 
 ---
 
@@ -54,8 +43,6 @@
 ---
 
 #### `SYS_ROLE` — 系统角色定义
-**当前数据**：4 条（预置种子数据）
-
 | ROLE_ID | ROLE_CODE | ROLE_NAME |
 |---------|-----------|-----------|
 | 1 | AUTHOR | 作者 |
@@ -68,8 +55,6 @@
 ---
 
 #### `SYS_USER_ROLE` — 用户-角色关联
-**当前数据**：10 条
-
 | 字段 | 说明 |
 |------|------|
 | USER_ROLE_ID | PK |
@@ -81,8 +66,6 @@
 ---
 
 #### `USER_RESEARCH_AREA` — 用户研究领域
-**当前数据**：2 条
-
 | 字段 | 说明 |
 |------|------|
 | USER_RESEARCH_AREA_ID | PK |
@@ -95,8 +78,6 @@
 ---
 
 #### `USER_ACADEMIC_PROFILE` — 用户学术档案
-**当前数据**：0 条（注册后填写）
-
 | 字段 | 说明 |
 |------|------|
 | PROFILE_ID | PK |
@@ -114,8 +95,6 @@
 ---
 
 #### `ROLE_APPLICATION` — 注册/角色申请
-**当前数据**：0 条
-
 | 字段 | 说明 |
 |------|------|
 | APPLICATION_ID | PK |
@@ -131,8 +110,6 @@
 ---
 
 #### `EMAIL_VERIFICATION_TOKEN` — 邮箱验证令牌
-**当前数据**：0 条
-
 | 字段 | 说明 |
 |------|------|
 | TOKEN_ID | PK |
@@ -290,23 +267,6 @@ DRAFT → PENDING_APPROVAL → OPEN_FOR_SUBMISSION → SUBMISSION_CLOSED
 
 ---
 
-#### `REVIEWER_BID` — 审稿人竞标/意愿声明
-**当前数据**：1 条
-
-| 字段 | 说明 |
-|------|------|
-| BID_ID | PK |
-| CONFERENCE_ID | FK → CONFERENCE |
-| MANUSCRIPT_ID | FK → MANUSCRIPT |
-| REVIEWER_ID | FK → SYS_USER |
-| BID_VALUE | `WANT_TO_REVIEW`（愿意）/ `NEUTRAL`（中立）/ `DECLINE`（拒绝） |
-| CONFLICT_DECLARED | 是否声明利益冲突（0/1） |
-| BID_AT | 竞标时间 |
-
-**作用**：在竞标阶段（`BIDDING_OPEN`），审稿人可以对每篇论文表明评审意愿。声明 `DECLINE` + `CONFLICT_DECLARED=1` 相当于 COI（利益冲突）声明。主席分配任务时优先考虑 `WANT_TO_REVIEW` 的审稿人。
-
----
-
 ### 第四组：评审流程（6 张）
 
 这是系统最核心的业务模型，记录完整的同行评审过程。
@@ -452,31 +412,6 @@ ASSIGNED → ACCEPTED → IN_REVIEW → SUBMITTED
 | REASON | 推荐理由（500 字符） |
 | DRAFT_STATUS | `PROPOSED`（草稿）→ `CONFIRMED`（已确认）/ `DISMISSED`（已驳回） |
 
-**作用**：AI Agent 或主席手动生成的"候选分配方案"。每个轮次-审稿人对只有一条草稿记录（唯一约束）。主席可以查看候选列表，批准部分候选人，完成实际的 `REVIEW_ASSIGNMENT` 创建。
-
----
-
-#### `ASSIGNMENT_PROPOSAL` — 分配提案
-**当前数据**：0 条
-
-| 说明 |
-|------|
-| AI Agent 生成的完整分配方案，包含多个候选审稿人 |
-
----
-
-#### `ASSIGNMENT_PROPOSAL_BUNDLE` / `ASSIGNMENT_PROPOSAL_CONTEXT` — 提案 Bundle 与上下文
-**当前数据**：均为 0 条
-
-**作用**：存储 AI 分配建议的完整上下文数据，供主席在审阅提案时参考。
-
----
-
-#### `ASSIGNMENT_OVERRIDE_AUDIT` — 分配覆盖审计
-**当前数据**：0 条
-
-**作用**：当主席覆盖 AI 推荐（例如强制分配某个 AI 不推荐的审稿人），此表记录覆盖行为和原因，作为审计追踪。
-
 ---
 
 ### 第六组：AI 分析平台（9 张）
@@ -581,403 +516,3 @@ ASSIGNED → ACCEPTED → IN_REVIEW → SUBMITTED
 
 ---
 
-#### 子组 C：遗留 Agent 表（3 张，已弃用）
-
-| 表名 | 说明 |
-|------|------|
-| `AGENT_ANALYSIS_TASK` | 旧版简单任务队列，已被上方双轨架构替代 |
-| `AGENT_ANALYSIS_RESULT` | 旧版结果存储 |
-| `AGENT_FEEDBACK` | 旧版反馈记录 |
-
-> ⚠️ **注意**：这 3 张表已不再由应用代码写入，仅保留历史数据（参见迁移 `011_retire_legacy_agent_tables.sql`），未来版本将彻底删除。
-
----
-
-### 第七组：会议自定义表单（5 张）
-
-支持会议组织者为评审流程定制不同阶段的表单（非固定评分模板）。
-
----
-
-#### `CONFERENCE_FORM_DEFINITION` — 表单定义
-**当前数据**：1 条
-
-| 字段 | 说明 |
-|------|------|
-| FORM_ID | PK |
-| CONFERENCE_ID | FK → CONFERENCE |
-| FORM_TYPE | `SUBMISSION`/`REVIEW`/`META_REVIEW`/`AUTHOR_FEEDBACK`/`CAMERA_READY` |
-| FORM_NAME | 表单名称 |
-| ACTIVE_FLAG | 是否启用（0/1） |
-
-**作用**：会议可以为不同流程阶段定义专属表单，替代系统内置的固定评分结构（`REVIEW_REPORT` 是固定结构，此表支持更灵活的自定义）。
-
----
-
-#### `CONFERENCE_FORM_FIELD` — 表单字段
-**当前数据**：1 条
-
-| 字段 | 说明 |
-|------|------|
-| FIELD_ID | PK |
-| FORM_ID | FK → CONFERENCE_FORM_DEFINITION |
-| FIELD_KEY | 字段标识（如 `overall_score`） |
-| FIELD_LABEL | 显示标签 |
-| FIELD_TYPE | `TEXT`/`LONG_TEXT`/`NUMBER`/`SCORE`/`BOOLEAN`/`SELECT` |
-| VISIBILITY | `AUTHOR_VISIBLE`/`CHAIR_ONLY`/`REVIEWER_ONLY`/`PUBLIC_SUMMARY` |
-| DISPLAY_ORDER | 展示顺序 |
-| OPTIONS_JSON | 选项列表（SELECT 类型用） |
-
----
-
-#### `REVIEW_FORM_RESPONSE` — 评审表单响应
-**当前数据**：1 条
-
-**作用**：审稿人填写自定义表单时的答案记录（JSON 格式存储）。
-
----
-
-#### `REVIEW_FORM_RESPONSE_REVISION` — 评审表单修订历史
-**当前数据**：0 条
-
-**作用**：每次修改评审表单时保留修订快照，支持审计追踪。
-
----
-
-#### `WORKFLOW_FORM_RESPONSE` — 工作流通用表单响应
-**当前数据**：0 条
-
-**作用**：比 `REVIEW_FORM_RESPONSE` 更通用的响应表，`SUBJECT_TYPE` 可以是 `MANUSCRIPT`（用于作者反馈、终稿等阶段的自定义表单）。
-
----
-
-### 第八组：出版管理（5 张）
-
-处理论文接收后的终稿提交到正式出版的全流程。
-
----
-
-#### `CAMERA_READY_SUBMISSION` — 终稿提交（旧）
-**当前数据**：0 条
-
-> 已被 `CAMERA_READY_FILE` 替代，功能类似但字段更完整。
-
----
-
-#### `CAMERA_READY_FILE` — 终稿文件
-**当前数据**：0 条
-
-| 字段 | 说明 |
-|------|------|
-| CAMERA_READY_FILE_ID | PK |
-| MANUSCRIPT_ID / VERSION_ID | 关联信息 |
-| SUBMITTED_BY | FK → SYS_USER（作者） |
-| FILE_NAME / FILE_SIZE | 文件信息 |
-| CHECKSUM_SHA256 | 文件 SHA-256 校验值（防篡改） |
-| COPYRIGHT_CONFIRMED | 版权确认（0/1） |
-| LICENSE_TYPE | 许可证类型（如 `CC-BY`） |
-| FILE_STATUS | `SUBMITTED` → `ACCEPTED` / `REJECTED` |
-| DECISION_NOTE | 审核意见（CLOB） |
-
-**作用**：论文被接收后，作者上传最终出版格式的文件（终稿）。主席审核终稿格式后给出 Accepted/Rejected。
-
----
-
-#### `PUBLICATION_METADATA` — 出版元数据
-**当前数据**：0 条
-
-| 字段 | 说明 |
-|------|------|
-| PUBLICATION_METADATA_ID | PK |
-| CONFERENCE_ID / MANUSCRIPT_ID | 关联信息（每篇论文唯一） |
-| DOI | 数字对象标识符（如 `10.1145/xxxx.yyyy`） |
-| INDEX_KEYWORDS | 索引关键词（1000 字符） |
-| PUBLICATION_STATUS | `DRAFT` → `READY_FOR_PROCEEDINGS` → `EXPORTED` → `PUBLISHED` |
-
-**作用**：记录论文的出版元数据，为生成论文集和 DOI 注册做准备。
-
----
-
-#### `PROCEEDINGS_EXPORT_BATCH` — 论文集导出批次
-**当前数据**：0 条
-
-**作用**：主席发起"导出论文集"操作时创建批次记录，包含要导出的论文列表（JSON）和导出状态。支持预览后确认导出的两步操作。
-
----
-
-#### `PROCEEDINGS_EXPORT_FILE` — 导出文件
-**当前数据**：0 条
-
-**作用**：记录已导出的具体文件信息（文件名、路径、校验值等）。
-
----
-
-### 第九组：通信与邮件（7 张）
-
----
-
-#### `SYS_NOTIFICATION` — 系统内部通知
-**当前数据**：2 条
-
-| 字段 | 说明 |
-|------|------|
-| NOTIFICATION_ID | PK |
-| RECEIVER_ID | FK → SYS_USER（接收人） |
-| BIZ_TYPE | 业务类型（如 `MANUSCRIPT_SUBMITTED`） |
-| BIZ_ID | 关联业务对象 ID |
-| TITLE / CONTENT | 通知标题/内容 |
-| IS_READ | 已读标记（0/1） |
-
-**作用**：站内消息系统，用于实时通知（如"您的论文已被分配给审稿人"）。前端轮询或 WebSocket 推送此表的未读记录。
-
----
-
-#### `COMMUNICATION_LOG` — 通信日志
-**当前数据**：0 条
-
-**作用**：所有系统通信（站内通知 + 邮件）的统一日志，支持按会议、稿件维度查询。
-
----
-
-#### `EMAIL_TEMPLATE` — 邮件模板
-**当前数据**：0 条
-
-**作用**：按会议定义邮件模板（如"审稿邀请"、"决定通知"），支持 `ACTIVE_VERSION_ID` 指向当前使用的版本。
-
----
-
-#### `EMAIL_TEMPLATE_VERSION` — 邮件模板版本
-**当前数据**：0 条
-
-**作用**：邮件模板的版本管理，`SUBJECT_TEMPLATE` 和 `BODY_TEMPLATE` 支持变量替换（如 `{{author_name}}`）。
-
----
-
-#### `OUTBOUND_EMAIL_HISTORY` — 外发邮件历史
-**当前数据**：0 条
-
-**作用**：记录每一封实际发出的邮件（收件人、主题、内容、发送状态），用于审计和重发。
-
----
-
-#### `COMMUNICATION_COMPOSE_BATCH` — 通信批量发送
-**当前数据**：0 条
-
-**作用**：主席向一批用户（如所有审稿人）群发通知时，记录批量发送任务。
-
----
-
-#### `COMMUNICATION_REMINDER` — 通信提醒
-**当前数据**：0 条
-
-**作用**：自动提醒任务（如"截止前 3 天提醒未完成评审的审稿人"）的配置和触发记录。
-
----
-
-### 第十组：COI 成熟度与邀请管理（4 张）
-
----
-
-#### `CONFLICT_RELATIONSHIP` — 冲突关系（精细化 COI）
-**当前数据**：0 条
-
-| 字段 | 说明 |
-|------|------|
-| CONFLICT_RELATIONSHIP_ID | PK |
-| CONFLICT_TYPE | 冲突类型（如 `CO_AUTHOR`、`SAME_LAB`） |
-| CONFLICT_SOURCE | `MANUAL`/`PROFILE`/`IMPORT`/`BID`/`SYSTEM` |
-| SEVERITY | `SOFT`（软冲突，可覆盖）/ `HARD`（硬冲突，禁止分配） |
-
-**作用**：比 `CONFLICT_CHECK_RECORD` 更细粒度的冲突管理，区分来源和严重程度，支持主席手动标记冲突关系。
-
----
-
-#### `REVIEWER_INVITATION` — 审稿人邀请
-**当前数据**：0 条
-
-| 字段 | 说明 |
-|------|------|
-| INVITATION_STATUS | `PENDING` → `ACCEPTED` / `DECLINED` / `EXPIRED` |
-| EXPIRES_AT | 邀请过期时间 |
-
-**作用**：主席邀请审稿人加入会议的邀请记录，支持追踪邀请状态和过期自动清理。
-
----
-
-#### `EXTERNAL_REVIEWER_DELEGATION` — 外部审稿人委托
-**当前数据**：0 条
-
-**作用**：审稿人将某篇论文转委托给外部未注册用户（如学生、同事）的申请记录，需主席审批。
-
----
-
-#### `REVIEWER_MATCHING_SCORE` — 审稿人匹配分数
-**当前数据**：0 条
-
-| 字段 | 说明 |
-|------|------|
-| MATCHING_SCORE_ID | PK |
-| CONFERENCE_ID / MANUSCRIPT_ID / REVIEWER_ID | 关联信息 |
-| SCORE | 匹配分数 |
-| SCORE_BREAKDOWN_JSON | 分数细项（研究方向匹配度、COI 惩罚等） |
-
-**作用**：AI 分配辅助算法为每个"论文-审稿人"对计算的匹配分数缓存表，避免每次重算。
-
----
-
-### 第十一组：运营工具（8 张）
-
----
-
-#### `AUDIT_LOG` — 审计日志
-**当前数据**：77 条
-
-| 字段 | 说明 |
-|------|------|
-| LOG_ID | PK |
-| OPERATOR_ID | FK → SYS_USER（操作人） |
-| OPERATION_TYPE | 操作类型（如 `MANUSCRIPT_SUBMITTED`、`DECISION_MADE`） |
-| BIZ_TYPE / BIZ_ID | 操作对象类型和 ID |
-| DETAIL_JSON | 操作详情（CLOB JSON） |
-
-**作用**：记录所有重要业务操作，支持监管审计。是目前数据量最大的运营表（77 条），Oracle 触发器和 Java 服务层都会写入。
-
----
-
-#### `PAPER_TAG` — 论文标签
-**当前数据**：0 条
-
-**作用**：会议主席为论文打标签（如"最佳论文候选"、"主题领域：CV"），支持会议内部的论文分类管理。
-
----
-
-#### `PAPER_ROLE_ASSIGNMENT` — 论文角色分配
-**当前数据**：0 条
-
-| ROLE_TYPE | 说明 |
-|-----------|------|
-| PRIMARY_REVIEWER | 主审 |
-| SECONDARY_REVIEWER | 副审 |
-| META_REVIEWER | 元审稿人（综合仲裁） |
-| DISCUSSION_LEAD | 讨论主持 |
-| SHEPHERD | 督导人（帮助作者改稿） |
-| PROCEEDINGS_EDITOR | 论文集编辑 |
-
-**作用**：在标准评审之外，为论文分配更细化的角色，支持更成熟的学术会议运作模式。
-
----
-
-#### `AUTHOR_FEEDBACK` — 作者反馈/申辩
-**当前数据**：0 条
-
-**作用**：在作者申辩阶段（Rebuttal），作者对审稿意见的书面回应记录，类型区分 `REBUTTAL`（申辩）、`AUTHOR_FEEDBACK`（反馈）、`REVISION_NOTE`（修改说明）。
-
----
-
-#### `IMPORT_BATCH` — 导入批次
-**当前数据**：0 条
-
-**作用**：批量导入论文标签等操作的任务记录，支持"预览 → 确认应用"两步操作，防止误操作。
-
----
-
-#### `BULK_OPERATION_BATCH` / `BULK_OPERATION_ROW` — 批量操作
-**当前数据**：均为 0 条
-
-**作用**：通用的批量操作框架（如批量发送通知、批量修改分配状态），`BATCH` 记录批次元信息，`ROW` 记录每行操作的结果。
-
----
-
-#### `WORKBENCH_EXPORT_BATCH` — 工作台导出批次
-**当前数据**：0 条
-
-**作用**：主席工作台中"导出数据"操作（如导出评审进度 Excel）的任务记录。
-
----
-
-#### `WORKBENCH_SAVED_FILTER` — 工作台保存的过滤条件
-**当前数据**：0 条
-
-**作用**：用户在工作台中保存常用的过滤/搜索条件（JSON 格式），避免每次重新设置。
-
----
-
-### 第十二组：文件与 DOI（2 张）
-
----
-
-#### `STORED_FILE` — 通用文件存储
-**当前数据**：0 条
-
-**作用**：系统的通用文件元数据表，存储文件名、大小、MIME 类型、存储路径/引用等。用于管理那些不直接以 BLOB 存在表中的文件。
-
----
-
-#### `DOI_INDEX_ADAPTER_SUBMISSION` — DOI 索引提交记录
-**当前数据**：0 条
-
-**作用**：论文出版后向 CrossRef 等 DOI 注册机构提交的记录，跟踪提交状态（成功/失败/待处理）。
-
----
-
-## 三、表与表的关系图（核心路径）
-
-```
-SYS_USER ──┬── SYS_USER_ROLE ── SYS_ROLE
-           ├── USER_ACADEMIC_PROFILE
-           ├── USER_RESEARCH_AREA
-           └── ROLE_APPLICATION ── EMAIL_VERIFICATION_TOKEN
-
-SYS_USER ──── MANUSCRIPT ──┬── MANUSCRIPT_VERSION ── MANUSCRIPT_AUTHOR
-                 │          └── DECISION_RECORD
-                 │
-                 └── REVIEW_ROUND ──┬── REVIEW_ASSIGNMENT ──┬── REVIEW_REPORT
-                                    │                       └── CONFLICT_CHECK_RECORD
-                                    └── ASSIGNMENT_DRAFT
-
-CONFERENCE ──┬── CONFERENCE_PHASE
-             ├── CONFERENCE_REVIEWER
-             └── (MANUSCRIPT.CONFERENCE_ID)
-
-ANALYSIS_INTENT ── ANALYSIS_PROJECTION
-                ── ANALYSIS_OUTBOX / INBOX
-                ── EXECUTION_JOB ──┬── EXECUTION_ATTEMPT
-                                   ├── EXECUTION_ARTIFACT
-                                   └── EXECUTION_OUTBOX / INBOX
-```
-
----
-
-## 四、迁移历史与表的来源
-
-| 迁移文件 | 新增核心表 | 目的 |
-|---------|-----------|------|
-| `001_init.sql` | SYS_USER, MANUSCRIPT, REVIEW_ROUND 等 13 张基础表 | 核心业务 MVP |
-| `008_agent_platform_refactor.sql` | ANALYSIS_INTENT, EXECUTION_JOB 等 9 张 | AI 分析双轨架构 |
-| `011_retire_legacy_agent_tables.sql` | — | 标记 AGENT_* 三表为遗留 |
-| `012_registration_foundation.sql` | USER_ACADEMIC_PROFILE, ROLE_APPLICATION, EMAIL_VERIFICATION_TOKEN | 注册/审批流程 |
-| `014_conference_cfp_lifecycle.sql` | CONFERENCE, CONFERENCE_PHASE | 会议管理 |
-| `015_conference_scoped_submission.sql` | — | 稿件关联会议 |
-| `016_reviewer_pool_bidding.sql` | CONFERENCE_REVIEWER, REVIEWER_BID | 审稿人池与竞标 |
-| `017_assignment_drafts.sql` | ASSIGNMENT_DRAFT | AI 分配草稿 |
-| `020_business_operations_closure.sql` | REVIEW_DISCUSSION_MESSAGE, CAMERA_READY_SUBMISSION, COMMUNICATION_LOG | 业务运营闭环 |
-| `021_real_platform_wave6_wave7.sql` | CONFERENCE_FORM_DEFINITION, REVIEW_FORM_RESPONSE, AUTHOR_FEEDBACK 等 | 自定义表单 |
-| `022_assignment_coi_maturity.sql` | REVIEWER_INVITATION, CONFLICT_RELATIONSHIP, REVIEWER_MATCHING_SCORE | COI 成熟度 |
-| `023_publication_communication_maturity.sql` | EMAIL_TEMPLATE, CAMERA_READY_FILE, PUBLICATION_METADATA 等 | 出版与邮件 |
-| `025_wave3_wave6_full_closure.sql` | WORKFLOW_FORM_RESPONSE, REVIEW_FORM_RESPONSE_REVISION | 表单修订历史 |
-
----
-
-## 五、总结
-
-**表多的根本原因是系统功能层次丰富**，一个学术会议的完整生命周期包含：
-
-1. **用户注册审批** → 2 层表（注册申请 + 邮箱验证）
-2. **会议全生命周期** → 3 层表（会议主记录 + 阶段时间 + 审稿人池）  
-3. **论文多版本管理** → 3 层表（稿件 + 版本 + 作者）
-4. **多轮评审** → 4 层表（轮次 + 分配 + 报告 + 决策）
-5. **AI 分析双轨** → 9 张表（Outbox 模式 + 双侧状态机）
-6. **出版闭环** → 5 张表（终稿 + 元数据 + 论文集 + DOI）
-7. **运营可观测性** → 8 张运营工具表（审计、标签、批量操作）
-
-其中数据量最多的运营表是 `AUDIT_LOG`（77 条），说明系统的每一次关键操作都有完整的审计轨迹。

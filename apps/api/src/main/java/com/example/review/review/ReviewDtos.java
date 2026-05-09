@@ -57,9 +57,35 @@ record AutoAssignRequest(
 ) {
 }
 
+record RandomAssignmentPreviewRequest(
+        Integer reviewsPerPaper,
+        Instant deadlineAt
+) {
+}
+
 record AutoAssignResponse(
         long conferenceId,
         int requestedReviewsPerPaper,
+        int createdCount,
+        List<AssignmentActionResponse> assignments
+) {
+}
+
+record RandomAssignmentPreviewResponse(
+        long conferenceId,
+        int requestedReviewsPerPaper,
+        int createdDraftCount,
+        List<AssignmentDraftResponse> drafts
+) {
+}
+
+record ConfirmAssignmentPreviewRequest(
+        Instant deadlineAt
+) {
+}
+
+record ConfirmAssignmentPreviewResponse(
+        long conferenceId,
         int createdCount,
         List<AssignmentActionResponse> assignments
 ) {

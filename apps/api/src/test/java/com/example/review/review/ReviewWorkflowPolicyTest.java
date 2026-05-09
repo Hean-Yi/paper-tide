@@ -24,11 +24,13 @@ class ReviewWorkflowPolicyTest {
     private final ManuscriptRepository manuscriptRepository = org.mockito.Mockito.mock(ManuscriptRepository.class);
     private final ReviewRoundRepository reviewRoundRepository = org.mockito.Mockito.mock(ReviewRoundRepository.class);
     private final ReviewAssignmentRepository reviewAssignmentRepository = org.mockito.Mockito.mock(ReviewAssignmentRepository.class);
+    private final AssignmentDraftRepository assignmentDraftRepository = org.mockito.Mockito.mock(AssignmentDraftRepository.class);
     private final ConflictCheckService conflictCheckService = org.mockito.Mockito.mock(ConflictCheckService.class);
     private final ReviewWorkflowService service = new ReviewWorkflowService(
             manuscriptRepository,
             reviewRoundRepository,
             reviewAssignmentRepository,
+            assignmentDraftRepository,
             conflictCheckService
     );
 

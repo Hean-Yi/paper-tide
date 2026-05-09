@@ -60,6 +60,8 @@
 - Review editor reader-overflow follow-up completed on 2026-04-27: the reviewer PDF preview frame now uses border-box sizing so its `height: 100%` constraint includes padding and border, preventing the small bottom overflow past the left-column boundary. Verification: `cd apps/web && npm run build`.
 - Review editor assist-rail width follow-up completed on 2026-04-27: the reviewer assist rail is widened again and the `Agent Trace` action row now stays horizontally aligned on desktop widths so `Run review assistant`, `Refresh`, and the status chip fit on one line. Verification: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts` and `cd apps/web && npm run build`.
 - Review editor column-balance follow-up completed on 2026-04-27: the desktop review workspace now uses a proportional two-column grid that narrows the left reader column and grants the assist rail a larger bounded share, keeping the right rail inside the `Review editor` container width. Verification: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts` and `cd apps/web && npm run build`.
+- Chair screening entry UX follow-up completed on 2026-05-09: the `Start screening` action now opens a submission-information dialog after the manuscript enters `UNDER_SCREENING`, and the dialog footer routes chairs into `Create round` or `Desk reject` from the same review surface; the redundant inline screening-analysis trigger remains removed from the queue item. Verification: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts -t "opens a submission info dialog after chair starts screening"` and `cd apps/web && npm run build`.
+- Chair screening submission-details follow-up completed on 2026-05-09: the screening dialog now includes the manuscript abstract and keywords from the submitted version read model instead of showing title-only metadata, keeping the chair's pre-decision context aligned with the author submission form. Verification: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts -t "opens a submission info dialog after chair starts screening"` and `cd apps/api && mvn -q -Dmaven.repo.local=/Users/hean/Agent_proj/.m2/repository -DskipTests compile`.
 - Documentation onboarding and optimization pack completed on 2026-04-13 across `README.md`, `CONTRIBUTING.md`, `TODO.md`, `docs/PROJECT_GUIDE.md`, and the expanded `docs/` bundle.
 - Demo documentation pack completed on 2026-04-13 under `docs/demo/`.
 - Architecture refactor design completed on 2026-04-22 in `docs/superpowers/specs/2026-04-22-agent-platform-boundary-and-execution-refactor-design.md`. The approved direction replaces mirrored API/Agent task ownership with a split-sovereignty model: `apps/api` owns business intent and result projections, `services/agent` owns execution jobs and platform governance, and RabbitMQ plus outbox/inbox patterns become the inter-service coordination backbone.
@@ -2992,3 +2994,315 @@ Expected after implementation: both commands pass.
   - A later exploratory Maven method-target command for an unimplemented extra duplicate-assignment edge test exposed an unrelated current workspace compile failure in `ConferenceServiceTest` references to removed `ConferenceService` methods; no assignment files were changed for that exploratory check.
 - Current completion state:
   - The requested reviewer assignment UX is implemented and covered by focused API/Web tests. Broader repository verification is currently blocked by unrelated dirty-worktree test drift noted above.
+
+**Author submission conference selector repair on 2026-05-08:**
+
+- Active feedback scope: authors should not see conferences in the manuscript submission selector when the conference has advanced beyond submission or the submission deadline has already passed.
+- Execution result:
+  - Updated the author submission page to derive its selector options from public CFP data but keep only conferences with `status === OPEN_FOR_SUBMISSION` and a future `submissionCloseAt`.
+  - Reset the selected conference if the previously selected ID is no longer eligible, and show an explicit empty-state message when there are no currently open submission targets.
+  - Added a focused frontend regression test that feeds one advanced conference, one expired open conference, and one valid open conference, then proves only the valid conference is offered.
+  - Updated `AGENTS.md` with the reusable rule that author-facing submission selectors must mirror backend conference eligibility guards.
+- Verification run:
+  - RED: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts -t "only offers currently open conferences"` failed because the advanced `REVIEWING` conference was selected and displayed.
+  - GREEN target: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts -t "only offers currently open conferences"` passed with 1 test.
+  - `cd apps/web && npm run typecheck` passed.
+  - `cd apps/web && npm run build` passed with the existing Vite large chunk warning.
+  - A nearby existing author submission test still failed because it asserted old English placeholders such as `Title` while the current page rendered Chinese placeholders; this was later corrected to use `论文标题`.
+- Current completion state:
+  - Author manuscript creation still has the backend hard guard, and the frontend selector now hides the same ineligible conference classes before authors can choose them.
+
+**Author submission title placeholder repair on 2026-05-08:**
+
+- Active feedback scope: the author manuscript form title placeholder used the typo `诞文标题`.
+- Execution result:
+  - Changed the title input placeholder to `论文标题`.
+  - Updated the author submission workflow tests to target the corrected Chinese placeholder.
+- Verification run:
+  - `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts -t "submits author manuscripts to a selected public conference"` passed.
+  - `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts -t "loads and submits the configured submission checklist after creating a manuscript"` passed.
+  - `cd apps/web && npm run typecheck` passed.
+- Current completion state:
+  - The visible title field copy and focused author submission tests are aligned on `论文标题`.
+
+**Organizer registration planned-conference removal on 2026-05-08:**
+
+- Active feedback scope: conference organizer registration should not require a planned conference title because organizer approval grants the capability to create one or more conferences later.
+- Execution result:
+  - Removed the backend validation that rejected organizer applications when `academicProfile.plannedConferenceTitle` was blank.
+  - Removed the frontend organizer-only `拟举办会议名称` field and its submit-time validation.
+  - Kept `plannedConferenceTitle: null` in the registration payload shape so existing admin read models remain compatible.
+  - Updated organizer registration/login tests so an organizer can register without a planned conference title and still enter `PENDING_ADMIN_APPROVAL`.
+  - Updated `AGENTS.md` with the reusable rule that organizer registration must not bind an applicant to a single planned conference.
+- Verification run:
+  - RED: `cd apps/api && mvn -Dtest=RegistrationServiceTest#organizerCanRegisterWithoutPlannedConferenceTitle test` failed with `Organizer applications require a planned conference title`.
+  - RED: `cd apps/web && npm run test -- --run src/tests/registration.spec.ts -t "registers an organizer without asking"` failed because the organizer registration form still rendered `register-conference-title`.
+  - GREEN target: `cd apps/api && mvn -Dtest=RegistrationServiceTest#organizerCanRegisterWithoutPlannedConferenceTitle test` passed.
+  - GREEN target: `cd apps/web && npm run test -- --run src/tests/registration.spec.ts -t "registers an organizer without asking"` passed.
+  - `cd apps/web && npm run test -- --run src/tests/registration.spec.ts` passed with 5 tests.
+  - `cd apps/web && npm run typecheck` passed.
+  - `cd apps/web && npm run build` passed with the existing Vite large chunk warning.
+  - `cd apps/api && mvn -Dtest=AuthControllerTest#registeredOrganizerCanLoginImmediatelyWhileChairRoleAwaitsApproval test` passed.
+  - `cd apps/api && mvn -Dtest=RegistrationServiceTest test` passed with 8 tests.
+  - `git diff --check` passed.
+- Current completion state:
+  - Organizer public registration no longer asks for or requires a conference name; approved organizers can create conferences later through the chair conference workflow.
+
+**Screening Agent requested-status visibility repair on 2026-05-08:**
+
+- Active feedback scope: Agent analysis could be successfully requested and persisted as `REQUESTED`, but the chair-facing screening queue did not display that status, leaving users unsure whether the LLM task had started.
+- Execution result:
+  - Extended the screening queue read model to include the latest `SCREENING` `AnalysisIntentResponse` for the manuscript/version anchor.
+  - Updated the chair screening queue UI to display the Agent intent status, show an animated progress indicator for active states, keep the clicked response in local state immediately, and disable the run button while the request is active.
+  - Added focused frontend and backend regression coverage for `REQUESTED` status visibility after requesting screening analysis.
+  - Updated `AGENTS.md` with the reusable rule that actor-facing Agent request lists must show durable intent state, not only completed projections.
+- Verification run:
+  - RED: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts -t "requested screening analysis"` failed because the queue ignored `screeningIntent`.
+  - RED: `cd apps/api && mvn test -Dtest=WorkflowQueryServiceTest#chairListsScreeningQueueStartsScreeningAndDownloadsPdf` failed because `/api/chair/screening-queue` omitted `screeningIntent` after the request endpoint returned `REQUESTED`.
+  - GREEN target: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts -t "requested screening analysis"` passed.
+  - GREEN target: `cd apps/api && mvn test -Dtest=WorkflowQueryServiceTest#chairListsScreeningQueueStartsScreeningAndDownloadsPdf` passed.
+  - `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts -t "screening analysis through"` passed.
+  - `cd apps/web && npm run typecheck` passed.
+  - `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts` was run and remains blocked by broader pre-existing localization drift: many older tests still look for English labels while the current UI renders Chinese labels. The Agent requested-status tests pass when targeted.
+- Current completion state:
+  - Screening Agent requests now remain visible as `Requested` in the chair queue immediately after the POST response and on subsequent queue reloads.
+
+**Admin workbench boundary cleanup on 2026-05-08:**
+
+- Active feedback scope: the admin workbench and top navigation were too cluttered because they mixed platform governance links with chair workflow operations. Admins should see a focused admin console, keep only one conference-management entry for status/detail viewing, and not open meeting paper content.
+- Execution result:
+  - Changed `/dashboard` for admin users to render the same focused admin console structure as `/admin`.
+  - Reduced the admin console's “会议运营辅助” section to only `会议管理`.
+  - Simplified the top bar for admin users to `管理后台`, `角色申请`, `会议审批`, `Agent 监控`, and `会议管理`; removed admin exposure to `初筛队列`, `决策工作台`, `审稿人分配`, and `出版操作`.
+  - Restricted front-end route access for admin-only users so chair screening, decision, assignment, publication, and paper-content pages redirect back to `/dashboard`; `会议管理` and conference status/detail pages remain accessible.
+  - Made admin conference management/read detail views read-only by hiding conference creation, reviewer-pool setup, status-advance, paper review-detail links, and paper decision buttons for users without `CHAIR`.
+  - Tightened backend paper-content endpoints so conference paper review detail and rendered paper pages require `CHAIR`; admin-only users receive `403`.
+  - Updated `AGENTS.md` with the reusable rule that admin navigation must reflect platform governance boundaries rather than chair operations.
+- Verification run:
+  - RED: `cd apps/web && npm run test -- --run src/tests/login.spec.ts -t "admin"` failed on admin access to `/chair/screening`, extra topbar links, and `/dashboard` still using the cluttered generic dashboard.
+  - RED: `cd apps/web && npm run test -- --run src/tests/conference-workflow.spec.ts -t "admin conference detail read-only"` failed because admin conference detail still exposed `查看评审详情`, `Accept`, and `Desk reject`.
+  - RED: `cd apps/api && mvn test -Dtest=WorkflowQueryServiceTest#adminCannotReadConferencePaperContent` failed because admin-only users could read conference paper review detail.
+  - GREEN target: `cd apps/web && npm run test -- --run src/tests/login.spec.ts -t "admin"` passed.
+  - GREEN target: `cd apps/web && npm run test -- --run src/tests/conference-workflow.spec.ts -t "admin conference detail read-only"` passed.
+  - GREEN target: `cd apps/web && npm run test -- --run src/tests/conference-workflow.spec.ts -t "admin conference management"` passed after correcting the admin conference-management page to keep the status table visible while hiding chair-only creation and reviewer-pool operations.
+  - GREEN target: `cd apps/api && mvn test -Dtest=WorkflowQueryServiceTest#adminCannotReadConferencePaperContent` passed.
+  - `cd apps/web && npm run test -- --run src/tests/login.spec.ts` passed with 16 tests.
+  - `cd apps/web && npm run test -- --run src/tests/conference-workflow.spec.ts` passed with 13 tests.
+  - `cd apps/web && npm run typecheck` passed.
+  - `cd apps/web && npm run build` passed with the existing Vite large chunk warning.
+  - `cd apps/api && mvn test -Dtest=WorkflowQueryServiceTest#chairReadsConferencePaperReviewDetailAndRenderedPages,WorkflowQueryServiceTest#adminCannotReadConferencePaperContent` passed with 2 tests.
+- Current completion state:
+  - Admin users now land on a focused governance workbench and can inspect conference status/detail without receiving chair paper-content or operational workflow controls.
+
+**Duplicate `/admin` route removal on 2026-05-08:**
+
+- Active feedback scope: `/admin` duplicated the admin version of `/dashboard`, so the separate URL should be removed.
+- Execution result:
+  - Removed the standalone `admin-dashboard` route at `/admin`.
+  - Changed admin-only login to route to `/dashboard`.
+  - Changed the admin topbar `管理后台` link to `/dashboard`.
+  - Updated login/router tests to assert the duplicate `/admin` route no longer exists.
+- Verification run:
+  - RED: `cd apps/web && npm run test -- --run src/tests/login.spec.ts -t "admin|duplicate"` failed because login still pushed `{ name: "admin-dashboard" }`, `/admin` still existed, and the topbar still linked to `/admin`.
+  - GREEN target: `cd apps/web && npm run test -- --run src/tests/login.spec.ts -t "admin|duplicate"` passed.
+  - `cd apps/web && npm run test -- --run src/tests/login.spec.ts` passed with 16 tests.
+  - `cd apps/web && npm run typecheck` passed.
+  - `cd apps/web && npm run build` passed with the existing Vite large chunk warning.
+- Current completion state:
+  - The admin workbench has a single entry URL: `/dashboard`. Dedicated admin subpages such as role applications, conference approvals, and Agent monitor remain under `/admin/...`.
+
+**Chair decision workbench ownership-scope repair on 2026-05-09:**
+
+- Active feedback scope: a newly registered chair/organizer account could see existing decision workbench rows because `/api/chair/decision-workbench` checked only role membership and read all pending/in-progress review rounds.
+- Execution result:
+  - Scoped ordinary chair users by `CONFERENCE.ORGANIZER_USER_ID` through the round's manuscript conference.
+  - Kept the existing admin/global behavior explicit by passing a null organizer scope only for admins.
+  - Avoided Oracle nullable numeric binding in the optional owner filter by dynamically appending the owner predicate only when needed.
+  - Added service-level tests for chair scoped reads and admin global reads, plus repository-level Oracle coverage proving another chair's conference round is excluded.
+  - Updated `AGENTS.md` with the reusable rule that chair-facing cross-conference read models must combine role checks with conference ownership scope.
+- Verification run:
+  - RED: `cd apps/api && mvn -Dtest=DecisionWorkbenchQueryTest test` failed at compile time because the repository did not yet accept an organizer scope.
+  - GREEN target: `cd apps/api && mvn -Dtest=DecisionWorkbenchQueryTest,DecisionWorkbenchReadRepositoryTest test` passed with 5 tests.
+  - Endpoint check: `cd apps/api && mvn -Dtest=WorkflowQueryServiceTest#chairDecisionWorkbenchIncludesAssignmentAndConflictCounts test` passed with 1 test.
+- Current completion state:
+  - New chair accounts no longer inherit global decision workbench rows unless they organize the manuscript's conference; admins retain the explicit global read path.
+
+**Conference approval rejection feedback loop on 2026-05-09:**
+
+- Active feedback scope: admin conference approval rows needed to open detail, support rejection with a required reason, return rejected conferences automatically to editable `DRAFT`, and let chairs see the reason, edit existing data, and resubmit.
+- Execution result:
+  - Added durable conference rejection fields (`REJECTED_BY`, `REJECTED_AT`, `REJECTION_REASON`) through migration `028_conference_rejection_feedback.sql`, schema verification, full schema apply, and incremental bootstrap wiring.
+  - Added backend admin detail/reject endpoints and chair draft update endpoint. Rejection now validates a nonblank reason, moves only `PENDING_APPROVAL` conferences back to `DRAFT`, unpublishes CFP state, and retains the rejection feedback for chair reads.
+  - Fixed the incremental Oracle bootstrap guard to check foreign-key existence with `USER_CONSTRAINTS` relationship metadata instead of treating an FK like a CHECK constraint search condition.
+  - Updated the admin conference approval page so rows can open a detail dialog with full conference information, approve from the dialog, or reject with a required reason.
+  - Updated the chair conference detail page to show the rejection reason on rejected drafts, prefill an editable conference form from the existing data, save draft edits, and submit again for approval.
+  - Updated `AGENTS.md` with the reusable rule that rejection loops must preserve both feedback and editability at the actor's resubmission surface.
+- Verification run:
+  - RED: `cd apps/api && mvn -Dtest=ConferenceSchemaTest#conferenceRejectionFeedbackSchemaIsWiredIntoOracleVerificationAndBootstrap test` failed until the bootstrap scripts exposed `oracle_foreign_key_exists`.
+  - GREEN target: `cd apps/api && mvn -Dtest=ConferenceSchemaTest#conferenceRejectionFeedbackSchemaIsWiredIntoOracleVerificationAndBootstrap test` passed.
+  - GREEN target: `cd apps/api && mvn -Dtest=ConferenceServiceTest test` passed with 11 tests.
+  - RED: `cd apps/web && npm run test -- --run src/tests/conference-workflow.spec.ts` failed on missing admin detail/rejection UI and missing chair rejection feedback/edit form.
+  - GREEN target: `cd apps/web && npm run test -- --run src/tests/conference-workflow.spec.ts` passed with 15 tests.
+- Current completion state:
+  - Admins can inspect pending conference details and reject with a required reason; rejected conferences return to chair-editable drafts with the reason visible where the chair edits and resubmits.
+
+**Chair publication operations frontend removal on 2026-05-09:**
+
+- Active feedback scope: the chair-facing publication operations page was too bulky for the current product surface and should be removed from the frontend, including the top navigation entry.
+- Execution result:
+  - Removed the `出版操作` topbar item for chair users.
+  - Removed the `/chair/publication-operations` route and `chair-publication-operations` route name.
+  - Deleted `PublicationOperationsView.vue`.
+  - Removed the dedicated publication-operations frontend API helpers and TypeScript DTOs that were only used by that deleted page.
+  - Removed the old workflow test that asserted the deleted page behavior, and added route/navigation negative assertions to keep the page from returning accidentally.
+  - Updated `AGENTS.md` with the reusable rule that frontend surface removals must remove route, nav, component, dedicated helpers/types, and old positive tests together.
+- Verification run:
+  - RED: `cd apps/web && npm run test -- --run src/tests/login.spec.ts -t "duplicate admin|role-aware"` failed because the route and chair topbar link still existed.
+  - GREEN target: `cd apps/web && npm run test -- --run src/tests/login.spec.ts -t "duplicate admin|role-aware"` passed.
+  - `cd apps/web && npm run test -- --run src/tests/login.spec.ts src/tests/workflow.spec.ts` was run; `login.spec.ts` passed, while `workflow.spec.ts` still has unrelated pre-existing localization/button-label drift failures across older workflow tests.
+  - `cd apps/web && npm run typecheck` passed.
+  - `cd apps/web && npm run build` passed with the existing Vite large chunk warning.
+- Current completion state:
+  - Chair users no longer see or can route to the frontend publication operations page; the backend endpoints remain untouched.
+
+**Reviewer assist structured display optimization on 2026-05-09:**
+
+- Active feedback scope: reviewer assist returned structured reviewer-safe fields, but the reviewer page displayed the whole `redactedResult` payload as raw JSON, including technical field names such as `blindReviewRisks`, `paperSummary`, IDs, and status metadata.
+- Execution result:
+  - Replaced raw JSON rendering in `ReviewerAgentPanel.vue` with a structured review-assist presentation: paper summary, confidence tag, contribution checks, method checks, experiment checks, evidence checks, potential weaknesses, reviewer questions, and blind-review risks.
+  - De-duplicated repeated checklist entries such as repeated redaction warnings before rendering.
+  - Added styling for the structured cards/lists and removed the reviewer-assist dependency on the generic JSON trace renderer.
+  - Updated the reviewer-agent workflow test to assert the structured sections are visible and raw JSON field names / `.json-block` are absent.
+  - Updated `AGENTS.md` with the reusable rule that structured Agent payloads should be mapped to labeled UI sections instead of rendered as raw JSON.
+- Verification run:
+  - RED: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts -t "redacted agent results for reviewer"` failed because the old UI still rendered raw JSON and did not show `可信度 85%`.
+  - GREEN target: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts -t "redacted agent results for reviewer"` passed.
+  - `cd apps/web && npm run typecheck` passed.
+  - `cd apps/web && npm run build` passed with the existing Vite large chunk warning.
+- Current completion state:
+  - Reviewer assist results now render as reviewer-readable sections instead of exposing native structured-output JSON.
+
+**Reviewer assist Chinese output prompt repair on 2026-05-09:**
+
+- Active feedback scope: after structured display was added, Reviewer assist values were still generated in English, making the Chinese UI awkward and harder to read.
+- Execution result:
+  - Updated `ProviderExecutor.run_reviewer_assist` so the LLM instruction explicitly requires all reviewer-visible natural-language field values to be Chinese while preserving the JSON schema field names.
+  - Updated the no-provider fallback output to return Chinese `paperSummary`, contribution checks, method checks, experiment checks, evidence checks, potential weaknesses, and reviewer questions.
+  - Added provider tests that inspect the actual prompt sent to the configured model and verify fallback output uses Chinese reviewer-visible values.
+  - Added runtime coverage that a default reviewer-assist completed event carries Chinese summary/checklist values.
+  - Updated `AGENTS.md` with the reusable rule that reviewer-facing Agent outputs in the Chinese UI should enforce Chinese at prompt/fallback source, not only in frontend rendering.
+- Verification run:
+  - RED: `.venv/bin/python -m pytest services/agent/tests/test_provider_executor.py -q` failed because the prompt lacked the Chinese-output instruction and fallback still returned English.
+  - GREEN target: `.venv/bin/python -m pytest services/agent/tests/test_provider_executor.py -q` passed with 7 tests.
+  - GREEN target: `.venv/bin/python -m pytest services/agent/tests/test_execution_runtime.py::test_runtime_executes_reviewer_assist_and_emits_completed_event services/agent/tests/test_provider_executor.py -q` passed with 8 tests.
+- Current completion state:
+  - New Reviewer assist runs should produce Chinese reviewer-visible structured values from both live LLM calls and offline fallback execution.
+
+**Reviewer assist real-paper-content payload repair on 2026-05-09:**
+
+- Active feedback scope: Reviewer assist appeared unrelated to the paper because the API request sent only title, abstract, keywords, and assignment metadata to the Agent. The Agent handler supported `pdfText`, but the field was never populated from the assigned manuscript PDF.
+- Root cause:
+  - `RequestReviewerAssistUseCase.buildPayload()` did not read `MANUSCRIPT_VERSION.PDF_FILE`; it only checked `PDF_FILE_SIZE`.
+  - `ReviewerAssistContextRepository` selected `PDF_FILE_SIZE` but not the PDF BLOB.
+  - Agent-side `build_paper_understanding()` already had a `pdfText` field, so the downstream prompt path could use real text once the API supplied it.
+- Execution result:
+  - Extended `ReviewerAssistContext` to include `pdfFile` and selected `V.PDF_FILE` from `MANUSCRIPT_VERSION`.
+  - Updated `RequestReviewerAssistUseCase` to extract text from the assigned PDF with PDFBox, normalize whitespace, cap text at 120,000 characters, and include `pdfText` plus `sections.fullText` in the outbox request payload.
+  - Added fallback byte-to-text handling for malformed local test PDFs so tests can still prove the payload path without needing a full PDF fixture.
+  - Added API unit coverage proving reviewer-assist outbox payloads include extracted paper text.
+  - Added HTTP/integration coverage proving `POST /api/review-assignments/{assignmentId}/agent-assist` writes outbox JSON with `requestPayload.pdfText`.
+  - Added Agent handler coverage proving `pdfText` and `sections` survive into the provider input.
+  - Updated `AGENTS.md` with the reusable rule that reviewer assist must analyze actual assigned paper content, not metadata-only payloads.
+- Verification run:
+  - RED: `cd apps/api && mvn -Dtest=RequestReviewerAssistUseCaseTest test` failed because `ReviewerAssistContext` did not carry a PDF field and the payload lacked `pdfText`.
+  - GREEN target: `cd apps/api && mvn -Dtest=RequestReviewerAssistUseCaseTest test` passed with 2 tests.
+  - GREEN target: `cd apps/api && mvn -Dtest=AnalysisIntentFlowTest#reviewerAssistRequestCreatesIntentInsteadOfPollingTask test` passed.
+  - GREEN target: `cd apps/api && mvn -Dtest=RequestReviewerAssistUseCaseTest,AnalysisIntentFlowTest test` passed with 3 tests.
+  - GREEN target: `.venv/bin/python -m pytest services/agent/tests/test_reviewer_assist_flow.py services/agent/tests/test_provider_executor.py -q` passed with 10 tests.
+- Current completion state:
+  - New Reviewer assist requests now include assigned paper text in the Agent payload. Existing cached/projection results remain old until the reviewer reruns assist, ideally with `force`/Retry if a previous result is already available.
+
+**Two-stage conference submission and paper-number pickup on 2026-05-09:**
+
+- Active feedback scope: chairs need to configure separate abstract and full-paper submission deadlines; authors should submit title/abstract metadata first, receive the conference paper number, then upload and submit the full PDF before the paper deadline.
+- Execution result:
+  - Added `CONFERENCE_PHASE.ABSTRACT_SUBMISSION_CLOSE_AT` with an idempotent Oracle migration, schema verification coverage, incremental bootstrap wiring, and an index for abstract-deadline lookup.
+  - Updated conference phase validation and repository mapping to enforce `submissionOpenAt < abstractSubmissionCloseAt < submissionCloseAt < biddingOpenAt < biddingCloseAt < reviewDeadlineAt < decisionReleaseAt`.
+  - Added `ABSTRACT_SUBMITTED` to the manuscript workflow status constraint and made initial author creation persist this status instead of `DRAFT`.
+  - Added `submissionNumber` to author manuscript detail/list responses, using the confirmed format `PAPER-{manuscriptId}`.
+  - Split author guards so initial abstract submission checks the abstract deadline, while PDF upload/final version submission check the full-paper deadline.
+  - Allowed PDF upload and final submission from `ABSTRACT_SUBMITTED`, mapping final submit to `SUBMITTED`.
+  - Updated chair conference create/edit UI to show and submit all phase timestamps, including separate `摘要提交截止日期` and `论文提交截止日期`.
+  - Updated author submission UI copy to “提交摘要并取号”, filters open conferences by abstract deadline, and displays the returned paper number after abstract submission.
+  - Updated direct Oracle test seeds and legacy conference phase reset helpers to include the new non-null abstract deadline.
+- Verification run:
+  - RED: `cd apps/api && mvn -Dtest=ConferenceServiceTest,ConferenceSchemaTest,ManuscriptServiceTest test` first failed at test compile because conference phase models lacked `abstractSubmissionCloseAt`.
+  - GREEN target: `cd apps/api && mvn -Dtest=ConferenceServiceTest,ConferenceSchemaTest,ManuscriptServiceTest test` passed with 29 tests after applying migration `029_abstract_submission_deadline.sql` to the local Oracle container.
+  - GREEN target: `cd apps/api && mvn -Dtest=ReviewFlowE2eTest,AssignmentDraftServiceTest,ConferenceReviewerBiddingServiceTest,RealPlatformWorkflowServiceTest test` passed with 17 tests after updating direct phase seeds.
+  - GREEN target: `cd apps/web && npm run test -- --run src/tests/conference-workflow.spec.ts` passed with 15 tests.
+  - GREEN target: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts -t "submits author manuscripts to a selected public conference|loads and submits the configured submission checklist|only offers currently open conferences|validates author manuscript form"` passed with 4 focused tests.
+  - GREEN target: `cd apps/web && npm run typecheck` passed.
+  - Broader note: `cd apps/web && npm run test -- --run src/tests/workflow.spec.ts` still has unrelated pre-existing Chinese localization/button-label drift failures outside the author submission tests touched here.
+- Current completion state:
+  - Chair-created conferences now carry independent abstract and full-paper deadlines, and author submission is a two-stage flow: metadata/abstract pickup number first, full PDF submission later using the same manuscript/version.
+
+**Reviewer self-assignment guard repair on 2026-05-09:**
+
+- Active feedback scope: a chair could still assign an author to review the author's own paper when the author/reviewer used the same `USER_ID`.
+- Root cause:
+  - Direct assignment and candidate search already checked `MANUSCRIPT_AUTHOR.USER_ID`.
+  - Confirming existing assignment drafts did not re-run the same eligibility check before writing `REVIEW_ASSIGNMENT`.
+  - Platform assignment proposal candidate and confirmation paths did not exclude `MANUSCRIPT_AUTHOR.USER_ID`, so authors could enter proposal/draft flows.
+- Execution result:
+  - Added confirm-time eligibility validation in `AssignmentDraftService.confirmOne()` before locking reviewer load and inserting `REVIEW_ASSIGNMENT`.
+  - Updated platform assignment proposal candidate SQL to exclude manuscript authors by `MANUSCRIPT_AUTHOR.USER_ID`.
+  - Added proposal confirmation validation to reject proposal rows whose reviewer is also a manuscript author.
+  - Added focused regression tests for stale draft confirmation and platform proposal candidate exclusion.
+  - Updated `ReviewWorkflowServiceTest` cleanup ordering for assignment proposal and external delegation child rows so related suites can run together.
+  - Updated `AGENTS.md` with the reusable rule that all durable assignment-writing paths must enforce the same eligibility policy.
+- Verification run:
+  - RED: `cd apps/api && mvn -Dtest=AssignmentDraftServiceTest#confirmDraftsRejectsManuscriptAuthorEvenWhenDraftAlreadyExists test` failed because stale draft confirmation returned `200` and inserted `REVIEW_ASSIGNMENT` for reviewer `1001`.
+  - GREEN target: `cd apps/api && mvn -Dtest=AssignmentDraftServiceTest#confirmDraftsRejectsManuscriptAuthorEvenWhenDraftAlreadyExists test` passed.
+  - RED: `cd apps/api && mvn -Dtest=RealPlatformWaveEightServiceTest#assignmentProposalCandidatesExcludeManuscriptAuthorByUserId test` failed because the author appeared as one assignment proposal candidate.
+  - GREEN target: `cd apps/api && mvn -Dtest=RealPlatformWaveEightServiceTest#assignmentProposalCandidatesExcludeManuscriptAuthorByUserId test` passed.
+  - GREEN target: `cd apps/api && mvn -Dtest=AssignmentDraftServiceTest,ReviewWorkflowServiceTest,RealPlatformWaveEightServiceTest#assignmentProposalCandidatesExcludeManuscriptAuthorByUserId test` passed with 16 tests.
+- Current completion state:
+  - Same-`USER_ID` manuscript authors are blocked from direct assignment, candidate search, draft confirmation, random preview confirmation, and platform proposal flows before a durable review assignment can be created.
+
+**Reviewer assignment empty-candidate repair on 2026-05-09:**
+
+- Active feedback scope: after tightening author self-review guards, chair assignment screens could show no available reviewer candidates even when reviewers had been added to the conference pool.
+- Root cause:
+  - `CONFERENCE_REVIEWER.MAX_LOAD` is conference-scoped, but candidate search and confirmation paths computed reviewer `CURRENT_LOAD` across all assignments on the platform.
+  - A reviewer with assignments in another conference could be treated as full for the current conference and filtered out of candidate search, draft generation, and confirmation.
+- Execution result:
+  - Scoped `ReviewAssignmentRepository` load calculations to assignments whose manuscripts belong to the current manuscript conference.
+  - Scoped `AssignmentDraftRepository` candidate and confirm-time load calculations to the conference locked from `CONFERENCE_REVIEWER`.
+  - Scoped platform assignment proposal validation load calculations to the manuscript conference.
+  - Added a regression test proving an assignment in another conference does not hide a reviewer from the current conference candidate list.
+  - Updated assignment draft tests so their overloaded-reviewer fixtures create same-conference load, preserving the intended max-load guard.
+  - Updated `AGENTS.md` with the reusable rule that load counts must be scoped to the same unit as the load limit.
+- Verification run:
+  - RED: `cd apps/api && mvn -Dtest=ReviewWorkflowServiceTest#assignmentCandidatesUseConferenceScopedReviewerLoad test` failed because reviewer `1002` was filtered by an assignment outside the target conference.
+  - GREEN target: `cd apps/api && mvn -Dtest=ReviewWorkflowServiceTest#assignmentCandidatesUseConferenceScopedReviewerLoad test` passed.
+  - GREEN target: `cd apps/api && mvn -Dtest=ReviewWorkflowServiceTest,AssignmentDraftServiceTest,RealPlatformWaveEightServiceTest#assignmentProposalCandidatesExcludeManuscriptAuthorByUserId test` passed with 17 tests.
+- Current completion state:
+  - Reviewer assignment candidates and draft/proposal confirmation now use conference-scoped load, so reviewers are not incorrectly hidden by assignments from other conferences.
+
+**Chair screening queue ownership-scope repair on 2026-05-09:**
+
+- Active feedback scope: the initial screening queue could still show manuscripts from conferences not organized by the current chair.
+- Root cause:
+  - `/api/chair/screening-queue` only checked chair/admin role membership.
+  - `ScreeningQueueReadRepository.findOpenScreeningItems()` queried all open screening manuscript statuses without joining `CONFERENCE` or applying `CONFERENCE.ORGANIZER_USER_ID`.
+- Execution result:
+  - Updated `WorkflowQueryService.listScreeningQueue()` so admins keep the explicit global query path, while ordinary chairs pass their `principal.userId()` as organizer scope.
+  - Updated `ScreeningQueueReadRepository` to join `CONFERENCE` and apply `C.ORGANIZER_USER_ID = ?` only for scoped chair reads.
+  - Bound the organizer id through `PreparedStatement` instead of using nullable numeric predicates, avoiding Oracle nullable binding hazards.
+  - Added HTTP regression coverage proving ordinary chairs do not see another organizer's submitted manuscript, and admins retain the explicit global view.
+  - Updated `AGENTS.md` to state that chair-facing queue repositories must accept explicit owner scope instead of hiding global SQL behind actor-facing services.
+- Verification run:
+  - RED: `cd apps/api && mvn -Dtest=WorkflowQueryServiceTest#chairScreeningQueueExcludesOtherOrganizerConferenceManuscripts test` failed because the chair queue returned both the owned manuscript and another organizer's manuscript.
+  - GREEN target: `cd apps/api && mvn -Dtest=WorkflowQueryServiceTest#chairScreeningQueueExcludesOtherOrganizerConferenceManuscripts,WorkflowQueryServiceTest#adminScreeningQueueKeepsExplicitGlobalScope,WorkflowQueryServiceTest#chairListsScreeningQueueStartsScreeningAndDownloadsPdf test` passed with 3 tests.
+- Current completion state:
+  - Initial screening queues are now conference-owner scoped for ordinary chairs. Admin global visibility remains explicit and covered.

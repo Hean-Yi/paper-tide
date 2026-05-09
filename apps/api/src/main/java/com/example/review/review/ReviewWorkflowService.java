@@ -7,6 +7,7 @@ import com.example.review.manuscript.ManuscriptRepository.LockedManuscriptRow;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
@@ -26,17 +27,20 @@ public class ReviewWorkflowService {
     private final ManuscriptRepository manuscriptRepository;
     private final ReviewRoundRepository reviewRoundRepository;
     private final ReviewAssignmentRepository reviewAssignmentRepository;
+    private final AssignmentDraftRepository assignmentDraftRepository;
     private final ConflictCheckService conflictCheckService;
 
     public ReviewWorkflowService(
             ManuscriptRepository manuscriptRepository,
             ReviewRoundRepository reviewRoundRepository,
             ReviewAssignmentRepository reviewAssignmentRepository,
+            AssignmentDraftRepository assignmentDraftRepository,
             ConflictCheckService conflictCheckService
     ) {
         this.manuscriptRepository = manuscriptRepository;
         this.reviewRoundRepository = reviewRoundRepository;
         this.reviewAssignmentRepository = reviewAssignmentRepository;
+        this.assignmentDraftRepository = assignmentDraftRepository;
         this.conflictCheckService = conflictCheckService;
     }
 
@@ -109,10 +113,7 @@ public class ReviewWorkflowService {
             AutoAssignRequest request
     ) {
         RoleGuard.requireChairOrAdmin(principal);
-        int reviewsPerPaper = request == null || request.reviewsPerPaper() == null ? 3 : request.reviewsPerPaper();
-        if (reviewsPerPaper < 1 || reviewsPerPaper > 10) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reviews per paper must be between 1 and 10");
-        }
+        int reviewsPerPaper = normalizeReviewsPerPaper(request == null ? null : request.reviewsPerPaper());
         List<AssignmentActionResponse> created = new ArrayList<>();
         for (ReviewRoundRow round : reviewAssignmentRepository.listAssignableRoundsForConference(conferenceId)) {
             LockedManuscriptRow manuscript = manuscriptRepository.findLockedById(round.manuscriptId())
@@ -136,6 +137,76 @@ public class ReviewWorkflowService {
             }
         }
         return new AutoAssignResponse(conferenceId, reviewsPerPaper, created.size(), created);
+    }
+
+    @Transactional
+    public RandomAssignmentPreviewResponse previewRandomConferenceAssignments(
+            CurrentUserPrincipal principal,
+            long conferenceId,
+            RandomAssignmentPreviewRequest request
+    ) {
+        RoleGuard.requireChairOrAdmin(principal);
+        int reviewsPerPaper = normalizeReviewsPerPaper(request == null ? null : request.reviewsPerPaper());
+        for (ReviewRoundRow round : reviewAssignmentRepository.listAssignableRoundsForConference(conferenceId)) {
+            LockedManuscriptRow manuscript = manuscriptRepository.findLockedById(round.manuscriptId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
+            ensureConferenceChairOrAdmin(principal, manuscript);
+            assignmentDraftRepository.clearOpenDrafts(round.roundId());
+            int remaining = reviewsPerPaper - reviewAssignmentRepository.countActiveAssignmentsForRound(round.roundId());
+            if (remaining <= 0) {
+                continue;
+            }
+            List<AssignmentCandidateDetailRow> candidates = new ArrayList<>(reviewAssignmentRepository.listEligibleCandidates(round.roundId()));
+            Collections.shuffle(candidates);
+            int rank = 1;
+            for (AssignmentCandidateDetailRow candidate : candidates) {
+                if (remaining <= 0) {
+                    break;
+                }
+                assignmentDraftRepository.insertDraft(new AssignmentDraftInsert(
+                        candidate.roundId(),
+                        candidate.manuscriptId(),
+                        candidate.versionId(),
+                        candidate.reviewerId(),
+                        rank,
+                        candidateScore(candidate.bidValue(), candidate.currentLoad(), candidate.maxLoad()),
+                        candidate.currentLoad(),
+                        candidate.maxLoad(),
+                        candidate.bidValue(),
+                        "Random preview; bid=" + candidate.bidValue() + "; load=" + candidate.currentLoad() + "/" + candidate.maxLoad(),
+                        principal.userId()
+                ));
+                rank++;
+                remaining--;
+            }
+        }
+        List<AssignmentDraftResponse> drafts = assignmentDraftRepository.listOpenByConference(conferenceId).stream()
+                .map(this::toDraftResponse)
+                .toList();
+        return new RandomAssignmentPreviewResponse(conferenceId, reviewsPerPaper, drafts.size(), drafts);
+    }
+
+    @Transactional
+    public ConfirmAssignmentPreviewResponse confirmRandomConferenceAssignmentPreview(
+            CurrentUserPrincipal principal,
+            long conferenceId,
+            ConfirmAssignmentPreviewRequest request
+    ) {
+        RoleGuard.requireChairOrAdmin(principal);
+        List<AssignmentActionResponse> created = new ArrayList<>();
+        for (AssignmentDraftRow draft : assignmentDraftRepository.findOpenByConferenceForUpdate(conferenceId)) {
+            ReviewRoundRow round = reviewRoundRepository.findByIdForUpdate(draft.roundId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Review round not found"));
+            LockedManuscriptRow manuscript = manuscriptRepository.findLockedById(round.manuscriptId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
+            ensureConferenceChairOrAdmin(principal, manuscript);
+            Timestamp deadline = request == null || request.deadlineAt() == null
+                    ? round.deadlineAt()
+                    : Timestamp.from(request.deadlineAt());
+            created.add(createAssignment(round, draft.reviewerId(), deadline));
+            assignmentDraftRepository.markConfirmed(draft.draftId());
+        }
+        return new ConfirmAssignmentPreviewResponse(conferenceId, created.size(), created);
     }
 
     @Transactional
@@ -240,6 +311,31 @@ public class ReviewWorkflowService {
                 candidateScore(row.bidValue(), row.currentLoad(), row.maxLoad()),
                 "bid=" + row.bidValue() + "; load=" + row.currentLoad() + "/" + row.maxLoad()
         );
+    }
+
+    private AssignmentDraftResponse toDraftResponse(AssignmentDraftRow row) {
+        return new AssignmentDraftResponse(
+                row.draftId(),
+                row.roundId(),
+                row.manuscriptId(),
+                row.versionId(),
+                row.reviewerId(),
+                row.rankOrder(),
+                row.score(),
+                row.currentLoad(),
+                row.maxLoad(),
+                row.bidValue(),
+                row.reason(),
+                row.draftStatus()
+        );
+    }
+
+    private int normalizeReviewsPerPaper(Integer requested) {
+        int reviewsPerPaper = requested == null ? 3 : requested;
+        if (reviewsPerPaper < 1 || reviewsPerPaper > 10) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reviews per paper must be between 1 and 10");
+        }
+        return reviewsPerPaper;
     }
 
     private int candidateScore(String bidValue, int currentLoad, int maxLoad) {

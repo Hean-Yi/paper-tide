@@ -110,6 +110,67 @@ public class DecisionService {
         return new DecisionResponse(decisionId, request.decisionCode(), nextStatus, "COMPLETED");
     }
 
+    @Transactional
+    public DecisionResponse screeningDeskReject(CurrentUserPrincipal principal, ScreeningDeskRejectRequest request) {
+        RoleGuard.requireChairOrAdmin(principal);
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Decision request is required");
+        }
+        LockedManuscriptRow manuscript = manuscriptRepository.findLockedById(request.manuscriptId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Manuscript not found"));
+        if (manuscript.currentVersionId() == null || manuscript.currentVersionId() != request.versionId()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Decision must target the manuscript current version");
+        }
+        String nextStatus = resolveNextStatus(manuscript.currentStatus(), "DESK_REJECT");
+        long roundId = reviewRoundRepository.nextRoundId();
+        int roundNo = reviewRoundRepository.nextRoundNo(request.manuscriptId());
+        Timestamp decidedAt = Timestamp.from(Instant.now());
+        reviewRoundRepository.insert(
+                roundId,
+                request.manuscriptId(),
+                roundNo,
+                request.versionId(),
+                "COMPLETED",
+                "REUSE_REVIEWERS",
+                true,
+                decidedAt,
+                principal.userId()
+        );
+        manuscriptRepository.updateStatusAndRoundNo(request.manuscriptId(), nextStatus, roundNo);
+        manuscriptRepository.updateLastDecision(request.manuscriptId(), "DESK_REJECT");
+
+        long decisionId = decisionRepository.nextDecisionId();
+        decisionRepository.insert(
+                decisionId,
+                manuscript.manuscriptId(),
+                roundId,
+                request.versionId(),
+                "DESK_REJECT",
+                request.decisionReason(),
+                principal.userId(),
+                decidedAt
+        );
+        try {
+            notificationService.notifyDecision(manuscript.submitterId(), manuscript.manuscriptId(), "DESK_REJECT");
+        } catch (Exception ex) {
+            LOGGER.warn("Decision notification failed for manuscript {}", manuscript.manuscriptId(), ex);
+        }
+        try {
+            businessOperationsService.recordDecisionCommunication(
+                    manuscript.conferenceId(),
+                    manuscript.manuscriptId(),
+                    manuscript.submitterId(),
+                    decisionId,
+                    "DESK_REJECT"
+            );
+        } catch (Exception ex) {
+            LOGGER.warn("Decision communication log failed for manuscript {}", manuscript.manuscriptId(), ex);
+        }
+        auditLogService.recordDecision(principal.userId(), roundId, manuscript.manuscriptId(), "DESK_REJECT");
+
+        return new DecisionResponse(decisionId, "DESK_REJECT", nextStatus, "COMPLETED");
+    }
+
     private String resolveNextStatus(String manuscriptStatus, String decisionCode) {
         if ("DESK_REJECT".equals(decisionCode)) {
             if (!SCREENING_STATUSES.contains(manuscriptStatus)) {
@@ -143,6 +204,13 @@ record DecisionRequest(
         long roundId,
         long versionId,
         String decisionCode,
+        String decisionReason
+) {
+}
+
+record ScreeningDeskRejectRequest(
+        long manuscriptId,
+        long versionId,
         String decisionReason
 ) {
 }

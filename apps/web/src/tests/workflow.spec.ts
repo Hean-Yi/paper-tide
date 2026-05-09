@@ -13,7 +13,6 @@ import SubmitManuscriptView from "../views/author/SubmitManuscriptView.vue";
 import ScreeningQueueView from "../views/chair/ScreeningQueueView.vue";
 import DecisionWorkbenchView from "../views/chair/DecisionWorkbenchView.vue";
 import AssignmentOperationsView from "../views/chair/AssignmentOperationsView.vue";
-import PublicationOperationsView from "../views/chair/PublicationOperationsView.vue";
 import AgentMonitorView from "../views/admin/AgentMonitorView.vue";
 import AssignmentListView from "../views/reviewer/AssignmentListView.vue";
 import ReviewEditorView from "../views/reviewer/ReviewEditorView.vue";
@@ -117,6 +116,8 @@ describe("workflow screens", () => {
           versionId: 21,
           versionNo: 1,
           title: "Workflow Seed",
+          abstractText: "An abstract for the seeded workflow submission.",
+          keywords: "agents, review",
           currentStatus: "UNDER_SCREENING",
           currentRoundNo: 1,
           blindMode: "DOUBLE_BLIND",
@@ -130,8 +131,81 @@ describe("workflow screens", () => {
     const wrapper = await mountWithRouter(ScreeningQueueView);
 
     expect(wrapper.text()).toContain("Workflow Seed");
-    expect(wrapper.text()).toContain("Start screening");
-    expect(wrapper.text()).toContain("Desk reject");
+    expect(wrapper.text()).toContain("查看初筛");
+    expect(wrapper.text()).toContain("桌面拒稿");
+  });
+
+  it("opens a submission info dialog after chair starts screening", async () => {
+    installAuth(["CHAIR"]);
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/chair/screening-queue") {
+        return Promise.resolve(jsonResponse([
+          {
+            manuscriptId: 11,
+            versionId: 21,
+            versionNo: 1,
+            title: "Workflow Seed",
+            abstractText: "An abstract for the seeded workflow submission.",
+            keywords: "agents, review",
+            currentStatus: "SUBMITTED",
+            currentRoundNo: 0,
+            blindMode: "DOUBLE_BLIND",
+            submittedAt: "2026-04-13T05:00:00Z",
+            pdfFileName: "workflow.pdf",
+            pdfFileSize: 23
+          }
+        ]));
+      }
+      if (path === "/manuscripts/11/versions/21/start-screening" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({}));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(ScreeningQueueView);
+    await clickButton(wrapper, "开始初筛");
+    await flushPromises();
+
+    expect(document.body.textContent).toContain("投稿信息");
+    expect(document.body.textContent).toContain("Workflow Seed");
+    expect(document.body.textContent).toContain("An abstract for the seeded workflow submission.");
+    expect(document.body.textContent).toContain("agents, review");
+    expect(document.body.textContent).toContain("创建轮次");
+    expect(document.body.textContent).toContain("桌面拒稿");
+  });
+
+  it("bounds the screening submission dialog on narrow screens", async () => {
+    installAuth(["CHAIR"]);
+    mockApi({
+      "/chair/screening-queue": [
+        {
+          manuscriptId: 11,
+          versionId: 21,
+          versionNo: 1,
+          title: "Workflow Seed With A Very Long Unbroken Title Segment",
+          abstractText: "A".repeat(180),
+          keywords: "workflow," + "agent".repeat(40),
+          currentStatus: "UNDER_SCREENING",
+          currentRoundNo: 0,
+          blindMode: "DOUBLE_BLIND",
+          submittedAt: "2026-04-13T05:00:00Z",
+          pdfFileName: `workflow-${"long".repeat(40)}.pdf`,
+          pdfFileSize: 23
+        }
+      ]
+    });
+
+    const wrapper = await mountWithRouter(ScreeningQueueView);
+    await clickButton(wrapper, "查看初筛");
+    await flushPromises();
+
+    const dialog = document.body.querySelector(".screening-dialog") as HTMLElement | null;
+    expect(dialog).not.toBeNull();
+    expect(dialog?.getAttribute("style")).toContain("--el-dialog-width: min(640px, calc(100vw - 32px))");
+    expect(document.body.querySelector(".screening-dialog-body")).not.toBeNull();
+    expect(document.body.querySelector(".screening-dialog .preformatted-text")).not.toBeNull();
   });
 
   it("uses date pickers for chair deadline inputs", async () => {
@@ -143,6 +217,8 @@ describe("workflow screens", () => {
           versionId: 21,
           versionNo: 1,
           title: "Workflow Seed",
+          abstractText: "An abstract for the seeded workflow submission.",
+          keywords: "agents, review",
           currentStatus: "UNDER_SCREENING",
           blindMode: "DOUBLE_BLIND",
           submittedAt: "2026-04-13T05:00:00Z",
@@ -171,6 +247,8 @@ describe("workflow screens", () => {
             versionId: 21,
             versionNo: 1,
             title: "Workflow Seed",
+            abstractText: "An abstract for the seeded workflow submission.",
+            keywords: "agents, review",
             currentStatus: "SUBMITTED",
             currentRoundNo: 0,
             blindMode: "DOUBLE_BLIND",
@@ -190,53 +268,12 @@ describe("workflow screens", () => {
     vi.stubGlobal("fetch", fetch);
 
     const wrapper = await mountWithRouter(ScreeningQueueView);
-    await buttonByText(wrapper, "Start screening").trigger("click");
+    await buttonByText(wrapper, "开始初筛").trigger("click");
     await flushPromises();
 
-    expect(buttonByText(wrapper, "Start screening").classes()).toContain("is-loading");
-    expect(buttonByText(wrapper, "Run agent").classes()).not.toContain("is-loading");
+    expect(buttonByText(wrapper, "开始初筛").classes()).toContain("is-loading");
 
     resolveStart?.(jsonResponse({}));
-  });
-
-  it("requests screening analysis through the intent outbox endpoint", async () => {
-    installAuth(["CHAIR"]);
-    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      const path = String(input).replace(/^\/api/, "");
-      if (path === "/chair/screening-queue") {
-        return Promise.resolve(jsonResponse([
-          {
-            manuscriptId: 11,
-            versionId: 21,
-            versionNo: 1,
-            title: "Workflow Seed",
-            currentStatus: "UNDER_SCREENING",
-            currentRoundNo: 1,
-            blindMode: "DOUBLE_BLIND",
-            submittedAt: "2026-04-13T05:00:00Z",
-            pdfFileName: "workflow.pdf",
-            pdfFileSize: 23
-          }
-        ]));
-      }
-      if (path === "/manuscripts/11/versions/21/screening-analysis" && init?.method === "POST") {
-        return Promise.resolve(jsonResponse({
-          intentId: 89,
-          analysisType: "SCREENING",
-          businessStatus: "REQUESTED"
-        }));
-      }
-      return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
-    });
-    vi.stubGlobal("fetch", fetch);
-
-    const wrapper = await mountWithRouter(ScreeningQueueView);
-    await clickButton(wrapper, "Run agent");
-
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/manuscripts/11/versions/21/screening-analysis",
-      expect.objectContaining({ method: "POST" })
-    );
   });
 
   it("shows a clear non-agent API error when starting screening fails", async () => {
@@ -251,6 +288,8 @@ describe("workflow screens", () => {
             versionId: 21,
             versionNo: 1,
             title: "Workflow Seed",
+            abstractText: "An abstract for the seeded workflow submission.",
+            keywords: "agents, review",
             currentStatus: "SUBMITTED",
             currentRoundNo: 0,
             blindMode: "DOUBLE_BLIND",
@@ -268,37 +307,72 @@ describe("workflow screens", () => {
     vi.stubGlobal("fetch", fetch);
 
     const wrapper = await mountWithRouter(ScreeningQueueView);
-    await clickButton(wrapper, "Start screening");
+    await clickButton(wrapper, "开始初筛");
 
     expect(message).toHaveBeenCalledWith("Manuscript is not ready for screening");
-    expect(buttonByText(wrapper, "Start screening").classes()).not.toContain("is-loading");
+    expect(buttonByText(wrapper, "开始初筛").classes()).not.toContain("is-loading");
   });
 
-  it("confirms desk reject before submitting the decision", async () => {
+  it("desk rejects a screening manuscript without a review round and refreshes the queue", async () => {
     installAuth(["CHAIR"]);
     const confirm = vi.spyOn(ElMessageBox, "confirm").mockResolvedValue("confirm" as never);
-    mockApi({
-      "/chair/screening-queue": [
-        {
-          manuscriptId: 11,
-          versionId: 21,
-          versionNo: 1,
-          title: "Workflow Seed",
-          currentStatus: "UNDER_SCREENING",
-          blindMode: "DOUBLE_BLIND",
-          submittedAt: "2026-04-13T05:00:00Z",
-          pdfFileName: "workflow.pdf",
-          pdfFileSize: 23
-        }
-      ]
+    const success = vi.spyOn(ElMessage, "success").mockImplementation(() => undefined as never);
+    let queueLoads = 0;
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/chair/screening-queue") {
+        queueLoads += 1;
+        return Promise.resolve(jsonResponse(queueLoads === 1 ? [
+          {
+            manuscriptId: 11,
+            versionId: 21,
+            versionNo: 1,
+            title: "Workflow Seed",
+            abstractText: "An abstract for the seeded workflow submission.",
+            keywords: "agents, review",
+            currentStatus: "UNDER_SCREENING",
+            currentRoundNo: 0,
+            blindMode: "DOUBLE_BLIND",
+            submittedAt: "2026-04-13T05:00:00Z",
+            pdfFileName: "workflow.pdf",
+            pdfFileSize: 23
+          }
+        ] : []));
+      }
+      if (path === "/decisions/screening-desk-reject" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({
+          decisionId: 41,
+          decisionCode: "DESK_REJECT",
+          currentStatus: "DESK_REJECTED",
+          roundStatus: "COMPLETED"
+        }));
+      }
+      return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
     });
+    vi.stubGlobal("fetch", fetch);
 
     const wrapper = await mountWithRouter(ScreeningQueueView);
-    await clickButton(wrapper, "Desk reject");
+    await clickButton(wrapper, "桌面拒稿");
     await setBodyTextarea("Out of scope for this venue.");
-    await clickBodyButton("Desk reject");
+    await clickBodyButton("确认拒稿");
 
-    expect(confirm).toHaveBeenCalled();
+    expect(confirm).toHaveBeenCalledWith(
+      "桌面拒稿将在外部评审前关闭此稿件，确认继续？",
+      "确认桌面拒稿",
+      expect.objectContaining({ confirmButtonText: "拒稿" })
+    );
+    expect(document.body.textContent).not.toContain("桥面拒稿");
+    const deskRejectCall = fetch.mock.calls.find(([input, init]) =>
+      String(input) === "/api/decisions/screening-desk-reject" && init?.method === "POST"
+    );
+    expect(deskRejectCall).toBeTruthy();
+    expect(JSON.parse(deskRejectCall?.[1]?.body as string)).toEqual({
+      manuscriptId: 11,
+      versionId: 21,
+      decisionReason: "Out of scope for this venue."
+    });
+    expect(success).toHaveBeenCalledWith("桌面拒稿已记录。");
+    expect(wrapper.text()).not.toContain("Workflow Seed");
   });
 
   it("shows loading on chair dialog submit actions while requests are pending", async () => {
@@ -436,6 +510,32 @@ describe("workflow screens", () => {
 
     expect(messageError).toHaveBeenCalledWith("PDF not found");
     expect(messageError).toHaveBeenCalledWith("A PDF is required before submission");
+  });
+
+  it("shows desk rejected manuscripts as desk rejected for authors", async () => {
+    installAuth(["AUTHOR"]);
+    mockApi({
+      "/manuscripts": [
+        {
+          manuscriptId: 11,
+          currentVersionId: 21,
+          currentStatus: "DESK_REJECTED",
+          currentRoundNo: 1,
+          blindMode: "DOUBLE_BLIND",
+          submittedAt: "2026-04-13T05:00:00Z",
+          lastDecisionCode: "DESK_REJECT",
+          currentVersionTitle: "Workflow Seed",
+          currentVersionNo: 1
+        }
+      ]
+    });
+
+    const wrapper = await mountWithRouter(ManuscriptListView);
+
+    expect(wrapper.text()).toContain("Workflow Seed");
+    expect(wrapper.text()).toContain("桌拒");
+    expect(wrapper.text()).not.toContain("Desk rejected");
+    expect(wrapper.text()).not.toContain("Desk reject");
   });
 
   it("loads author decision packages without exposing reviewer identity", async () => {
@@ -587,10 +687,67 @@ describe("workflow screens", () => {
     vi.stubGlobal("fetch", fetch);
 
     const wrapper = await mountWithRouter(SubmitManuscriptView);
-    await clickButton(wrapper, "Create manuscript");
+    await clickButton(wrapper, "提交摘要并取号");
 
     expect(fetch).toHaveBeenCalledWith("/api/conferences/cfp", expect.anything());
     expect(fetch).not.toHaveBeenCalledWith("/api/manuscripts", expect.anything());
+  });
+
+  it("only offers currently open conferences in the author submission selector", async () => {
+    installAuth(["AUTHOR"]);
+    const fetch = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/conferences/cfp") {
+        return Promise.resolve(jsonResponse([
+          {
+            conferenceId: 500,
+            name: "Review Advanced To Paper 2026",
+            acronym: "RAP",
+            year: 2026,
+            status: "SUBMISSION_CLOSED",
+            blindMode: "DOUBLE_BLIND",
+            publicSlug: "review-advanced-paper-2026",
+            submissionOpenAt: "2026-01-01T00:00:00Z",
+            abstractSubmissionCloseAt: "2099-06-01T00:00:00Z",
+            submissionCloseAt: "2099-07-01T00:00:00Z"
+          },
+          {
+            conferenceId: 501,
+            name: "Review Abstract Deadline Passed 2026",
+            acronym: "RADP",
+            year: 2026,
+            status: "OPEN_FOR_SUBMISSION",
+            blindMode: "SINGLE_BLIND",
+            publicSlug: "review-abstract-deadline-passed-2026",
+            submissionOpenAt: "2026-01-01T00:00:00Z",
+            abstractSubmissionCloseAt: "2000-06-01T00:00:00Z",
+            submissionCloseAt: "2099-07-01T00:00:00Z"
+          },
+          {
+            conferenceId: 502,
+            name: "Review Open 2026",
+            acronym: "RO",
+            year: 2026,
+            status: "OPEN_FOR_SUBMISSION",
+            blindMode: "OPEN",
+            publicSlug: "review-open-2026",
+            submissionOpenAt: "2026-01-01T00:00:00Z",
+            abstractSubmissionCloseAt: "2099-06-01T00:00:00Z",
+            submissionCloseAt: "2099-07-01T00:00:00Z"
+          }
+        ]));
+      }
+      return Promise.resolve(jsonResponse([]));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(SubmitManuscriptView);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Review Open 2026");
+    expect(wrapper.text()).not.toContain("Review Advanced To Paper 2026");
+    expect(wrapper.text()).not.toContain("Review Abstract Deadline Passed 2026");
+    expect(wrapper.text()).toContain("Open");
   });
 
   it("submits author manuscripts to a selected public conference", async () => {
@@ -608,6 +765,7 @@ describe("workflow screens", () => {
             blindMode: "SINGLE_BLIND",
             publicSlug: "review-systems-2026",
             submissionOpenAt: "2026-06-01T00:00:00Z",
+            abstractSubmissionCloseAt: "2026-06-15T00:00:00Z",
             submissionCloseAt: "2026-07-01T00:00:00Z"
           }
         ]));
@@ -615,9 +773,10 @@ describe("workflow screens", () => {
       if (path === "/manuscripts" && init?.method === "POST") {
         return Promise.resolve(jsonResponse({
           manuscriptId: 61,
+          submissionNumber: "PAPER-61",
           conferenceId: 501,
           currentVersionId: 71,
-          currentStatus: "DRAFT",
+          currentStatus: "ABSTRACT_SUBMITTED",
           blindMode: "SINGLE_BLIND"
         }));
       }
@@ -631,10 +790,10 @@ describe("workflow screens", () => {
     expect(wrapper.text()).toContain("Review Systems 2026");
     expect(wrapper.text()).toContain("Single blind");
 
-    await wrapper.get('input[placeholder="Title"]').setValue("Conference Paper");
+    await wrapper.get('input[placeholder="论文标题"]').setValue("Conference Paper");
     await wrapper.get("textarea").setValue("Conference abstract");
-    await wrapper.get('input[placeholder="comma,separated,keywords"]').setValue("conference,review");
-    await clickButton(wrapper, "Create manuscript");
+    await wrapper.get('input[placeholder="逗号分隔的关键词"]').setValue("conference,review");
+    await clickButton(wrapper, "提交摘要并取号");
     await flushPromises();
 
     const createCall = fetch.mock.calls.find(([input]) => String(input) === "/api/manuscripts");
@@ -643,6 +802,7 @@ describe("workflow screens", () => {
       conferenceId: 501,
       title: "Conference Paper"
     }));
+    expect(wrapper.text()).toContain("PAPER-61");
   });
 
   it("loads and submits the configured submission checklist after creating a manuscript", async () => {
@@ -660,6 +820,7 @@ describe("workflow screens", () => {
             blindMode: "SINGLE_BLIND",
             publicSlug: "review-systems-2026",
             submissionOpenAt: "2026-06-01T00:00:00Z",
+            abstractSubmissionCloseAt: "2026-06-15T00:00:00Z",
             submissionCloseAt: "2026-07-01T00:00:00Z"
           }
         ]));
@@ -667,9 +828,10 @@ describe("workflow screens", () => {
       if (path === "/manuscripts" && init?.method === "POST") {
         return Promise.resolve(jsonResponse({
           manuscriptId: 61,
+          submissionNumber: "PAPER-61",
           conferenceId: 501,
           currentVersionId: 71,
-          currentStatus: "DRAFT",
+          currentStatus: "ABSTRACT_SUBMITTED",
           blindMode: "SINGLE_BLIND"
         }));
       }
@@ -704,16 +866,16 @@ describe("workflow screens", () => {
     const wrapper = await mountWithRouter(SubmitManuscriptView);
     await flushPromises();
 
-    await wrapper.get('input[placeholder="Title"]').setValue("Conference Paper");
+    await wrapper.get('input[placeholder="论文标题"]').setValue("Conference Paper");
     await wrapper.get("textarea").setValue("Conference abstract");
-    await wrapper.get('input[placeholder="comma,separated,keywords"]').setValue("conference,review");
-    await clickButton(wrapper, "Create manuscript");
+    await wrapper.get('input[placeholder="逗号分隔的关键词"]').setValue("conference,review");
+    await clickButton(wrapper, "提交摘要并取号");
     await flushPromises();
 
     expect(wrapper.text()).toContain("Submission checklist");
     const checklistInput = wrapper.find('[data-test="submission-form-ethics"] textarea');
     await checklistInput.setValue("No human subjects.");
-    await clickButton(wrapper, "Submit checklist");
+    await clickButton(wrapper, "提交核对清单");
     await flushPromises();
 
     const submitCall = fetch.mock.calls.find(([input, init]) =>
@@ -1326,7 +1488,35 @@ describe("workflow screens", () => {
             summaryText: "Reviewer-visible signal",
             superseded: false,
             updatedAt: "2026-04-22T12:00:00Z",
-            redactedResult: { paperSummary: "Reviewer-visible signal" }
+            redactedResult: {
+              paperSummary: "Reviewer-visible signal",
+              claimedContributions: [
+                "Check if contributions are novel and distinct from prior work",
+                "Verify if contributions are properly contextualized within existing literature"
+              ],
+              methodChecklist: [
+                "Check if methodology is clearly described and replicable"
+              ],
+              experimentChecklist: [
+                "Verify experimental setup details are complete and reproducible"
+              ],
+              evidenceToVerify: [
+                "Cross-check all cited references for proper attribution"
+              ],
+              potentialWeaknesses: [
+                "Verify if results are overinterpreted or not sufficiently supported"
+              ],
+              questionsForReviewer: [
+                "Are the research questions clearly defined and addressed?"
+              ],
+              blindReviewRisks: [
+                "Reviewer-safe summary unavailable due to redaction."
+              ],
+              confidence: 0.85,
+              manuscriptId: "3384",
+              versionId: "3550",
+              status: "in_progress"
+            }
           }
         ]
       }
@@ -1337,8 +1527,19 @@ describe("workflow screens", () => {
     const wrapper = await mountWithRouter(ReviewEditorView, "/reviewer/reviews/9");
 
     expect(wrapper.find(".agent-trace-panel").exists()).toBe(true);
-    expect(wrapper.text()).toContain("Review assist analysis");
+    expect(wrapper.text()).toContain("审稿辅助分析");
     expect(wrapper.text()).toContain("Reviewer-visible signal");
+    expect(wrapper.text()).toContain("可信度 85%");
+    expect(wrapper.text()).toContain("主要贡献核查");
+    expect(wrapper.text()).toContain("方法核查");
+    expect(wrapper.text()).toContain("实验核查");
+    expect(wrapper.text()).toContain("证据核查");
+    expect(wrapper.text()).toContain("潜在弱点");
+    expect(wrapper.text()).toContain("建议追问");
+    expect(wrapper.text()).toContain("双盲风险");
+    expect(wrapper.text()).not.toContain('"paperSummary"');
+    expect(wrapper.text()).not.toContain('"blindReviewRisks"');
+    expect(wrapper.find(".json-block").exists()).toBe(false);
     expect(wrapper.text()).not.toContain("rawResult");
   });
 
@@ -1509,10 +1710,78 @@ describe("workflow screens", () => {
     }));
   });
 
-  it("posts conflict analysis requests as analysis intents", async () => {
+  it("keeps conflict analysis disabled with progress until the projection is available", async () => {
     installAuth(["CHAIR"]);
+    vi.useFakeTimers();
     const success = vi.spyOn(ElMessage, "success").mockImplementation(() => undefined as never);
+    let resolveConflict: ((value: ReturnType<typeof jsonResponse>) => void) | undefined;
+    let workbenchCalls = 0;
     const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/chair/decision-workbench") {
+        workbenchCalls += 1;
+        const hasRequestedIntent = workbenchCalls > 1;
+        return Promise.resolve(jsonResponse([
+          {
+            roundId: 7,
+            manuscriptId: 11,
+            versionId: 21,
+            versionNo: 1,
+            roundNo: 1,
+            title: "Workflow Seed",
+            currentStatus: "UNDER_REVIEW",
+            roundStatus: "IN_PROGRESS",
+            assignmentCount: 1,
+            submittedReviewCount: 1,
+            conflictCount: 1,
+            assignments: [{ assignmentId: 9, reviewerId: 1002, taskStatus: "SUBMITTED" }],
+            conflictIntent: hasRequestedIntent
+              ? { intentId: 91, analysisType: "CONFLICT_ANALYSIS", businessStatus: "REQUESTED" }
+              : null,
+            conflictProjections: []
+          }
+        ]));
+      }
+      if (path === "/review-rounds/7/conflict-analysis" && init?.method === "POST") {
+        return new Promise((resolve) => {
+          resolveConflict = resolve;
+        });
+      }
+      return Promise.resolve(jsonResponse([]));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(DecisionWorkbenchView);
+    await buttonByText(wrapper, "冲突分析").trigger("click");
+    await flushPromises();
+
+    expect(buttonByText(wrapper, "LLM 分析中").classes()).toContain("is-loading");
+    resolveConflict?.(jsonResponse({
+      intentId: 91,
+      analysisType: "CONFLICT_ANALYSIS",
+      businessStatus: "REQUESTED"
+    }));
+    await flushPromises();
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/review-rounds/7/conflict-analysis",
+      expect.objectContaining({
+        method: "POST"
+      })
+    );
+    expect(success).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain("LLM 分析中");
+    expect(buttonByText(wrapper, "LLM 分析中").attributes("disabled")).toBeDefined();
+
+    await vi.advanceTimersByTimeAsync(2000);
+    await flushPromises();
+
+    expect(fetch.mock.calls.filter(([input]) => String(input) === "/api/chair/decision-workbench").length).toBeGreaterThan(1);
+  });
+
+  it("opens available conflict analysis as a structured chair-readable panel", async () => {
+    installAuth(["CHAIR"]);
+    const fetch = vi.fn((input: RequestInfo | URL) => {
       const path = String(input).replace(/^\/api/, "");
       if (path === "/chair/decision-workbench") {
         return Promise.resolve(jsonResponse([
@@ -1529,37 +1798,50 @@ describe("workflow screens", () => {
             submittedReviewCount: 1,
             conflictCount: 1,
             assignments: [{ assignmentId: 9, reviewerId: 1002, taskStatus: "SUBMITTED" }],
-            conflictProjections: []
+            conflictIntent: { intentId: 91, analysisType: "CONFLICT_ANALYSIS", businessStatus: "AVAILABLE" },
+            conflictProjections: [
+              {
+                projectionId: 3,
+                analysisType: "CONFLICT_ANALYSIS",
+                businessStatus: "AVAILABLE",
+                summaryText: "Projection conflict signal",
+                redactedResult: {
+                  decisionSummary: "Projection conflict signal",
+                  consensusPoints: ["Both reviews praise the motivation."],
+                  conflictPoints: ["Reviewer scores diverge on methodology."],
+                  highRiskIssues: ["One reviewer reports a hard institution conflict."],
+                  confidence: 0.82
+                },
+                superseded: false,
+                updatedAt: "2026-04-23T02:00:00Z"
+              }
+            ]
           }
         ]));
-      }
-      if (path === "/review-rounds/7/conflict-analysis" && init?.method === "POST") {
-        return Promise.resolve(jsonResponse({
-          intentId: 91,
-          analysisType: "CONFLICT_ANALYSIS",
-          businessStatus: "REQUESTED"
-        }));
       }
       return Promise.resolve(jsonResponse([]));
     });
     vi.stubGlobal("fetch", fetch);
 
     const wrapper = await mountWithRouter(DecisionWorkbenchView);
-    await buttonByText(wrapper, "Conflict analysis").trigger("click");
+    await buttonByText(wrapper, "查看冲突分析").trigger("click");
     await flushPromises();
 
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/review-rounds/7/conflict-analysis",
-      expect.objectContaining({
-        method: "POST"
-      })
-    );
-    expect(success).toHaveBeenCalledWith("Conflict analysis requested.");
+    expect(wrapper.find(".conflict-analysis-backdrop").exists()).toBe(true);
+    expect(wrapper.find(".conflict-analysis-panel").exists()).toBe(true);
+    expect(wrapper.text()).toContain("Projection conflict signal");
+    expect(wrapper.text()).toContain("共识点");
+    expect(wrapper.text()).toContain("Both reviews praise the motivation.");
+    expect(wrapper.text()).toContain("分歧点");
+    expect(wrapper.text()).toContain("Reviewer scores diverge on methodology.");
+    expect(wrapper.text()).toContain("高风险事项");
+    expect(wrapper.text()).toContain("One reviewer reports a hard institution conflict.");
+    expect(wrapper.text()).toContain("置信度 82%");
+    expect(wrapper.find(".conflict-analysis-panel .json-block").exists()).toBe(false);
   });
 
-  it("submits a configured meta-review from the chair decision workbench", async () => {
+  it("does not expose meta-review from the chair decision workbench", async () => {
     installAuth(["CHAIR"]);
-    const success = vi.spyOn(ElMessage, "success").mockImplementation(() => undefined as never);
     const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input).replace(/^\/api/, "");
       if (path === "/chair/decision-workbench") {
@@ -1581,61 +1863,14 @@ describe("workflow screens", () => {
           }
         ]));
       }
-      if (path === "/manuscripts/11/forms/META_REVIEW") {
-        return Promise.resolve(jsonResponse({
-          form: {
-            formId: 51,
-            conferenceId: 0,
-            formType: "META_REVIEW",
-            formName: "Meta Review",
-            fields: [
-              { fieldId: 61, fieldKey: "summary", fieldLabel: "Summary", fieldType: "LONG_TEXT", required: true, visibility: "CHAIR_ONLY", displayOrder: 1 }
-            ]
-          },
-          currentResponse: {
-            responseId: 71,
-            formId: 51,
-            subjectType: "MANUSCRIPT",
-            subjectId: 11,
-            responseStatus: "DRAFT",
-            answers: { summary: "Existing meta review draft" }
-          }
-        }));
-      }
-      if (path === "/manuscripts/11/form-response" && init?.method === "POST") {
-        return Promise.resolve(jsonResponse({
-          responseId: 72,
-          formId: 51,
-          subjectType: "MANUSCRIPT",
-          subjectId: 11,
-          responseStatus: "SUBMITTED",
-          answers: JSON.parse(init.body as string).answers
-        }));
-      }
       return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
     });
     vi.stubGlobal("fetch", fetch);
 
     const wrapper = await mountWithRouter(DecisionWorkbenchView);
-    await buttonByText(wrapper, "Meta-review").trigger("click");
-    await flushPromises();
-
-    expect(wrapper.text()).toContain("Meta Review");
-    expect((document.body.querySelector('[data-test="meta-review-summary"] textarea') as HTMLTextAreaElement).value)
-      .toBe("Existing meta review draft");
-
-    await clickBodyButton("Submit meta-review");
-
-    const submitCall = fetch.mock.calls.find(([input, init]) =>
-      String(input) === "/api/manuscripts/11/form-response" && init?.method === "POST"
-    );
-    expect(submitCall).toBeTruthy();
-    expect(JSON.parse(submitCall?.[1]?.body as string)).toEqual({
-      formId: 51,
-      responseStatus: "SUBMITTED",
-      answers: { summary: "Existing meta review draft" }
-    });
-    expect(success).toHaveBeenCalledWith("Meta-review submitted.");
+    expect(wrapper.text()).not.toContain("元评审");
+    expect(wrapper.text()).not.toContain("Meta-review");
+    expect(fetch).not.toHaveBeenCalledWith("/api/manuscripts/11/forms/META_REVIEW", expect.anything());
   });
 
   it("does not load legacy raw agent results for conflict analysis on the decision workbench", async () => {
@@ -1671,7 +1906,7 @@ describe("workflow screens", () => {
     expect(wrapper.text()).toContain("Workflow Seed");
     await wrapper.get(".el-table__expand-icon").trigger("click");
     await flushPromises();
-    expect(wrapper.text()).toContain("No conflict analysis projections yet.");
+    expect(wrapper.text()).toContain("暂无冲突分析投影。");
     expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining(legacyResultsPath(11, 21)), expect.anything());
   });
 
@@ -1807,14 +2042,29 @@ describe("workflow screens", () => {
     );
   });
 
-  it("runs one-click reviewer assignment with a configurable reviewer count", async () => {
+  it("generates a random assignment preview with a configurable reviewer count", async () => {
     installAuth(["CHAIR"]);
     const success = vi.spyOn(ElMessage, "success").mockImplementation(() => undefined as never);
     const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input).replace(/^\/api/, "");
-      if (path === "/conferences/0/assignment-operations") {
+      if (path === "/chair/conferences") {
+        return Promise.resolve(jsonResponse([
+          {
+            conferenceId: 501,
+            name: "Agent Review Conference",
+            acronym: "ARC",
+            year: 2026,
+            status: "REVIEW_ASSIGNMENT",
+            blindMode: "DOUBLE_BLIND",
+            publicSlug: "arc-2026",
+            submissionOpenAt: "2026-05-01T00:00:00Z",
+            submissionCloseAt: "2026-06-01T00:00:00Z"
+          }
+        ]));
+      }
+      if (path === "/conferences/501/assignment-operations") {
         return Promise.resolve(jsonResponse({
-          conferenceId: 0,
+          conferenceId: 501,
           reviewerInvitations: [],
           externalDelegations: [],
           importBatches: [],
@@ -1822,14 +2072,33 @@ describe("workflow screens", () => {
           matchingScores: []
         }));
       }
-      if (path === "/conferences/0/auto-assignments" && init?.method === "POST") {
+      if (path === "/chair/conferences/501/papers") {
+        return Promise.resolve(jsonResponse([
+          {
+            manuscriptId: 11,
+            versionId: 21,
+            versionNo: 1,
+            roundId: 7,
+            roundNo: 1,
+            title: "Configurable Random Paper",
+            currentStatus: "UNDER_REVIEW",
+            roundStatus: "PENDING",
+            assignmentCount: 0,
+            submittedReviewCount: 0,
+            lastDecisionCode: null,
+            submittedAt: "2026-05-04T00:00:00Z"
+          }
+        ]));
+      }
+      if (path === "/review-rounds/7/assignment-candidates") {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (path === "/conferences/501/assignment-previews/random" && init?.method === "POST") {
         return Promise.resolve(jsonResponse({
+          conferenceId: 501,
           requestedReviewsPerPaper: JSON.parse(init.body as string).reviewsPerPaper,
-          createdCount: 2,
-          assignments: [
-            { assignmentId: 31, roundId: 7, reviewerId: 1002 },
-            { assignmentId: 32, roundId: 8, reviewerId: 1012 }
-          ]
+          createdDraftCount: 2,
+          drafts: []
         }));
       }
       return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
@@ -1837,62 +2106,191 @@ describe("workflow screens", () => {
     vi.stubGlobal("fetch", fetch);
 
     const wrapper = await mountWithRouter(AssignmentOperationsView);
+    await flushPromises();
     await wrapper.find('[data-test="auto-assign-target"] input').setValue("2");
-    await wrapper.find('[data-test="auto-assign-submit"]').trigger("click");
+    await wrapper.find('[data-test="assignment-preview-submit"]').trigger("click");
     await flushPromises();
 
-    const autoAssignCall = fetch.mock.calls.find(([input, init]) =>
-      String(input) === "/api/conferences/0/auto-assignments" && init?.method === "POST"
+    const previewCall = fetch.mock.calls.find(([input, init]) =>
+      String(input) === "/api/conferences/501/assignment-previews/random" && init?.method === "POST"
     );
-    expect(autoAssignCall).toBeTruthy();
-    expect(JSON.parse(autoAssignCall?.[1]?.body as string)).toMatchObject({
+    expect(previewCall).toBeTruthy();
+    expect(JSON.parse(previewCall?.[1]?.body as string)).toMatchObject({
       reviewsPerPaper: 2
     });
-    expect(success).toHaveBeenCalledWith("已创建 2 个审稿分配。");
-    expect(wrapper.text()).toContain("已按每篇 2 人目标创建 2 个分配。");
+    expect(success).toHaveBeenCalledWith("已生成 2 个随机分配预览。");
+    expect(wrapper.text()).toContain("已按每篇最多 2 人生成 2 个随机分配预览。");
   });
 
-  it("renders chair publication operations and exports proceedings metadata", async () => {
+  it("generates and confirms a random assignment preview after choosing a conference", async () => {
     installAuth(["CHAIR"]);
+    const success = vi.spyOn(ElMessage, "success").mockImplementation(() => undefined as never);
     const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input).replace(/^\/api/, "");
-      if (path === "/conferences/0/publication-operations") {
+      if (path === "/chair/conferences") {
+        return Promise.resolve(jsonResponse([
+          {
+            conferenceId: 501,
+            name: "Agent Review Conference",
+            acronym: "ARC",
+            year: 2026,
+            status: "REVIEW_ASSIGNMENT",
+            blindMode: "DOUBLE_BLIND",
+            publicSlug: "arc-2026",
+            submissionOpenAt: "2026-05-01T00:00:00Z",
+            submissionCloseAt: "2026-06-01T00:00:00Z",
+            targetReviewsPerPaper: 2
+          }
+        ]));
+      }
+      if (path === "/conferences/501/assignment-operations") {
         return Promise.resolve(jsonResponse({
-          conferenceId: 0,
-          emailTemplates: [{ templateId: 10, activeVersionId: 11, templateKey: "decision_notice" }],
-          emailHistory: [{ emailHistoryId: 12, templateKey: "decision_notice", recipientEmail: "chair@example.com", deliveryStatus: "RECORDED" }],
-          offlineReviewImports: [{ batchId: 13, assignmentId: 9, reviewerId: 1002, batchStatus: "APPLIED", rowCount: 1, validRowCount: 1, errorCount: 0 }],
-          cameraReadyFiles: [{ cameraReadyFileId: 14, manuscriptId: 11, fileName: "camera-ready.pdf", fileSize: 2048, fileStatus: "SUBMITTED" }],
-          publicationMetadata: [{ publicationMetadataId: 15, manuscriptId: 11, doi: "10.5555/wave9", publicationStatus: "READY_FOR_PROCEEDINGS" }],
-          proceedingsExports: [{ exportBatchId: 16, exportName: "Wave 9 Export", exportStatus: "PREVIEWED", paperCount: 1 }]
+          conferenceId: 501,
+          reviewerInvitations: [],
+          externalDelegations: [],
+          importBatches: [],
+          assignmentProposals: [],
+          matchingScores: []
         }));
       }
-      if (path === "/proceedings-exports/16/download-metadata" && init?.method === "POST") {
+      if (path === "/chair/conferences/501/papers") {
+        return Promise.resolve(jsonResponse([
+          {
+            manuscriptId: 11,
+            versionId: 21,
+            versionNo: 1,
+            roundId: 7,
+            roundNo: 1,
+            title: "Random Assignment Paper",
+            currentStatus: "UNDER_REVIEW",
+            roundStatus: "PENDING",
+            assignmentCount: 0,
+            submittedReviewCount: 0,
+            lastDecisionCode: null,
+            submittedAt: "2026-05-04T00:00:00Z"
+          }
+        ]));
+      }
+      if (path === "/review-rounds/7/assignment-candidates") {
+        return Promise.resolve(jsonResponse([
+          {
+            reviewerId: 1002,
+            reviewerName: "Reviewer Demo",
+            institution: "Nanjing University",
+            currentLoad: 0,
+            maxLoad: 3,
+            bidValue: "WANT_TO_REVIEW",
+            score: 103,
+            reason: "bid=WANT_TO_REVIEW; load=0/3"
+          }
+        ]));
+      }
+      if (path === "/conferences/501/assignment-previews/random" && init?.method === "POST") {
         return Promise.resolve(jsonResponse({
-          exportBatchId: 16,
-          exportStatus: "EXPORTED",
-          downloadFileName: "wave-9-export.json",
-          downloadUrl: "/api/proceedings-exports/16/files/wave-9-export.json",
-          paperCount: 1
+          conferenceId: 501,
+          requestedReviewsPerPaper: JSON.parse(init.body as string).reviewsPerPaper,
+          createdDraftCount: 1,
+          drafts: [
+            {
+              draftId: 88,
+              roundId: 7,
+              manuscriptId: 11,
+              versionId: 21,
+              reviewerId: 1002,
+              rankOrder: 1,
+              score: 103,
+              currentLoad: 0,
+              maxLoad: 3,
+              bidValue: "WANT_TO_REVIEW",
+              reason: "Random preview",
+              draftStatus: "PROPOSED"
+            }
+          ]
+        }));
+      }
+      if (path === "/conferences/501/assignment-previews/confirm" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({
+          conferenceId: 501,
+          createdCount: 1,
+          assignments: [{ assignmentId: 31, taskStatus: "ASSIGNED", reviewerId: 1002 }]
         }));
       }
       return Promise.resolve(errorResponse(404, `Unexpected path ${path}`));
     });
     vi.stubGlobal("fetch", fetch);
 
-    const wrapper = await mountWithRouter(PublicationOperationsView);
+    const wrapper = await mountWithRouter(AssignmentOperationsView);
+    await flushPromises();
 
-    expect(wrapper.text()).toContain("decision_notice");
-    expect(wrapper.text()).toContain("camera-ready.pdf");
-    expect(wrapper.text()).toContain("Wave 9 Export");
-    await clickButton(wrapper, "Export metadata");
+    expect(wrapper.text()).toContain("审稿人分配");
+    expect(wrapper.text()).toContain("Agent Review Conference");
+    expect(wrapper.text()).toContain("Random Assignment Paper");
+    expect(wrapper.text()).toContain("Reviewer Demo");
+    await wrapper.find('[data-test="auto-assign-target"] input').setValue("2");
+    await wrapper.find('[data-test="assignment-preview-submit"]').trigger("click");
+    await flushPromises();
+    await wrapper.find('[data-test="assignment-preview-confirm"]').trigger("click");
+    await flushPromises();
 
+    const previewCall = fetch.mock.calls.find(([input, init]) =>
+      String(input) === "/api/conferences/501/assignment-previews/random" && init?.method === "POST"
+    );
+    expect(previewCall).toBeTruthy();
+    expect(JSON.parse(previewCall?.[1]?.body as string)).toMatchObject({ reviewsPerPaper: 2 });
     expect(fetch).toHaveBeenCalledWith(
-      "/api/proceedings-exports/16/download-metadata",
+      "/api/conferences/501/assignment-previews/confirm",
       expect.objectContaining({ method: "POST" })
     );
-    expect(wrapper.text()).toContain("wave-9-export.json");
+    expect(success).toHaveBeenCalledWith("已确认 1 个审稿分配。");
   });
+
+  it("bounds assignment page tables inside horizontal scroll containers", async () => {
+    installAuth(["CHAIR"]);
+    const fetch = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/chair/conferences") {
+        return Promise.resolve(jsonResponse([
+          {
+            conferenceId: 501,
+            name: "Agent Review Conference",
+            acronym: "ARC",
+            year: 2026,
+            status: "REVIEW_ASSIGNMENT",
+            blindMode: "DOUBLE_BLIND",
+            publicSlug: "arc-2026",
+            submissionOpenAt: "2026-05-01T00:00:00Z",
+            submissionCloseAt: "2026-06-01T00:00:00Z"
+          }
+        ]));
+      }
+      if (path === "/conferences/501/assignment-operations") {
+        return Promise.resolve(jsonResponse({
+          conferenceId: 501,
+          reviewerInvitations: [],
+          externalDelegations: [],
+          importBatches: [],
+          assignmentProposals: [],
+          matchingScores: []
+        }));
+      }
+      if (path === "/chair/conferences/501/papers") {
+        return Promise.resolve(jsonResponse([]));
+      }
+      return Promise.resolve(jsonResponse([]));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = await mountWithRouter(AssignmentOperationsView);
+    await flushPromises();
+
+    expect(wrapper.classes()).toContain("assignment-page");
+    const tables = wrapper.findAll(".el-table");
+    expect(tables.length).toBeGreaterThan(0);
+    for (const table of tables) {
+      expect(table.element.closest(".table-scroll")).not.toBeNull();
+    }
+  });
+
 });
 
 async function clickButton(wrapper: ReturnType<typeof mount>, label: string) {

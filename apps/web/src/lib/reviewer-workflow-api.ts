@@ -14,6 +14,15 @@ export function listReviewerAssignments() {
   return apiRequest<ReviewerAssignment[]>("/review-assignments");
 }
 
+export interface ReviewerInterfaceChoice {
+  shouldPrompt: boolean;
+  activeAssignmentCount: number;
+}
+
+export function getReviewerInterfaceChoice() {
+  return apiRequest<ReviewerInterfaceChoice>("/reviewer/interface-choice");
+}
+
 export function getReviewerAssignment(assignmentId: number) {
   return apiRequest<ReviewerAssignment>(`/review-assignments/${assignmentId}`);
 }

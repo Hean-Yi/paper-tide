@@ -55,6 +55,22 @@ public class ReviewerAssignmentReadRepository {
         );
     }
 
+    public ReviewerInterfaceChoiceState findInterfaceChoiceState(long reviewerId) {
+        return jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) AS ACTIVE_ASSIGNMENT_COUNT
+                FROM REVIEW_ASSIGNMENT A
+                JOIN MANUSCRIPT M ON M.MANUSCRIPT_ID = A.MANUSCRIPT_ID
+                JOIN CONFERENCE C ON C.CONFERENCE_ID = M.CONFERENCE_ID
+                WHERE A.REVIEWER_ID = ?
+                  AND A.TASK_STATUS IN ('ASSIGNED', 'ACCEPTED', 'IN_REVIEW', 'OVERDUE')
+                  AND C.CONFERENCE_STATUS <> 'CLOSED'
+                """,
+                (rs, rowNum) -> new ReviewerInterfaceChoiceState(rs.getInt("ACTIVE_ASSIGNMENT_COUNT")),
+                reviewerId
+        );
+    }
+
     public List<ReviewerAssignmentDetail> findDetailByAssignmentId(long assignmentId) {
         return jdbcTemplate.query(
                 """
@@ -107,5 +123,11 @@ public class ReviewerAssignmentReadRepository {
                 rs.getTimestamp("SUBMITTED_AT"),
                 rs.getString("RECOMMENDATION")
         );
+    }
+}
+
+record ReviewerInterfaceChoiceState(int activeAssignmentCount) {
+    boolean shouldPrompt() {
+        return activeAssignmentCount > 0;
     }
 }

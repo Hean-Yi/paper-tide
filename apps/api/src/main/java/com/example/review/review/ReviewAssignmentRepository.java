@@ -184,11 +184,13 @@ public class ReviewAssignmentRepository {
                  AND B.MANUSCRIPT_ID = M.MANUSCRIPT_ID
                  AND B.REVIEWER_ID = ?
                 LEFT JOIN (
-                  SELECT REVIEWER_ID, COUNT(*) AS CURRENT_LOAD
-                  FROM REVIEW_ASSIGNMENT
-                  WHERE TASK_STATUS IN ('ASSIGNED', 'ACCEPTED', 'IN_REVIEW', 'SUBMITTED', 'OVERDUE')
-                  GROUP BY REVIEWER_ID
+                  SELECT A.REVIEWER_ID, M2.CONFERENCE_ID, COUNT(*) AS CURRENT_LOAD
+                  FROM REVIEW_ASSIGNMENT A
+                  JOIN MANUSCRIPT M2 ON M2.MANUSCRIPT_ID = A.MANUSCRIPT_ID
+                  WHERE A.TASK_STATUS IN ('ASSIGNED', 'ACCEPTED', 'IN_REVIEW', 'SUBMITTED', 'OVERDUE')
+                  GROUP BY A.REVIEWER_ID, M2.CONFERENCE_ID
                 ) LOADS ON LOADS.REVIEWER_ID = ?
+                 AND LOADS.CONFERENCE_ID = M.CONFERENCE_ID
                 WHERE M.MANUSCRIPT_ID = ?
                 """,
                 (rs, rowNum) -> new AssignmentEligibilityRow(
@@ -236,8 +238,10 @@ public class ReviewAssignmentRepository {
                        COALESCE((
                          SELECT COUNT(*)
                          FROM REVIEW_ASSIGNMENT A
+                         JOIN MANUSCRIPT AM ON AM.MANUSCRIPT_ID = A.MANUSCRIPT_ID
                          WHERE A.REVIEWER_ID = CR.REVIEWER_ID
                            AND A.TASK_STATUS IN ('ASSIGNED', 'ACCEPTED', 'IN_REVIEW', 'SUBMITTED', 'OVERDUE')
+                           AND AM.CONFERENCE_ID = M.CONFERENCE_ID
                        ), 0) AS CURRENT_LOAD,
                        COALESCE(B.BID_VALUE, 'NEUTRAL') AS BID_VALUE
                 FROM REVIEW_ROUND R
@@ -274,8 +278,10 @@ public class ReviewAssignmentRepository {
                   AND (
                     SELECT COUNT(*)
                     FROM REVIEW_ASSIGNMENT A
+                    JOIN MANUSCRIPT AM ON AM.MANUSCRIPT_ID = A.MANUSCRIPT_ID
                     WHERE A.REVIEWER_ID = CR.REVIEWER_ID
                       AND A.TASK_STATUS IN ('ASSIGNED', 'ACCEPTED', 'IN_REVIEW', 'SUBMITTED', 'OVERDUE')
+                      AND AM.CONFERENCE_ID = M.CONFERENCE_ID
                   ) < CR.MAX_LOAD
                 ORDER BY
                   CASE COALESCE(B.BID_VALUE, 'NEUTRAL')

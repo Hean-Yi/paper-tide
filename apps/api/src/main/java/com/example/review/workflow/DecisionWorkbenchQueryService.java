@@ -16,7 +16,8 @@ public class DecisionWorkbenchQueryService {
     public List<DecisionWorkbenchItem> listDecisionWorkbench(CurrentUserPrincipal principal) {
         RoleGuard.requireChairOrAdmin(principal);
 
-        List<DecisionWorkbenchBase> rounds = repository.findPendingAndInProgressRounds();
+        Long organizerUserId = RoleGuard.hasRole(principal, "ADMIN") ? null : principal.userId();
+        List<DecisionWorkbenchBase> rounds = repository.findPendingAndInProgressRounds(organizerUserId);
         if (rounds.isEmpty()) {
             return List.of();
         }

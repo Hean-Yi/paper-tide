@@ -216,6 +216,59 @@ class DecisionServiceTest {
         org.junit.jupiter.api.Assertions.assertEquals("DESK_REJECT", decisionRow.get("DECISION_CODE"));
     }
 
+    @Test
+    void screeningDeskRejectDoesNotRequireExistingReviewRoundAndLeavesQueue() throws Exception {
+        ScreeningFixture fixture = seedUnderScreeningManuscriptWithoutRound();
+        String chairToken = loginAndExtractToken("chair_demo", "demo123");
+
+        mockMvc.perform(post("/api/decisions/screening-desk-reject")
+                        .header("Authorization", "Bearer " + chairToken)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "manuscriptId": %d,
+                                  "versionId": %d,
+                                  "decisionReason": "outside venue scope"
+                                }
+                                """.formatted(fixture.manuscriptId(), fixture.versionId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.decisionCode").value("DESK_REJECT"))
+                .andExpect(jsonPath("$.currentStatus").value("DESK_REJECTED"))
+                .andExpect(jsonPath("$.roundStatus").value("COMPLETED"));
+
+        Map<String, Object> manuscriptRow = jdbcTemplate.queryForMap(
+                "SELECT CURRENT_STATUS, LAST_DECISION_CODE, CURRENT_ROUND_NO FROM MANUSCRIPT WHERE MANUSCRIPT_ID = ?",
+                fixture.manuscriptId()
+        );
+        Map<String, Object> decisionRow = jdbcTemplate.queryForMap(
+                """
+                SELECT D.DECISION_CODE, D.VERSION_ID, R.ROUND_STATUS, R.SCREENING_REQUIRED
+                FROM DECISION_RECORD D
+                JOIN REVIEW_ROUND R ON R.ROUND_ID = D.ROUND_ID
+                WHERE D.MANUSCRIPT_ID = ?
+                """,
+                fixture.manuscriptId()
+        );
+        Integer queueRows = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM MANUSCRIPT
+                WHERE MANUSCRIPT_ID = ?
+                  AND CURRENT_STATUS IN ('SUBMITTED', 'REVISED_SUBMITTED', 'UNDER_SCREENING')
+                """,
+                Integer.class,
+                fixture.manuscriptId()
+        );
+
+        org.junit.jupiter.api.Assertions.assertEquals("DESK_REJECTED", manuscriptRow.get("CURRENT_STATUS"));
+        org.junit.jupiter.api.Assertions.assertEquals("DESK_REJECT", manuscriptRow.get("LAST_DECISION_CODE"));
+        org.junit.jupiter.api.Assertions.assertEquals("DESK_REJECT", decisionRow.get("DECISION_CODE"));
+        org.junit.jupiter.api.Assertions.assertEquals(fixture.versionId(), ((Number) decisionRow.get("VERSION_ID")).longValue());
+        org.junit.jupiter.api.Assertions.assertEquals("COMPLETED", decisionRow.get("ROUND_STATUS"));
+        org.junit.jupiter.api.Assertions.assertEquals(1, ((Number) decisionRow.get("SCREENING_REQUIRED")).intValue());
+        org.junit.jupiter.api.Assertions.assertEquals(0, queueRows);
+    }
+
     private ReviewFixture seedUnderReviewAssignment(String assignmentStatus) {
         long manuscriptId = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT.NEXTVAL FROM DUAL", Long.class);
         long versionId = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT_VERSION.NEXTVAL FROM DUAL", Long.class);
@@ -322,6 +375,32 @@ class DecisionServiceTest {
         return new ScreeningFixture(manuscriptId, versionId, roundId);
     }
 
+    private ScreeningFixture seedUnderScreeningManuscriptWithoutRound() {
+        long manuscriptId = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT.NEXTVAL FROM DUAL", Long.class);
+        long versionId = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT_VERSION.NEXTVAL FROM DUAL", Long.class);
+
+        jdbcTemplate.update(
+                """
+                INSERT INTO MANUSCRIPT (MANUSCRIPT_ID, SUBMITTER_ID, CONFERENCE_ID, CURRENT_VERSION_ID, CURRENT_STATUS, CURRENT_ROUND_NO, BLIND_MODE, SUBMITTED_AT, LAST_DECISION_CODE)
+                VALUES (?, 1001, 0, NULL, 'UNDER_SCREENING', 0, 'DOUBLE_BLIND', ?, NULL)
+                """,
+                manuscriptId,
+                Timestamp.from(Instant.now())
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO MANUSCRIPT_VERSION (VERSION_ID, MANUSCRIPT_ID, VERSION_NO, VERSION_TYPE, TITLE, ABSTRACT, KEYWORDS, SUBMITTED_BY, SUBMITTED_AT, SOURCE_DECISION_ID)
+                VALUES (?, ?, 1, 'INITIAL', 'Screening Seed', 'seed abstract', 'seed', 1001, ?, NULL)
+                """,
+                versionId,
+                manuscriptId,
+                Timestamp.from(Instant.now())
+        );
+        jdbcTemplate.update("UPDATE MANUSCRIPT SET CURRENT_VERSION_ID = ? WHERE MANUSCRIPT_ID = ?", versionId, manuscriptId);
+
+        return new ScreeningFixture(manuscriptId, versionId, 0);
+    }
+
     private String loginAndExtractToken(String username, String password) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/auth/login")
                         .contentType(APPLICATION_JSON)
@@ -382,6 +461,7 @@ class DecisionServiceTest {
                     0 AS PHASE_ID,
                     0 AS CONFERENCE_ID,
                     TIMESTAMP '2026-01-01 00:00:00' AS SUBMISSION_OPEN_AT,
+                    TIMESTAMP '2099-12-30 00:00:00' AS ABSTRACT_SUBMISSION_CLOSE_AT,
                     TIMESTAMP '2099-12-31 00:00:00' AS SUBMISSION_CLOSE_AT,
                     TIMESTAMP '2100-01-01 00:00:00' AS BIDDING_OPEN_AT,
                     TIMESTAMP '2100-01-02 00:00:00' AS BIDDING_CLOSE_AT,
@@ -391,13 +471,14 @@ class DecisionServiceTest {
                 ) S
                 ON (P.CONFERENCE_ID = S.CONFERENCE_ID)
                 WHEN MATCHED THEN
-                  UPDATE SET P.SUBMISSION_CLOSE_AT = S.SUBMISSION_CLOSE_AT
+                  UPDATE SET P.ABSTRACT_SUBMISSION_CLOSE_AT = S.ABSTRACT_SUBMISSION_CLOSE_AT,
+                             P.SUBMISSION_CLOSE_AT = S.SUBMISSION_CLOSE_AT
                 WHEN NOT MATCHED THEN
                   INSERT (
-                    PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, SUBMISSION_CLOSE_AT,
+                    PHASE_ID, CONFERENCE_ID, SUBMISSION_OPEN_AT, ABSTRACT_SUBMISSION_CLOSE_AT, SUBMISSION_CLOSE_AT,
                     BIDDING_OPEN_AT, BIDDING_CLOSE_AT, REVIEW_DEADLINE_AT, DECISION_RELEASE_AT
                   ) VALUES (
-                    S.PHASE_ID, S.CONFERENCE_ID, S.SUBMISSION_OPEN_AT, S.SUBMISSION_CLOSE_AT,
+                    S.PHASE_ID, S.CONFERENCE_ID, S.SUBMISSION_OPEN_AT, S.ABSTRACT_SUBMISSION_CLOSE_AT, S.SUBMISSION_CLOSE_AT,
                     S.BIDDING_OPEN_AT, S.BIDDING_CLOSE_AT, S.REVIEW_DEADLINE_AT, S.DECISION_RELEASE_AT
                   )
                 """

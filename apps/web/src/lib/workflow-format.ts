@@ -3,14 +3,15 @@ export type WorkflowTagType = "primary" | "success" | "warning" | "info" | "dang
 const LABELS: Record<string, string> = {
   ACCEPT: "Accept",
   ACCEPTED: "Accepted",
+  ABSTRACT_SUBMITTED: "摘要已取号",
   AVAILABLE: "Available",
   ASSIGNED: "Assigned",
   BIDDING_OPEN: "Bidding open",
   CAN_REVIEW: "Can review",
   CONFLICT: "Conflict",
   DECISION_CONFLICT_ANALYSIS: "Decision conflict analysis",
-  DESK_REJECT: "Desk reject",
-  DESK_REJECTED: "Desk rejected",
+  DESK_REJECT: "桌拒",
+  DESK_REJECTED: "桌拒",
   DOUBLE_BLIND: "Double blind",
   DRAFT: "Draft",
   FAILED: "Failed",
@@ -54,7 +55,7 @@ const WARNING_STATUSES = new Set([
   "UNDER_SCREENING"
 ]);
 const DANGER_STATUSES = new Set(["CONFLICT", "DECLINED", "DESK_REJECT", "DESK_REJECTED", "FAILED", "FAILED_VISIBLE", "OVERDUE", "REJECT", "REJECTED"]);
-const INFO_STATUSES = new Set(["ASSIGNED", "CAN_REVIEW", "DRAFT", "OPEN", "REVIEW_ASSIST_ANALYSIS", "SCREENING_ANALYSIS", "DECISION_CONFLICT_ANALYSIS", "REVIEWER_ASSIGNMENT_ASSIST"]);
+const INFO_STATUSES = new Set(["ABSTRACT_SUBMITTED", "ASSIGNED", "CAN_REVIEW", "DRAFT", "OPEN", "REVIEW_ASSIST_ANALYSIS", "SCREENING_ANALYSIS", "DECISION_CONFLICT_ANALYSIS", "REVIEWER_ASSIGNMENT_ASSIST"]);
 
 export function workflowLabel(value: string | null | undefined): string {
   if (!value) {

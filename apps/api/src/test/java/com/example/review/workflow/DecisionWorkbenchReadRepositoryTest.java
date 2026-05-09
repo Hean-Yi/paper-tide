@@ -66,6 +66,10 @@ class DecisionWorkbenchReadRepositoryTest {
         jdbcTemplate.update("DELETE FROM ANALYSIS_INBOX");
         jdbcTemplate.update("DELETE FROM ANALYSIS_PROJECTION");
         jdbcTemplate.update("DELETE FROM ANALYSIS_INTENT");
+        ensureChairUser(1003L, "chair_demo");
+        ensureChairUser(2003L, "decision_workbench_other_chair");
+        ensureConference(0L, 1003L, "Legacy / Platform Default");
+        ensureConference(77L, 2003L, "Other Chair Conference");
     }
 
     @Test
@@ -86,7 +90,7 @@ class DecisionWorkbenchReadRepositoryTest {
         seedProjection(intentId, "AVAILABLE", "Summary text");
         
         // Query base rounds
-        List<DecisionWorkbenchBase> rounds = repository.findPendingAndInProgressRounds();
+        List<DecisionWorkbenchBase> rounds = repository.findPendingAndInProgressRounds(1003L);
         assertThat(rounds).hasSize(2);
         
         List<Long> roundIds = rounds.stream().map(DecisionWorkbenchBase::roundId).toList();
@@ -112,13 +116,38 @@ class DecisionWorkbenchReadRepositoryTest {
         assertThat(projections.get(round2)).isNullOrEmpty();
     }
 
+    @Test
+    void findPendingAndInProgressRounds_filtersByConferenceOrganizer() {
+        long ownedManuscript = seedManuscript("UNDER_REVIEW", 0L);
+        long ownedVersion = seedVersion(ownedManuscript);
+        long ownedRound = seedRound(ownedManuscript, ownedVersion, "IN_PROGRESS");
+
+        long otherManuscript = seedManuscript("UNDER_REVIEW", 77L);
+        long otherVersion = seedVersion(otherManuscript);
+        long otherRound = seedRound(otherManuscript, otherVersion, "IN_PROGRESS");
+
+        List<Long> chairRoundIds = repository.findPendingAndInProgressRounds(1003L).stream()
+                .map(DecisionWorkbenchBase::roundId)
+                .toList();
+        List<Long> adminRoundIds = repository.findPendingAndInProgressRounds(null).stream()
+                .map(DecisionWorkbenchBase::roundId)
+                .toList();
+
+        assertThat(chairRoundIds).containsExactly(ownedRound);
+        assertThat(adminRoundIds).containsExactly(ownedRound, otherRound);
+    }
+
     private long seedManuscript(String status) {
+        return seedManuscript(status, 0L);
+    }
+
+    private long seedManuscript(String status, long conferenceId) {
         long id = jdbcTemplate.queryForObject("SELECT SEQ_MANUSCRIPT.NEXTVAL FROM DUAL", Long.class);
         jdbcTemplate.update(
                 """
-                INSERT INTO MANUSCRIPT (MANUSCRIPT_ID, SUBMITTER_ID, CURRENT_STATUS, CURRENT_ROUND_NO, BLIND_MODE, SUBMITTED_AT)
-                VALUES (?, 1001, ?, 1, 'DOUBLE_BLIND', CURRENT_TIMESTAMP)
-                """, id, status);
+                INSERT INTO MANUSCRIPT (MANUSCRIPT_ID, SUBMITTER_ID, CURRENT_STATUS, CURRENT_ROUND_NO, BLIND_MODE, SUBMITTED_AT, CONFERENCE_ID)
+                VALUES (?, 1001, ?, 1, 'DOUBLE_BLIND', CURRENT_TIMESTAMP, ?)
+                """, id, status, conferenceId);
         return id;
     }
 
@@ -170,5 +199,87 @@ class DecisionWorkbenchReadRepositoryTest {
                 INSERT INTO ANALYSIS_PROJECTION (PROJECTION_ID, INTENT_ID, ANALYSIS_TYPE, VISIBILITY_LEVEL, BUSINESS_STATUS, SUMMARY_TEXT, IS_SUPERSEDED, UPDATED_AT)
                 VALUES (?, ?, ?, 'REDACTED_ONLY', ?, ?, 0, CURRENT_TIMESTAMP)
                 """, id, intentId, AnalysisType.CONFLICT_ANALYSIS.name(), status, summary);
+    }
+
+    private void ensureConference(long conferenceId, long organizerUserId, String name) {
+        jdbcTemplate.update(
+                """
+                MERGE INTO CONFERENCE C
+                USING (
+                  SELECT ? AS CONFERENCE_ID,
+                         ? AS NAME,
+                         'WB' || ? AS ACRONYM,
+                         2026 AS CONFERENCE_YEAR,
+                         ? AS ORGANIZER_USER_ID,
+                         'OPEN_FOR_SUBMISSION' AS CONFERENCE_STATUS,
+                         'DOUBLE_BLIND' AS BLIND_MODE,
+                         'Default conference for decision workbench tests.' AS CFP_TEXT,
+                         '["TEST"]' AS TOPIC_AREAS_JSON,
+                         3 AS TARGET_REVIEWS_PER_PAPER,
+                         3 AS DEFAULT_REVIEWER_MAX_LOAD,
+                         'decision-workbench-' || ? AS PUBLIC_SLUG,
+                         0 AS CFP_PUBLISHED
+                  FROM DUAL
+                ) S
+                ON (C.CONFERENCE_ID = S.CONFERENCE_ID)
+                WHEN MATCHED THEN
+                  UPDATE SET C.ORGANIZER_USER_ID = S.ORGANIZER_USER_ID,
+                             C.CONFERENCE_STATUS = S.CONFERENCE_STATUS,
+                             C.UPDATED_AT = CURRENT_TIMESTAMP
+                WHEN NOT MATCHED THEN
+                  INSERT (
+                    CONFERENCE_ID, NAME, ACRONYM, CONFERENCE_YEAR, ORGANIZER_USER_ID,
+                    CONFERENCE_STATUS, BLIND_MODE, CFP_TEXT, TOPIC_AREAS_JSON,
+                    TARGET_REVIEWS_PER_PAPER, DEFAULT_REVIEWER_MAX_LOAD, PUBLIC_SLUG, CFP_PUBLISHED
+                  )
+                  VALUES (
+                    S.CONFERENCE_ID, S.NAME, S.ACRONYM, S.CONFERENCE_YEAR, S.ORGANIZER_USER_ID,
+                    S.CONFERENCE_STATUS, S.BLIND_MODE, S.CFP_TEXT, S.TOPIC_AREAS_JSON,
+                    S.TARGET_REVIEWS_PER_PAPER, S.DEFAULT_REVIEWER_MAX_LOAD, S.PUBLIC_SLUG, S.CFP_PUBLISHED
+                  )
+                """,
+                conferenceId,
+                name,
+                conferenceId,
+                organizerUserId,
+                conferenceId
+        );
+    }
+
+    private void ensureChairUser(long userId, String username) {
+        jdbcTemplate.update(
+                """
+                MERGE INTO SYS_USER U
+                USING (
+                  SELECT ? AS USER_ID,
+                         ? AS USERNAME,
+                         '$2a$10$Al2Fi5T2ZEwE2Yi2ds6gp.7qKpiXar4e9.VBDPgU.8XtAfoe7UUDq' AS PASSWORD_HASH,
+                         ? AS REAL_NAME,
+                         ? || '@example.com' AS EMAIL,
+                         'Test University' AS INSTITUTION,
+                         'ACTIVE' AS STATUS
+                  FROM DUAL
+                ) S
+                ON (U.USER_ID = S.USER_ID)
+                WHEN NOT MATCHED THEN
+                  INSERT (USER_ID, USERNAME, PASSWORD_HASH, REAL_NAME, EMAIL, INSTITUTION, STATUS)
+                  VALUES (S.USER_ID, S.USERNAME, S.PASSWORD_HASH, S.REAL_NAME, S.EMAIL, S.INSTITUTION, S.STATUS)
+                """,
+                userId,
+                username,
+                username,
+                username
+        );
+        jdbcTemplate.update(
+                """
+                MERGE INTO SYS_USER_ROLE UR
+                USING (SELECT ? AS USER_ID, 3 AS ROLE_ID FROM DUAL) S
+                ON (UR.USER_ID = S.USER_ID AND UR.ROLE_ID = S.ROLE_ID)
+                WHEN NOT MATCHED THEN
+                  INSERT (USER_ROLE_ID, USER_ID, ROLE_ID)
+                  VALUES (SEQ_SYS_USER_ROLE.NEXTVAL, S.USER_ID, S.ROLE_ID)
+                """,
+                userId
+        );
     }
 }

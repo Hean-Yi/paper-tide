@@ -199,6 +199,7 @@ record PlatformProposalReviewerValidationRow(
         long reviewerId,
         int currentLoad,
         int maxLoad,
+        int manuscriptAuthorCount,
         int hardConflictCount,
         int roundAssignmentCount,
         int openDraftCount

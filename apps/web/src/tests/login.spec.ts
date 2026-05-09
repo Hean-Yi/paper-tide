@@ -1,5 +1,5 @@
 import { flushPromises, mount } from "@vue/test-utils";
-import ElementPlus from "element-plus";
+import ElementPlus, { ElMessageBox } from "element-plus";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AppShell from "../layouts/AppShell.vue";
@@ -12,6 +12,7 @@ import {
   logout,
   resetAuthForTests
 } from "../stores/auth";
+import DashboardView from "../views/DashboardView.vue";
 import LoginView from "../views/LoginView.vue";
 
 function token(claims: Record<string, unknown>): string {
@@ -30,11 +31,13 @@ function futureToken(roles: string[] = ["AUTHOR"]): string {
 
 describe("frontend authentication", () => {
   beforeEach(() => {
+    document.body.innerHTML = "";
     resetAuthForTests();
     vi.restoreAllMocks();
   });
 
   afterEach(() => {
+    document.body.innerHTML = "";
     resetAuthForTests();
     vi.restoreAllMocks();
   });
@@ -101,9 +104,11 @@ describe("frontend authentication", () => {
     });
     await wrapper.get('input[autocomplete="username"]').setValue("chair_demo");
     await wrapper.get('input[autocomplete="current-password"]').setValue("demo123");
-    await wrapper.get('[data-test="login-submit"]').trigger("submit");
+    await wrapper.get("form").trigger("submit");
     await flushPromises();
     await flushPromises();
+    await flushPromises();
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/auth/login",
@@ -135,7 +140,7 @@ describe("frontend authentication", () => {
     });
     await wrapper.get('input[autocomplete="username"]').setValue("author_demo");
     await wrapper.get('input[autocomplete="current-password"]').setValue("wrong");
-    await wrapper.get('[data-test="login-submit"]').trigger("submit");
+    await wrapper.get("form").trigger("submit");
     await flushPromises();
 
     expect(wrapper.text()).toContain("Invalid username or password.");
@@ -234,22 +239,65 @@ describe("frontend authentication", () => {
       });
   });
 
-  it("allows admin users to open chair workflow routes", async () => {
+  it("keeps admin-only users inside admin governance routes", async () => {
     const router = createAppRouter();
     localStorage.setItem("review.auth.token", futureToken(["ADMIN"]));
     initializeAuth();
 
-    router.push("/chair/screening");
+    router.push("/chair/conferences");
     await router.isReady();
-    expect(router.currentRoute.value.path).toBe("/chair/screening");
+    expect(router.currentRoute.value.path).toBe("/chair/conferences");
+
+    await router.push("/chair/screening");
+    expect(router.currentRoute.value.path).toBe("/dashboard");
 
     await router.push("/chair/decisions");
-    expect(router.currentRoute.value.path).toBe("/chair/decisions");
+    expect(router.currentRoute.value.path).toBe("/dashboard");
+
+    await router.push("/chair/conferences/501/papers/11");
+    expect(router.currentRoute.value.path).toBe("/dashboard");
+  });
+
+  it("routes admin-only users to dashboard after login", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ token: futureToken(["ADMIN"]) })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const router = createAppRouter();
+    const pushSpy = vi.spyOn(router, "push");
+    router.push("/login");
+    await router.isReady();
+
+    const wrapper = mount(LoginView, {
+      global: {
+        plugins: [ElementPlus, router]
+      }
+    });
+    await wrapper.get('input[autocomplete="username"]').setValue("admin_demo");
+    await wrapper.get('input[autocomplete="current-password"]').setValue("demo123");
+    await wrapper.get("form").trigger("submit");
+    await flushPromises();
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalled();
+    expect(authState.user?.roles).toEqual(["ADMIN"]);
+    expect(pushSpy).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("does not keep a duplicate admin console route", () => {
+    const router = createAppRouter();
+
+    expect(router.getRoutes().some((route) => route.name === "admin-dashboard")).toBe(false);
+    expect(router.getRoutes().some((route) => route.path === "/admin")).toBe(false);
+    expect(router.getRoutes().some((route) => route.name === "chair-publication-operations")).toBe(false);
+    expect(router.getRoutes().some((route) => route.path === "/chair/publication-operations")).toBe(false);
   });
 
   it("renders role-aware shell links and logs out", async () => {
     const router = createAppRouter();
-    localStorage.setItem("review.auth.token", futureToken(["AUTHOR", "CHAIR", "ADMIN"]));
+    localStorage.setItem("review.auth.token", futureToken(["AUTHOR", "CHAIR"]));
     initializeAuth();
     router.push("/dashboard");
     await router.isReady();
@@ -263,9 +311,11 @@ describe("frontend authentication", () => {
       }
     });
 
-    expect(wrapper.text()).toContain("My manuscripts");
-    expect(wrapper.text()).toContain("Screening");
-    expect(wrapper.text()).toContain("Agent monitor");
+    expect(wrapper.text()).toContain("我的稿件");
+    expect(wrapper.text()).toContain("初筛队列");
+    expect(wrapper.text()).not.toContain("出版操作");
+    expect(wrapper.text()).not.toContain("Agent 监控");
+    expect(wrapper.text()).not.toContain("管理后台");
     expect(wrapper.text()).not.toContain("Review assignments");
 
     await wrapper.get('[data-test="logout"]').trigger("click");
@@ -274,5 +324,149 @@ describe("frontend authentication", () => {
     expect(localStorage.getItem("review.auth.token")).toBeNull();
     expect(router.currentRoute.value.path).toBe("/login");
     expect(logout).toBeDefined();
+  });
+
+  it("renders a focused admin shell without chair operation clutter", async () => {
+    const router = createAppRouter();
+    localStorage.setItem("review.auth.token", futureToken(["ADMIN"]));
+    initializeAuth();
+    router.push("/dashboard");
+    await router.isReady();
+
+    const wrapper = mount(AppShell, {
+      global: {
+        plugins: [ElementPlus, router],
+        stubs: {
+          RouterView: true
+        }
+      }
+    });
+
+    expect(wrapper.text()).toContain("角色申请");
+    expect(wrapper.text()).toContain("会议审批");
+    expect(wrapper.text()).toContain("Agent 监控");
+    expect(wrapper.text()).toContain("会议管理");
+    const links = wrapper.findAll("a");
+    expect(links.some((link) => link.text().includes("管理后台"))).toBe(false);
+    expect(links.some((link) => link.attributes("href") === "/admin")).toBe(false);
+    expect(wrapper.text()).not.toContain("初筛队列");
+    expect(wrapper.text()).not.toContain("决策工作台");
+    expect(wrapper.text()).not.toContain("审稿人分配");
+    expect(wrapper.text()).not.toContain("出版操作");
+  });
+
+  it("uses the admin console layout for admin dashboard", async () => {
+    const router = createAppRouter();
+    localStorage.setItem("review.auth.token", futureToken(["ADMIN"]));
+    initializeAuth();
+    router.push("/dashboard");
+    await router.isReady();
+
+    const wrapper = mount(DashboardView, {
+      global: {
+        plugins: [ElementPlus, router]
+      }
+    });
+
+    expect(wrapper.text()).toContain("平台管理员控制台");
+    expect(wrapper.text()).toContain("平台管理");
+    expect(wrapper.text()).toContain("会议运营辅助");
+    expect(wrapper.text()).toContain("会议管理");
+    expect(wrapper.text()).not.toContain("初筛队列");
+    expect(wrapper.text()).not.toContain("决策工作台");
+    expect(wrapper.text()).not.toContain("审稿人分配");
+  });
+
+  it("prompts an author-reviewer with active review work to choose an interface", async () => {
+    const confirm = vi.spyOn(ElMessageBox, "confirm").mockResolvedValue("confirm" as never);
+    const router = createAppRouter();
+    localStorage.setItem("review.auth.token", futureToken(["AUTHOR", "REVIEWER"]));
+    initializeAuth();
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/reviewer/interface-choice") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({
+            shouldPrompt: true,
+            activeAssignmentCount: 1
+          })
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({})
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    router.push("/dashboard");
+    await router.isReady();
+    const pushSpy = vi.spyOn(router, "push");
+
+    mount(AppShell, {
+      global: {
+        plugins: [ElementPlus, router],
+        stubs: {
+          RouterView: true
+        }
+      }
+    });
+    await flushPromises();
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/reviewer/interface-choice", expect.anything());
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining("您当前有 1 个会议中的审稿任务"),
+      "选择本次进入的工作界面",
+      expect.objectContaining({
+        confirmButtonText: "进入审稿人界面",
+        cancelButtonText: "进入作者界面"
+      })
+    );
+    await flushPromises();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(pushSpy).toHaveBeenCalledWith("/reviewer/assignments");
+  });
+
+  it("does not prompt an author-reviewer after all active review work is closed", async () => {
+    const router = createAppRouter();
+    localStorage.setItem("review.auth.token", futureToken(["AUTHOR", "REVIEWER"]));
+    initializeAuth();
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/reviewer/interface-choice") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({
+            shouldPrompt: false,
+            activeAssignmentCount: 0
+          })
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({})
+      });
+    }));
+    router.push("/dashboard");
+    await router.isReady();
+
+    mount(AppShell, {
+      global: {
+        plugins: [ElementPlus, router],
+        stubs: {
+          RouterView: true
+        }
+      }
+    });
+    await flushPromises();
+    await flushPromises();
+
+    expect(document.body.textContent).not.toContain("选择本次进入的工作界面");
   });
 });
